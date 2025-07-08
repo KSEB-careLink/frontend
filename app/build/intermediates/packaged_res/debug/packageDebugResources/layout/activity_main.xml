@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:orientation="vertical"
+    android:gravity="center_horizontal"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:padding="16dp">
+
+    <!-- 오늘의 감정 선택 안내 텍스트 -->
+    <TextView
+        android:id="@+id/tvPrompt"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="오늘의 감정을 선택해주세요"
+        android:textSize="18sp"
+        android:layout_marginBottom="24dp"/>
+
+    <!-- 감정 선택 버튼들을 수평으로 배치 -->
+    <LinearLayout
+        android:orientation="horizontal"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:gravity="center">
+
+        <Button
+            android:id="@+id/btnSmile"
+            android:layout_width="60dp"
+            android:layout_height="60dp"
+            android:text="😊"
+            android:textSize="28sp"
+            android:layout_margin="8dp"/>
+
+        <Button
+            android:id="@+id/btnNeutral"
+            android:layout_width="60dp"
+            android:layout_height="60dp"
+            android:text="😐"
+            android:textSize="28sp"
+            android:layout_margin="8dp"/>
+
+        <Button
+            android:id="@+id/btnSad"
+            android:layout_width="60dp"
+            android:layout_height="60dp"
+            android:text="😢"
+            android:textSize="28sp"
+            android:layout_margin="8dp"/>
+
+        <Button
+            android:id="@+id/btnAngry"
+            android:layout_width="60dp"
+            android:layout_height="60dp"
+            android:text="😡"
+            android:textSize="28sp"
+            android:layout_margin="8dp"/>
+
+        <Button
+            android:id="@+id/btnSleepy"
+            android:layout_width="60dp"
+            android:layout_height="60dp"
+            android:text="😴"
+            android:textSize="28sp"
+            android:layout_margin="8dp"/>
+    </LinearLayout>
+
+</LinearLayout>
