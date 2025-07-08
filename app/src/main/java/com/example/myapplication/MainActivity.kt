@@ -17,6 +17,7 @@ import com.example.myapplication.util.getOutputDirectory
 import com.example.myapplication.util.uploadImageToServer
 import com.example.myapplication.screens.GuardianSignInPage
 import com.example.myapplication.screens.PatientSignInPage
+import com.example.myapplication.screens.Login
 
 
 
@@ -32,41 +33,41 @@ class MainActivity : ComponentActivity() {
                 val context = LocalContext.current
 
                 NavHost(navController = navController, startDestination = "splash") {
-                    // 스플래시 화면
+                    // 스플래시
                     composable("splash") {
-                        SplashScreen(
-                            navController = navController
-                        )
+                        SplashScreen(navController)
                     }
 
-                    // Guardian Sign-in 페이지
+                    // Guardian Sign-in
                     composable("guardian") {
-                        GuardianSignInPage(
-                            navController = navController
-                        )
+                        GuardianSignInPage(navController)
                     }
-                    // Patient Sign-in 페이지
+
+                    // Patient Sign-in
                     composable("patient") {
-                        PatientSignInPage(
-                            navController = navController
-                        )
-                    }
-                    // 결과 페이지
-                    composable("result") {
-                        ResultScreen(
-                            navController = navController
-                        )
+                        PatientSignInPage(navController)
                     }
 
                     // 위치 선택 페이지
                     composable("choose") {
-                        ChoosePositionPage(
-                            navController = navController
-                        )
+                        ChoosePositionPage(navController)
                     }
+
+                    // 로그인 페이지 (route는 "login"으로 소문자)
+                    composable("login") {
+                        Login(navController)
+                    }
+
+                    // 결과 페이지
+                    composable("result") {
+                        ResultScreen(navController)
+                    }
+                }
+
+            }
                 }
             }
         }
-    }
-}
+
+
 
