@@ -115,7 +115,7 @@ fun Login(navController: NavController) {
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Button(
-                onClick = { /* 로그인 처리 */ },
+                onClick = { navController.navigate("sentence") },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp),                  // 버튼 높이

@@ -18,6 +18,7 @@ import com.example.myapplication.util.uploadImageToServer
 import com.example.myapplication.screens.GuardianSignInPage
 import com.example.myapplication.screens.PatientSignInPage
 import com.example.myapplication.screens.Login
+import com.example.myapplication.screens.Patient_Sentence
 
 
 
@@ -56,6 +57,11 @@ class MainActivity : ComponentActivity() {
                     // 로그인 페이지 (route는 "login"으로 소문자)
                     composable("login") {
                         Login(navController)
+                    }
+
+                    // 환자 문장 페이지
+                    composable("sentence") {
+                        Patient_Sentence(navController)
                     }
 
                     // 결과 페이지
