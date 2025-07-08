@@ -63,7 +63,7 @@ fun ChoosePositionPage(navController: NavController) {
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Button(
-                onClick = { navController.navigate("patient") },
+                onClick = { navController.navigate("login") },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(80.dp),    // 버튼 높이 (조절 가능)

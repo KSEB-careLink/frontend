@@ -106,21 +106,39 @@ fun Login(navController: NavController) {
             )
         }
 
-        // 3) 화면 하단 로그인 버튼
-        Button(
-            onClick = { /* TODO: 로그인 처리 후 navController.navigate("home") */ },
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C4B4)),
-            shape = RoundedCornerShape(12.dp),
+        // 3) 화면 하단에 두 개의 버튼을 Column으로 묶기
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp)          // 버튼 높이 (조절 가능)
-                .align(Alignment.BottomCenter)
-                .offset(y = (-230).dp)
+                .align(Alignment.BottomCenter)        // BoxScope.align
+                .padding(bottom = 170.dp)               // 아래 여백
+                .fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text(text = "로그인", color = Color.White, fontSize = 16.sp)
+            Button(
+                onClick = { /* 로그인 처리 */ },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),                  // 버튼 높이
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C4B4))
+            ) {
+                Text("로그인", color = Color.White, fontSize = 16.sp)
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+            Button(
+                onClick = { navController.navigate("patient") },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),                  // 버튼 높이
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C4B4))
+            ) {
+                Text("회원가입", color = Color.White, fontSize = 16.sp)
+            }
         }
     }
 }
+
 
 @Preview(showBackground = true)
 @Composable
