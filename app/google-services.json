@@ -28,7 +28,7 @@
       "client_info": {
         "mobilesdk_app_id": "1:1043106500906:android:c327bd9aa45e64fd398e53",
         "android_client_info": {
-          "package_name": "com.example.carelink"
+          "package_name": "com.example.myapplication"
         }
       },
       "oauth_client": [],

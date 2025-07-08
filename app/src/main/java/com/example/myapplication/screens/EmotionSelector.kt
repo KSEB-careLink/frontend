@@ -1,4 +1,4 @@
-package com.example.carelink.screens
+package com.example.myapplication.screens
 
 import android.widget.Toast
 import androidx.compose.foundation.layout.Row

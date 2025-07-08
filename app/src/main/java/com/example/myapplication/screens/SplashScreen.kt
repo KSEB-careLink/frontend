@@ -1,8 +1,7 @@
-package com.example.carelink.screens
+package com.example.myapplication.screens
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
-import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -12,14 +11,14 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
-import com.example.carelink.R
+import com.example.myapplication.R
 import kotlinx.coroutines.delay
 
 @Composable
 fun SplashScreen(navController: NavController) {
     LaunchedEffect(Unit) {
         delay(3000)
-        navController.navigate("home") {
+        navController.navigate("choose") {
             popUpTo("splash") { inclusive = true }
         }
     }

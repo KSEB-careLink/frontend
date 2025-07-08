@@ -1,4 +1,4 @@
-package com.example.carelink
+package com.example.myapplication
 
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.ext.junit.runners.AndroidJUnit4

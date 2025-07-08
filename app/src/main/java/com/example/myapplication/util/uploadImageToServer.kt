@@ -1,4 +1,4 @@
-package com.example.carelink.util
+package com.example.myapplication.util
 
 import android.content.Context
 import kotlinx.coroutines.CoroutineScope

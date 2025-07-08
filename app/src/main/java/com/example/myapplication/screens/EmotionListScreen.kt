@@ -1,4 +1,4 @@
-package com.example.carelink.screens
+package com.example.myapplication.screens
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -19,7 +19,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
-import com.example.carelink.viewmodel.EmotionViewModel
+import com.example.myapplication.viewmodel.EmotionViewModel
 import androidx.compose.foundation.shape.RoundedCornerShape
 
 @OptIn(ExperimentalMaterial3Api::class)

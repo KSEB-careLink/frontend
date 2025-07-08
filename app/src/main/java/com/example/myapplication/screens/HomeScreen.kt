@@ -1,4 +1,4 @@
-package com.example.carelink.screens
+package com.example.myapplication.screens
 
 import android.content.Context
 import android.content.Intent
@@ -31,8 +31,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
-import com.example.carelink.R
-import com.example.carelink.viewmodel.EmotionViewModel
+import com.example.myapplication.R
+import com.example.myapplication.viewmodel.EmotionViewModel
 import java.util.*
 import androidx.compose.foundation.Image
 

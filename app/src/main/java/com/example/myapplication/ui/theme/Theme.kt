@@ -1,4 +1,4 @@
-package com.example.carelink.ui.theme
+package com.example.myapplication.ui.theme
 
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme

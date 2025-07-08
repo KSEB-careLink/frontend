@@ -1,8 +1,8 @@
-package com.example.carelink.viewmodel
+package com.example.myapplication.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.carelink.datastore.EmotionRepository
+import com.example.myapplication.datastore.EmotionRepository
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
