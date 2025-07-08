@@ -21,41 +21,44 @@ import com.example.myapplication.R
 @Composable
 fun ChoosePositionPage(navController: NavController) {
     // 이 두 값만 바꿔 보세요!
-    val topPadding = 100.dp     // 이미지 그룹이 화면 상단에서 얼마나 아래로 내려올지
-    val bottomPadding = 48.dp   // 버튼 그룹이 화면 바닥에서 얼마나 위로 올라올지
+    val imageGroupTopPadding = 220.dp      // 이미지(로고+텍스트) 그룹이 화면 상단에서 얼마나 내려올지
+    val buttonGroupTopPadding = 500.dp    // 버튼 그룹이 화면 상단에서 얼마나 내려올지
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = 24.dp)
     ) {
-        // 1) 로고 + 텍스트 이미지
-        Column(
+        // 1) 이미지 그룹: 로고와 텍스트 이미지를 겹쳐서 중앙에 배치
+        Box(
             modifier = Modifier
                 .align(Alignment.TopCenter)
-                .padding(top = topPadding),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .padding(top = imageGroupTopPadding),
+            contentAlignment = Alignment.Center
         ) {
             Image(
-                painter = painterResource(R.drawable.rogo),
+                painter = painterResource(id = R.drawable.rogo),
                 contentDescription = "로고",
-                modifier = Modifier.size(200.dp),
+                modifier = Modifier
+                    .size(200.dp)
+                    .offset(y = (-20).dp),   // 로고를 위로 20dp 이동 (조절 가능)
                 contentScale = ContentScale.Fit
             )
-            Spacer(modifier = Modifier.height(16.dp))
             Image(
-                painter = painterResource(R.drawable.ai_text),
+                painter = painterResource(id = R.drawable.ai_text),
                 contentDescription = "텍스트 로고",
-                modifier = Modifier.size(150.dp),
+                modifier = Modifier
+                    .size(150.dp)
+                    .offset(y = 90.dp),     // 텍스트를 아래로 90dp 이동 (조절 가능)
                 contentScale = ContentScale.Fit
             )
         }
 
-        // 2) 버튼 두 개
+        // 2) 버튼 그룹: TopCenter에 붙이고, top padding으로 위치 조절
         Column(
             modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = bottomPadding)
+                .align(Alignment.TopCenter)
+                .padding(top = buttonGroupTopPadding)
                 .fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -63,18 +66,18 @@ fun ChoosePositionPage(navController: NavController) {
                 onClick = { navController.navigate("patient") },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(80.dp),     // 버튼 높이를 바꾸고 싶으면 이 값을 조절
-                shape = RoundedCornerShape(90.dp),
+                    .height(80.dp),    // 버튼 높이 (조절 가능)
+                shape = RoundedCornerShape(40.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Color.Black)
             ) {
                 Text("🧓 어르신으로 시작하기", color = Color.White)
             }
-            Spacer(modifier = Modifier.height(16.dp))  // 버튼 사이 간격
+            Spacer(modifier = Modifier.height(16.dp))
             Button(
                 onClick = { navController.navigate("guardian") },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(80.dp),     // 버튼 높이 동일하게 유지
+                    .height(80.dp),
                 shape = RoundedCornerShape(40.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Color.Black)
             ) {
@@ -89,6 +92,8 @@ fun ChoosePositionPage(navController: NavController) {
 fun PreviewChoosePositionPage() {
     ChoosePositionPage(navController = rememberNavController())
 }
+
+
 
 
 
