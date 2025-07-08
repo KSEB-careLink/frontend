@@ -16,7 +16,7 @@ import com.example.myapplication.ui.theme.MyApplicationTheme
 import com.example.myapplication.util.getOutputDirectory
 import com.example.myapplication.util.uploadImageToServer
 import com.example.myapplication.screens.GuardianSignInPage
-import com.example.myapplication.screens.PatientSigninPage
+import com.example.myapplication.screens.PatientSignInPage
 
 
 
@@ -38,12 +38,7 @@ class MainActivity : ComponentActivity() {
                             navController = navController
                         )
                     }
-                    // 홈 화면
-                    composable("home") {
-                        HomeScreen(
-                            navController = navController,
-                        )
-                    }
+
                     // Guardian Sign-in 페이지
                     composable("guardian") {
                         GuardianSignInPage(
