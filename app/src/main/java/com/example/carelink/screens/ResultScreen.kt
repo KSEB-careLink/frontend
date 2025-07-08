@@ -1,4 +1,4 @@
-package com.example.myapplication.screens
+package com.example.carelink.screens
 
 import android.net.Uri
 import androidx.compose.foundation.*
@@ -20,7 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import coil.compose.rememberAsyncImagePainter
-import com.example.myapplication.R // 여기에 sample_drawing이 있어야 함
+import com.example.carelink.R // 여기에 sample_drawing이 있어야 함
 
 @Composable
 fun ResultScreen(navController: NavController) {

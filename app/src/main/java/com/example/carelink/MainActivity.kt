@@ -1,15 +1,14 @@
-package com.example.myapplication
+package com.example.carelink
 
-import com.example.myapplication.screens.EmotionListScreen
+import com.example.carelink.screens.EmotionListScreen
 
-import com.example.myapplication.screens.HomeScreen
+import com.example.carelink.screens.HomeScreen
 import android.content.Context
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
@@ -17,12 +16,12 @@ import androidx.datastore.preferences.preferencesDataStore
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import com.example.myapplication.screens.*
-import com.example.myapplication.ui.theme.MyApplicationTheme
-import com.example.myapplication.viewmodel.EmotionViewModel
-import com.example.myapplication.datastore.EmotionRepository
-import com.example.myapplication.util.getOutputDirectory
-import com.example.myapplication.util.uploadImageToServer
+import com.example.carelink.screens.*
+import com.example.carelink.ui.theme.MyApplicationTheme
+import com.example.carelink.viewmodel.EmotionViewModel
+import com.example.carelink.datastore.EmotionRepository
+import com.example.carelink.util.getOutputDirectory
+import com.example.carelink.util.uploadImageToServer
 import java.io.File
 
 // Context 확장

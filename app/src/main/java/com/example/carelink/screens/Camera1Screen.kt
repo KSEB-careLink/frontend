@@ -1,4 +1,4 @@
-package com.example.myapplication.screens
+package com.example.carelink.screens
 
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody.Companion.asRequestBody
@@ -7,10 +7,8 @@ import androidx.compose.ui.res.painterResource
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
-import androidx.navigation.compose.rememberNavController
 import android.content.Context
 import android.net.Uri
-import android.os.Environment
 import android.util.Log
 import android.widget.Toast
 import androidx.camera.core.*
@@ -28,8 +26,7 @@ import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
-import coil.compose.rememberImagePainter
-import com.example.myapplication.R
+import com.example.carelink.R
 import kotlinx.coroutines.*
 import okhttp3.*
 import retrofit2.Retrofit

@@ -1,4 +1,4 @@
-package com.example.myapplication.datastore
+package com.example.carelink.datastore
 
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
