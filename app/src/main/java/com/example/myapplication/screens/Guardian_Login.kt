@@ -115,7 +115,7 @@ fun Guardian_Login(navController: NavController) {
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Button(
-                onClick = { navController.navigate("main") },
+                onClick = { navController.navigate("code") },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp),                  // 버튼 높이

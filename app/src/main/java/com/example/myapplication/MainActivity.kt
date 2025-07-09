@@ -21,6 +21,7 @@ import com.example.myapplication.screens.Patient_Login
 import com.example.myapplication.screens.Patient_Sentence
 import com.example.myapplication.screens.Guardian_Login
 import com.example.myapplication.screens.Main_Page
+import com.example.myapplication.screens.Code
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -62,6 +63,11 @@ class MainActivity : ComponentActivity() {
                     // 로그인 페이지 (route는 "login"으로 소문자)
                     composable("G_login") {
                         Guardian_Login(navController)
+                    }
+
+                    // 코드 페이지
+                    composable("code") {
+                        Code(navController)
                     }
 
                     // 매인 페이지
