@@ -64,6 +64,11 @@ class MainActivity : ComponentActivity() {
                         Patient_Sentence(navController)
                     }
 
+                    // 환자 퀴즈 페이지
+                    composable("quiz") {
+                        Patient_Quiz(navController)
+                    }
+
                     // 결과 페이지
                     composable("result") {
                         ResultScreen(navController)

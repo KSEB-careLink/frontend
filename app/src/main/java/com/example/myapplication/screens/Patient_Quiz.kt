@@ -27,20 +27,21 @@ import androidx.navigation.compose.rememberNavController
 import com.example.myapplication.R
 
 @Composable
-fun  Patient_Sentence(navController: NavController) {
-    // ✏️ 조절용 값들
-    val logoSize = 200.dp
-    val logoOffsetY = (1).dp
+fun Patient_Quiz(navController: NavController) {
+    // ✏️값 조절용
+    val logoSize      = 200.dp
+    val logoOffsetY   = (1).dp
     val speakerTopGap = 16.dp
     val greyBoxTopGap = 16.dp
     val greyBoxHeight = 330.dp
     val greyBoxCorner = 12.dp
-    val recallBtnHeight = 56.dp
-    val recallBtnGap = 12.dp
+    val questionGap   = 16.dp
+    val optionGap     = 12.dp
+    val optionHeight  = 56.dp
 
-    // 현재 route 확인
+    // 현재 route
     val navBackStack by navController.currentBackStackEntryAsState()
-    val currentRoute = navBackStack?.destination?.route
+    val currentRoute  = navBackStack?.destination?.route
 
     Scaffold(
         bottomBar = {
@@ -82,7 +83,7 @@ fun  Patient_Sentence(navController: NavController) {
                 .padding(horizontal = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // 1) 로고만 겹치기
+            // 1) 로고
             Box(
                 Modifier
                     .offset(y = logoOffsetY)
@@ -97,83 +98,103 @@ fun  Patient_Sentence(navController: NavController) {
                 )
             }
 
-            // 2) 소리 아이콘 + “기억 나시나요?”
-            Spacer(modifier = Modifier.height(speakerTopGap))
+            // 2) 내레이션
+            Spacer(Modifier.height(speakerTopGap))
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .align(Alignment.Start),
+                modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
-                    imageVector = Icons.Default.VolumeUp,
+                    Icons.Default.VolumeUp,
                     contentDescription = "소리 재생",
-                    modifier = Modifier.size(24.dp),
+                    modifier = Modifier.size(28.dp),
                     tint = Color.Black
                 )
-                Spacer(modifier = Modifier.width(8.dp))
+                Spacer(Modifier.width(8.dp))
                 Text(
                     text = buildAnnotatedString {
-                        append("기억 ")
-                        withStyle(SpanStyle(color = Color(0xFF00C4B4))) {
-                            append("나시나요?")
-                        }
+                        append("작년 봄, 손녀와 함께 전주에서 특별한 음식을 먹었을 때의 사진이네요!")
                     },
-                    fontSize = 24.sp
+                    fontSize = 20.sp,
+                    lineHeight = 24.sp
                 )
             }
 
-            // 3) 빈 회색 배경 박스
-            Spacer(modifier = Modifier.height(greyBoxTopGap))
+            // 3) 회색 박스
+            Spacer(Modifier.height(greyBoxTopGap))
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(greyBoxHeight)
-                    .background(
-                        color = Color(0xFFEDE9F5),
-                        shape = RoundedCornerShape(greyBoxCorner)
-                    )
+                    .background(Color(0xFFEDE9F5), RoundedCornerShape(greyBoxCorner))
             )
 
-            // 4) 회상문장 버튼 2개
-            Spacer(modifier = Modifier.height(recallBtnGap))
-            Button(
-                onClick = { /* TODO: 회상문장1 */ },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(recallBtnHeight),
-                shape = RoundedCornerShape(8.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C4B4))
-            ) {
-                Text(
-                    text = "(회상문장1) ex: 작년 크리스마스 기념 가족여행을 갔을 때의 사진이네요!",
-                    color = Color.White,
-                    fontSize = 14.sp
-                )
-            }
-            Spacer(modifier = Modifier.height(recallBtnGap))
-            Button(
-                onClick = { /* TODO: 회상문장2 */ },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(recallBtnHeight),
-                shape = RoundedCornerShape(8.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C4B4))
-            ) {
-                Text(
-                    text = "(회상문장2) ex: 손녀딸 경민이가 포크를 들고 있네요!",
-                    color = Color.White,
-                    fontSize = 14.sp
-                )
+            // 4) 질문
+            Spacer(Modifier.height(questionGap))
+            Text(
+                text = "무엇을 드셨을까요?",
+                fontSize = 28.sp,
+                color = Color(0xFF00C4B4),
+                modifier = Modifier.align(Alignment.CenterHorizontally)
+            )
+
+            // 5) 선택지 2x2
+            Spacer(Modifier.height(optionGap))
+            Column(verticalArrangement = Arrangement.spacedBy(optionGap)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(optionGap)
+                ) {
+                    OptionButton(
+                        text = "냉면",
+                        onClick = { /*TODO*/ },
+                        modifier = Modifier.weight(1f)
+                    )
+                    OptionButton(
+                        text = "비빔밥",
+                        onClick = { /*TODO*/ },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(optionGap)
+                ) {
+                    OptionButton(
+                        text = "떡볶이",
+                        onClick = { /*TODO*/ },
+                        modifier = Modifier.weight(1f)
+                    )
+                    OptionButton(
+                        text = "칼국수",
+                        onClick = { /*TODO*/ },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
             }
         }
     }
 }
 
-@Preview(showBackground = true)
 @Composable
-fun PreviewPatient_() {
-    Patient_Sentence(navController = rememberNavController())
+private fun OptionButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Button(
+        onClick = onClick,
+        modifier = modifier
+            .height(56.dp),
+        shape = RoundedCornerShape(8.dp),
+        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C4B4))
+    ) {
+        Text(text = text, color = Color.White)
+    }
 }
 
-
+@Preview(showBackground = true)
+@Composable
+fun PreviewPatient_Quiz() {
+    Patient_Quiz(navController = rememberNavController())
+}
