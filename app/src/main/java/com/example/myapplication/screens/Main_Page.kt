@@ -13,31 +13,27 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import androidx.navigation.compose.rememberNavController
 import com.example.myapplication.R
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowRight
-import androidx.compose.ui.tooling.preview.Preview
-import androidx.navigation.compose.rememberNavController
 
 @Composable
 fun Main_Page(navController: NavController) {
-
-    // 로고 그룹 상단 패딩 값
-    val imageGroupTopPadding = 32.dp
-
-    Box(
+    Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = 16.dp)
     ) {
-        // 1) 이미지 그룹: 로고(rogo)와 텍스트(ai_text)를 겹쳐서 중앙에 배치
+        // 1) 상단 로고 그룹
         Box(
             modifier = Modifier
-                .align(Alignment.TopCenter)
-                .padding(top = imageGroupTopPadding),
+                .fillMaxWidth()
+                .padding(top = 32.dp),
             contentAlignment = Alignment.Center
         ) {
             Image(
@@ -58,12 +54,12 @@ fun Main_Page(navController: NavController) {
             )
         }
 
-        // 2) 장치 리스트 버튼들
+        Spacer(modifier = Modifier.height(54.dp))
+
+        // 2) 장치 리스트
         Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .align(Alignment.Center)
-                .padding(horizontal = 8.dp),
+                .fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             val deviceNames = listOf("장치 1", "장치 2", "장치 3")
@@ -81,11 +77,7 @@ fun Main_Page(navController: NavController) {
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text(
-                            text = name,
-                            color = Color.White,
-                            fontSize = 18.sp
-                        )
+                        Text(text = name, color = Color.White, fontSize = 18.sp)
                         Icon(
                             imageVector = Icons.Default.KeyboardArrowRight,
                             contentDescription = "Next",
@@ -96,22 +88,42 @@ fun Main_Page(navController: NavController) {
             }
         }
 
-        // 3) 하단 환자의 기기 추가 버튼
+        // 3) 장치 리스트와 하단 버튼 사이를 flexible space 로 채우기
+        Spacer(modifier = Modifier.weight(1f))
+
+        // 4) 빈 공간 중앙에 스마트폰 이모지
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "📱",
+                fontSize = 250.sp,
+                color = Color(0x9900C4B4)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // 5) 하단 환자의 기기 추가 버튼
         Button(
             onClick = { navController.navigate("addDevice") },
             modifier = Modifier
                 .fillMaxWidth()
-                .height(100.dp)
-                .align(Alignment.BottomCenter)
-                .padding(18.dp),
+                .height(66.dp)
+                .padding(bottom = 16.dp),
             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C4B4)),
             shape = MaterialTheme.shapes.medium
         ) {
-            Text(
-                text = "환자의 기기 추가",
-                color = Color.White,
-                fontSize = 18.sp
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+
+                Text(text = "환자의 기기 추가", color = Color.White, fontSize = 18.sp)
+            }
         }
     }
 }
@@ -119,6 +131,8 @@ fun Main_Page(navController: NavController) {
 @Preview(showBackground = true)
 @Composable
 fun PreviewMainPage() {
-    // 더미 NavController는 Helpers로 만들거나 그냥 null 처리
     Main_Page(navController = rememberNavController())
 }
+
+
+
