@@ -13,8 +13,6 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.myapplication.screens.*
 import com.example.myapplication.ui.theme.MyApplicationTheme
-import com.example.myapplication.util.getOutputDirectory
-import com.example.myapplication.util.uploadImageToServer
 import com.example.myapplication.screens.GuardianSignInPage
 import com.example.myapplication.screens.PatientSignInPage
 import com.example.myapplication.screens.Patient_Login
