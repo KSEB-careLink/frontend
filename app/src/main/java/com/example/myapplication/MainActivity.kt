@@ -68,6 +68,10 @@ class MainActivity : ComponentActivity() {
                     composable("quiz") {
                         Patient_Quiz(navController)
                     }
+                    // 환자 알림 페이지
+                    composable("alert") {
+                        Patient_Alert(navController)
+                    }
 
                     // 결과 페이지
                     composable("result") {
