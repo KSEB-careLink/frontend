@@ -8,16 +8,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -28,20 +24,27 @@ import com.example.myapplication.R
 
 @Composable
 fun Patient_Quiz(navController: NavController) {
-    // ✏️값 조절용
-    val logoSize      = 200.dp
-    val logoOffsetY   = (1).dp
-    val speakerTopGap = 16.dp
-    val greyBoxTopGap = 16.dp
-    val greyBoxHeight = 330.dp
-    val greyBoxCorner = 12.dp
+    // — 레이아웃 조절값 —
+    val logoSize      = 150.dp
+    val logoOffsetY   = 1.dp
+    val speakerGap    = 16.dp
+    val greyGap       = 16.dp
+    val greyHeight    = 330.dp
+    val greyCorner    = 12.dp
     val questionGap   = 16.dp
     val optionGap     = 12.dp
-    val optionHeight  = 56.dp
 
-    // 현재 route
+    // — 문제 데이터 —
+    val options       = listOf("냉면", "비빔밥", "떡볶이", "칼국수")
+    val correctAnswer = "냉면"
+
+    // — 상태 —
+    var selected   by remember { mutableStateOf<String?>(null) }
+    var showResult by remember { mutableStateOf(false) }
+
+    // — 탭 바용 현재 route —
     val navBackStack by navController.currentBackStackEntryAsState()
-    val currentRoute  = navBackStack?.destination?.route
+    val currentRoute = navBackStack?.destination?.route
 
     Scaffold(
         bottomBar = {
@@ -75,102 +78,174 @@ fun Patient_Quiz(navController: NavController) {
                 }
             }
         }
-    ) { innerPadding ->
+    ) { inner ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
+                .padding(inner)
                 .padding(horizontal = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // 1) 로고
-            Box(
-                Modifier
-                    .offset(y = logoOffsetY)
-                    .size(logoSize),
-                contentAlignment = Alignment.Center
-            ) {
-                Image(
-                    painter = painterResource(R.drawable.rogo),
-                    contentDescription = "로고",
-                    modifier = Modifier.size(logoSize),
-                    contentScale = ContentScale.Fit
-                )
-            }
-
-            // 2) 내레이션
-            Spacer(Modifier.height(speakerTopGap))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    Icons.Default.VolumeUp,
-                    contentDescription = "소리 재생",
-                    modifier = Modifier.size(28.dp),
-                    tint = Color.Black
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    text = buildAnnotatedString {
-                        append("작년 봄, 손녀와 함께 전주에서 특별한 음식을 먹었을 때의 사진이네요!")
-                    },
-                    fontSize = 20.sp,
-                    lineHeight = 24.sp
-                )
-            }
-
-            // 3) 회색 박스
-            Spacer(Modifier.height(greyBoxTopGap))
-            Box(
+            Spacer(Modifier.height(24.dp))
+            Image(
+                painter = painterResource(R.drawable.rogo),
+                contentDescription = "로고",
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(greyBoxHeight)
-                    .background(Color(0xFFEDE9F5), RoundedCornerShape(greyBoxCorner))
+                    .size(logoSize)
+                    .offset(y = logoOffsetY),
+                contentScale = ContentScale.Fit
             )
 
-            // 4) 질문
-            Spacer(Modifier.height(questionGap))
-            Text(
-                text = "무엇을 드셨을까요?",
-                fontSize = 28.sp,
-                color = Color(0xFF00C4B4),
-                modifier = Modifier.align(Alignment.CenterHorizontally)
-            )
+            Spacer(Modifier.height(speakerGap))
 
-            // 5) 선택지 2x2
-            Spacer(Modifier.height(optionGap))
-            Column(verticalArrangement = Arrangement.spacedBy(optionGap)) {
+            if (!showResult) {
+                // ───────── 질문 화면 ─────────
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(optionGap)
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    OptionButton(
-                        text = "냉면",
-                        onClick = { /*TODO*/ },
-                        modifier = Modifier.weight(1f)
+                    Icon(
+                        Icons.Default.VolumeUp,
+                        contentDescription = "소리",
+                        modifier = Modifier.size(28.dp),
+                        tint = Color.Black
                     )
-                    OptionButton(
-                        text = "비빔밥",
-                        onClick = { /*TODO*/ },
-                        modifier = Modifier.weight(1f)
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        "작년 봄, 손녀와 함께 전주에서 특별한 음식을 먹었을 때의 사진이네요!",
+                        fontSize = 20.sp,
+                        lineHeight = 24.sp
                     )
                 }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(optionGap)
+
+                Spacer(Modifier.height(greyGap))
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(greyHeight)
+                        .background(Color(0xFFEDE9F5), RoundedCornerShape(greyCorner))
+                )
+
+                Spacer(Modifier.height(questionGap))
+
+                Text(
+                    "무엇을 드셨을까요?",
+                    fontSize = 28.sp,
+                    color = Color(0xFF00C4B4)
+                )
+
+                Spacer(Modifier.height(questionGap))
+
+                // ★ 질문 화면용 2×2 보기 그리드
+                Column(
+                    modifier = Modifier.fillMaxWidth(),                // ← 여기가 포인트!
+                    verticalArrangement = Arrangement.spacedBy(optionGap)
                 ) {
-                    OptionButton(
-                        text = "떡볶이",
-                        onClick = { /*TODO*/ },
-                        modifier = Modifier.weight(1f)
-                    )
-                    OptionButton(
-                        text = "칼국수",
-                        onClick = { /*TODO*/ },
-                        modifier = Modifier.weight(1f)
-                    )
+                    options.chunked(2).forEach { rowItems ->
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(optionGap)
+                        ) {
+                            rowItems.forEach { text ->
+                                OptionButton(
+                                    text = text,
+                                    modifier = Modifier.weight(1f),
+                                    onClick = {
+                                        selected = text
+                                        showResult = true
+                                    }
+                                )
+                            }
+                        }
+                    }
                 }
+                // ───────────────────────────────
+
+            } else {
+                // ───────── 결과 화면 ─────────
+                Spacer(Modifier.height(32.dp))
+                val isCorrect = selected == correctAnswer
+
+                if (isCorrect) {
+                    // 맞았을 때
+                    Text(
+                        "정답이에요!",
+                        fontSize = 32.sp,
+                        color = Color(0xFF00A651)
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    Image(
+                        painter = painterResource(R.drawable.ch),
+                        contentDescription = "정답 이미지",
+                        modifier = Modifier.size(180.dp),
+                        contentScale = ContentScale.Fit
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    Text(
+                        "정말 잘 기억하셨어요😊",
+                        fontSize = 20.sp,
+                        color = Color(0xFF00C4B4)
+                    )
+                    Spacer(Modifier.height(24.dp))
+                    Button(
+                        onClick = {
+                            selected = null
+                            showResult = false
+                        },
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C4B4))
+                    ) {
+                        Text("다시 풀기", color = Color.White)
+                    }
+                } else {
+                    // 틀렸을 때
+                    Text(
+                        "정답이 아니에요!",
+                        fontSize = 32.sp,
+                        color = Color(0xFFE2101A)
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    Image(
+                        painter = painterResource(R.drawable.wr),
+                        contentDescription = "오답 이미지",
+                        modifier = Modifier.size(180.dp),
+                        contentScale = ContentScale.Fit
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    Text(
+                        "다시 기억해볼까요?",
+                        fontSize = 20.sp,
+                        color = Color(0xFF00C4B4)
+                    )
+                    Spacer(Modifier.height(questionGap))
+
+                    // ★ 오답 재표시용 2×2 보기 그리드
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),            // ← 여기도 동일!
+                        verticalArrangement = Arrangement.spacedBy(optionGap)
+                    ) {
+                        options.chunked(2).forEach { rowItems ->
+                            Row(
+                                Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(optionGap)
+                            ) {
+                                rowItems.forEach { text ->
+                                    OptionButton(
+                                        text = text,
+                                        modifier = Modifier.weight(1f),
+                                        onClick = {
+                                            selected = text
+                                            showResult = true
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+                // ───────────────────────────────
             }
         }
     }
@@ -184,12 +259,11 @@ private fun OptionButton(
 ) {
     Button(
         onClick = onClick,
-        modifier = modifier
-            .height(56.dp),
+        modifier = modifier.height(56.dp),
         shape = RoundedCornerShape(8.dp),
         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C4B4))
     ) {
-        Text(text = text, color = Color.White)
+        Text(text, color = Color.White)
     }
 }
 
@@ -198,3 +272,7 @@ private fun OptionButton(
 fun PreviewPatient_Quiz() {
     Patient_Quiz(navController = rememberNavController())
 }
+
+
+
+
