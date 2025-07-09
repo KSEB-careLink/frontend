@@ -3,10 +3,7 @@ package com.example.myapplication.screens
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Text
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -18,21 +15,18 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
-import com.example.myapplication.R
 import androidx.navigation.compose.rememberNavController
-
+import com.example.myapplication.R
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 
 @Composable
-fun GuardianSignInPage(
-    navController: NavController
-) {
-    // ★ 위치 조절 변수
-    val imageGroupTopPadding = 80.dp
-    val formTopPadding = 300.dp
-    val buttonBottomPadding = 0.1.dp
+fun Guardian_Login(navController: NavController) {
+    // ★ 위치 조절 변수 ★
+    val imageGroupTopPadding = 80.dp    // 로고 겹치기 그룹이 상단에서 얼마나 내려올지
+    val formTopPadding = 320.dp         // 이메일/비밀번호 폼이 화면 상단에서 얼마나 내려올지
 
-    // 입력 상태
-    var name by remember { mutableStateOf("") }
+
+    // 입력값 상태
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
 
@@ -41,61 +35,51 @@ fun GuardianSignInPage(
             .fillMaxSize()
             .padding(horizontal = 24.dp)
     ) {
-        // 1) 로고 겹치기
+        // 1) 가운데 로고 겹치기
         Box(
-            Modifier
+            modifier = Modifier
                 .align(Alignment.TopCenter)
                 .padding(top = imageGroupTopPadding)
                 .sizeIn(minWidth = 0.dp, minHeight = 0.dp),
             contentAlignment = Alignment.Center
         ) {
             Image(
-                painter = painterResource(R.drawable.rogo),
+                painter = painterResource(id = R.drawable.rogo),
                 contentDescription = "로고",
                 modifier = Modifier
                     .size(200.dp)
-                    .offset(y = (-20).dp),
+                    .offset(y = (-20).dp), // 로고를 위로 20dp 이동
                 contentScale = ContentScale.Fit
             )
             Image(
-                painter = painterResource(R.drawable.ai_text),
+                painter = painterResource(id = R.drawable.ai_text),
                 contentDescription = "텍스트 로고",
                 modifier = Modifier
                     .size(150.dp)
-                    .offset(y = 90.dp),
+                    .offset(y = 90.dp),   // 텍스트를 아래로 90dp 이동
                 contentScale = ContentScale.Fit
             )
         }
 
-        // 2) 회원 가입 폼
+        // 2) 로그인 폼 (타이틀 + 입력란)
         Column(
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .padding(top = formTopPadding)
                 .fillMaxWidth(),
             horizontalAlignment = Alignment.Start
-        ) {Spacer(Modifier.height(24.dp))
+        ) {
+            // 타이틀
             Text(
-                text = "회원 가입",
+                text = "보호자 로그인",
                 fontSize = 32.sp,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.align(Alignment.CenterHorizontally)
             )
-            Spacer(Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
-            Text(text = "이름", fontSize = 16.sp)
-            OutlinedTextField(
-                value = name,
-                onValueChange = { name = it },
-                placeholder = { Text("이름") },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp),
-                singleLine = true
-            )
-            Spacer(Modifier.height(16.dp))
-
-            Text(text = "이메일 주소 (아이디)", fontSize = 16.sp)
+            // 이메일
+            Text(text = "이메일 주소", fontSize = 16.sp)
             OutlinedTextField(
                 value = email,
                 onValueChange = { email = it },
@@ -105,8 +89,10 @@ fun GuardianSignInPage(
                     .height(56.dp),
                 singleLine = true
             )
-            Spacer(Modifier.height(16.dp))
 
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // 비밀번호
             Text(text = "비밀번호", fontSize = 16.sp)
             OutlinedTextField(
                 value = password,
@@ -115,54 +101,47 @@ fun GuardianSignInPage(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp),
-                singleLine = true
+                singleLine = true,
+                visualTransformation = PasswordVisualTransformation()
             )
         }
 
-        Row(
+        // 3) 화면 하단에 두 개의 버튼을 Column으로 묶기
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .height(66.dp)
-                .align(Alignment.BottomCenter)
-                .offset(y = (-140).dp),   // 필요시 위치 조정
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .align(Alignment.BottomCenter)        // BoxScope.align
+                .padding(bottom = 170.dp)               // 아래 여백
+                .fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // 가입하기
             Button(
-                onClick = { navController.navigate("signup") },
+                onClick = { navController.navigate("sentence") },
                 modifier = Modifier
-                    .weight(1f),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C4B4)),
+                    .fillMaxWidth()
+                    .height(56.dp),                  // 버튼 높이
                 shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C4B4))
             ) {
-                Text(
-                    text = "가입하기",
-                    color = Color.White,
-                    fontSize = 16.sp
-                )
+                Text("로그인", color = Color.White, fontSize = 16.sp)
             }
-
-            // 로그인
+            Spacer(modifier = Modifier.height(16.dp))
             Button(
-                onClick = { navController.navigate("G_login") },
+                onClick = { navController.navigate("") },
                 modifier = Modifier
-                    .weight(1f),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C4B4)),
+                    .fillMaxWidth()
+                    .height(56.dp),                  // 버튼 높이
                 shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C4B4))
             ) {
-                Text(
-                    text = "로그인",
-                    color = Color.White,
-                    fontSize = 16.sp
-                )
+                Text("회원가입", color = Color.White, fontSize = 16.sp)
             }
         }
     }
 }
 
+
 @Preview(showBackground = true)
 @Composable
-fun GuardianSignInPage() {
-    PatientSignInPage(navController = rememberNavController())
+fun PreviewLogin2() {
+    Guardian_Login(navController = rememberNavController())
 }

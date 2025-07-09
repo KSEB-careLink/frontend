@@ -20,7 +20,7 @@ import com.example.myapplication.R
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 
 @Composable
-fun Login(navController: NavController) {
+fun Patient_Login(navController: NavController) {
     // ★ 위치 조절 변수 ★
     val imageGroupTopPadding = 80.dp    // 로고 겹치기 그룹이 상단에서 얼마나 내려올지
     val formTopPadding = 320.dp         // 이메일/비밀번호 폼이 화면 상단에서 얼마나 내려올지
@@ -71,7 +71,7 @@ fun Login(navController: NavController) {
         ) {
             // 타이틀
             Text(
-                text = "로그인",
+                text = "어르신 로그인",
                 fontSize = 32.sp,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.align(Alignment.CenterHorizontally)
@@ -142,6 +142,6 @@ fun Login(navController: NavController) {
 
 @Preview(showBackground = true)
 @Composable
-fun PreviewLogin() {
-    Login(navController = rememberNavController())
+fun PreviewLogin1() {
+    Patient_Login(navController = rememberNavController())
 }

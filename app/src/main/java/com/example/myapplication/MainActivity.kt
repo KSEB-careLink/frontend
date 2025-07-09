@@ -17,9 +17,9 @@ import com.example.myapplication.util.getOutputDirectory
 import com.example.myapplication.util.uploadImageToServer
 import com.example.myapplication.screens.GuardianSignInPage
 import com.example.myapplication.screens.PatientSignInPage
-import com.example.myapplication.screens.Login
+import com.example.myapplication.screens.Patient_Login
 import com.example.myapplication.screens.Patient_Sentence
-
+import com.example.myapplication.screens.Guardian_Login
 
 
 class MainActivity : ComponentActivity() {
@@ -54,9 +54,14 @@ class MainActivity : ComponentActivity() {
                         ChoosePositionPage(navController)
                     }
 
+                    // 환자 로그인 페이지 (route는 "login"으로 소문자)
+                    composable("p_login") {
+                        Patient_Login(navController)
+                    }
+
                     // 로그인 페이지 (route는 "login"으로 소문자)
-                    composable("login") {
-                        Login(navController)
+                    composable("G_login") {
+                        Guardian_Login(navController)
                     }
 
                     // 환자 문장 페이지

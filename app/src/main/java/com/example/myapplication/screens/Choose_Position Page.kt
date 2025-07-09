@@ -63,7 +63,7 @@ fun ChoosePositionPage(navController: NavController) {
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Button(
-                onClick = { navController.navigate("login") },
+                onClick = { navController.navigate("p_login") },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(80.dp),    // 버튼 높이 (조절 가능)
@@ -74,7 +74,7 @@ fun ChoosePositionPage(navController: NavController) {
             }
             Spacer(modifier = Modifier.height(16.dp))
             Button(
-                onClick = { navController.navigate("guardian") },
+                onClick = { navController.navigate("G_login") },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(80.dp),

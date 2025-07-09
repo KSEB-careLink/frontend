@@ -119,18 +119,44 @@ fun PatientSignInPage(
             )
         }
 
-        // 3) 로그인 하러 가기 버튼
-        Button(
-            onClick = { navController.navigate("login") },
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C4B4)),
-            shape = RoundedCornerShape(12.dp),
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(66.dp)
                 .align(Alignment.BottomCenter)
-                .offset(y = (-140).dp)    // 위로 10dp 이동
+                .offset(y = (-140).dp),   // 필요시 위치 조정
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(text = "로그인 하러 가기", color = Color.White, fontSize = 16.sp)
+            // 가입하기
+            Button(
+                onClick = { navController.navigate("signup") },
+                modifier = Modifier
+                    .weight(1f),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C4B4)),
+                shape = RoundedCornerShape(12.dp),
+            ) {
+                Text(
+                    text = "가입하기",
+                    color = Color.White,
+                    fontSize = 16.sp
+                )
+            }
+
+            // 로그인
+            Button(
+                onClick = { navController.navigate("p_login") },
+                modifier = Modifier
+                    .weight(1f),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C4B4)),
+                shape = RoundedCornerShape(12.dp),
+            ) {
+                Text(
+                    text = "로그인",
+                    color = Color.White,
+                    fontSize = 16.sp
+                )
+            }
         }
     }
 }
