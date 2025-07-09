@@ -65,7 +65,7 @@ fun Main_Page(navController: NavController) {
             val deviceNames = listOf("장치 1", "장치 2", "장치 3")
             deviceNames.forEach { name ->
                 Button(
-                    onClick = { /* TODO: 장치 상세로 이동 */ },
+                    onClick = { navController.navigate("main2") },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(66.dp),

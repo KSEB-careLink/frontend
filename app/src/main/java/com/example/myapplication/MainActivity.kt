@@ -20,6 +20,7 @@ import com.example.myapplication.screens.Patient_Sentence
 import com.example.myapplication.screens.Guardian_Login
 import com.example.myapplication.screens.Main_Page
 import com.example.myapplication.screens.Code
+import com.example.myapplication.screens.Main_Page2
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -73,6 +74,10 @@ class MainActivity : ComponentActivity() {
                         Main_Page(navController)
                     }
 
+                    // 매인 페이지
+                    composable("main2") {
+                        Main_Page2(navController)
+                    }
                     // 환자 문장 페이지
                     composable("sentence") {
                         Patient_Sentence(navController)
