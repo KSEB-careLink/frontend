@@ -107,7 +107,7 @@ fun Main_Page2(navController: NavController) {
             }
 
             Button(
-                onClick = { /* TODO: 보호자 음성 등록 */ },
+                onClick = { navController.navigate("Recode") },
                 colors = ButtonDefaults.buttonColors(containerColor = buttonColor),
                 shape = RoundedCornerShape(12.dp),
                 modifier = Modifier
