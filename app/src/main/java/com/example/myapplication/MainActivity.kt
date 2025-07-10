@@ -78,6 +78,19 @@ class MainActivity : ComponentActivity() {
                         Main_Page2(navController)
                     }
 
+<<<<<<< Updated upstream
+=======
+                    // 기본 정보 입력 페이지
+                    composable("guardian_basic_info") {
+                        GuardianBasicInfoScreen()
+                    }
+
+                    // 알림 전달 페이지
+                    composable("alarm") {
+                        Guardian_Alarm(navController)
+                    }
+
+>>>>>>> Stashed changes
                     // Recode 화면: voices + onSelectVoice 전달
                     composable("recode") {
                         Recode(
