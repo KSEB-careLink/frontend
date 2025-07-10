@@ -100,18 +100,15 @@ dependencies {
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
 
-    // Import the Firebase BoM
+    // Firebase BoM: 공식 가이드 최신 버전 사용
     implementation(platform("com.google.firebase:firebase-bom:33.16.0"))
 
+// Firebase Auth & 기타 제품은 BoM 덕분에 버전 없이 추가
+    implementation("com.google.firebase:firebase-auth-ktx")
 
-    // TODO: Add the dependencies for Firebase products you want to use
-    // When using the BoM, don't specify versions in Firebase dependencies
-    implementation("com.google.firebase:firebase-analytics")
+// (필요하다면) Analytics, Firestore 등 다른 제품도 버전 없이 추가
+    implementation("com.google.firebase:firebase-analytics-ktx")
 
-
-
-    // Add the dependencies for any other desired Firebase products
-    // https://firebase.google.com/docs/android/setup#available-libraries
 
     // Accompanist Permissions (Compose 런타임 권한 요청)
     implementation("com.google.accompanist:accompanist-permissions:0.37.3")
@@ -123,6 +120,8 @@ dependencies {
     implementation("com.google.maps.android:maps-compose:2.11.3")
     implementation("com.google.android.gms:play-services-maps:18.1.0")
 
+    // 백엔드 로그인 기능 연동을 위한 코드
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.7.1")
 
 }
 
