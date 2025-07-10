@@ -78,6 +78,11 @@ class MainActivity : ComponentActivity() {
                         Main_Page2(navController)
                     }
 
+                    // 알림 전달 페이지
+                    composable("alarm") {
+                        Guardian_Alarm(navController)
+                    }
+
                     // Recode 화면: voices + onSelectVoice 전달
                     composable("recode") {
                         Recode(
@@ -96,6 +101,7 @@ class MainActivity : ComponentActivity() {
                         Recode2(navController)
                     }
 
+                    // 위치 페이지
                     composable("location") {
                         LocationScreen(navController)
                     }

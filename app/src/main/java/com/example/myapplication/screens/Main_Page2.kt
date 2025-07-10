@@ -91,7 +91,7 @@ fun Main_Page2(navController: NavController) {
             }
 
             Button(
-                onClick = { /* TODO: 알림 전달 */ },
+                onClick = { navController.navigate("alarm") },
                 colors = ButtonDefaults.buttonColors(containerColor = buttonColor),
                 shape = RoundedCornerShape(12.dp),
                 modifier = Modifier
