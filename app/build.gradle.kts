@@ -113,6 +113,17 @@ dependencies {
     // Add the dependencies for any other desired Firebase products
     // https://firebase.google.com/docs/android/setup#available-libraries
 
+    // Accompanist Permissions (Compose 런타임 권한 요청)
+    implementation("com.google.accompanist:accompanist-permissions:0.37.3")
+
+    // 위치 권한을 얻기 위한 FusedLocationProvider
+    implementation("com.google.android.gms:play-services-location:21.0.1")
+
+    // Compose Google Maps
+    implementation("com.google.maps.android:maps-compose:2.11.3")
+    implementation("com.google.android.gms:play-services-maps:18.1.0")
+
+
 }
 
 

@@ -96,6 +96,10 @@ class MainActivity : ComponentActivity() {
                         Recode2(navController)
                     }
 
+                    composable("location") {
+                        LocationScreen(navController)
+                    }
+
                     // 환자 문장 페이지
                     composable("sentence") {
                         Patient_Sentence(navController)

@@ -123,7 +123,7 @@ fun Main_Page2(navController: NavController) {
             }
 
             Button(
-                onClick = { /* TODO: 위치 확인 */ },
+                onClick = { navController.navigate("location") },
                 colors = ButtonDefaults.buttonColors(containerColor = buttonColor),
                 shape = RoundedCornerShape(12.dp),
                 modifier = Modifier
