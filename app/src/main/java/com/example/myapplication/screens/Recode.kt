@@ -95,7 +95,7 @@ fun Recode(
 
         // 3) 하단 녹음하러 가기 버튼
         Button(
-            onClick = { navController.navigate("record") },
+            onClick = { navController.navigate("recode2") },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(56.dp)

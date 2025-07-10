@@ -10,50 +10,50 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale              // ← 이 줄을 추가!
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
-import androidx.compose.ui.tooling.preview.Preview
 import com.example.myapplication.R
 import androidx.navigation.compose.rememberNavController
+import androidx.compose.foundation.Image                 // ← Image 도 import
 
 @Composable
 fun Recode2(navController: NavController) {
     // ✏️ 조절값
-    val topSpacer             = 80.dp    // 로고 위 여백
-    val betweenLogoAndTitle   = 24.dp    // 로고-타이틀 간격
-    val betweenTitleAndSub    = 8.dp     // 타이틀-서브텍스트 간격
-    val greyBoxTopGap         = 16.dp    // 서브텍스트-회색박스 간격
-    val greyBoxHeight         = 400.dp   // 회색박스 높이
-    val greyBoxCorner         = 12.dp    // 회색박스 모서리
-    val bottomButtonOffsetY   = 48.dp    // 버튼을 얼마나 위로 올릴지
-
+    val topPadding           = 80.dp
+    val betweenLogoAndTitle  = 12.dp
+    val betweenTitleAndSub   = 8.dp
+    val greyBoxTopGap        = 16.dp
+    val greyBoxHeight        = 400.dp
+    val greyBoxCorner        = 12.dp
+    val bottomButtonOffsetY   = 48.dp
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 24.dp)
+            .padding(top = topPadding, start = 24.dp, end = 24.dp)
     ) {
         Column(
-            modifier = Modifier
-                .align(Alignment.TopCenter)
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.fillMaxWidth()
         ) {
-            Spacer(modifier = Modifier.height(topSpacer))
-
             // 1) 로고
-            androidx.compose.foundation.Image(
+            Image(
                 painter = painterResource(id = R.drawable.rogo),
                 contentDescription = "로고",
-                modifier = Modifier.size(200.dp)
+                modifier = Modifier.size(200.dp),
+                contentScale = ContentScale.Fit
             )
 
             Spacer(modifier = Modifier.height(betweenLogoAndTitle))
 
             // 2) 타이틀
             Text(
-                text = "녹음중.....",
-                fontSize =  32.sp,
+                text = "녹음중...",
+                fontSize = 32.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color.Black
             )
@@ -109,3 +109,5 @@ fun Recode2(navController: NavController) {
 fun PreviewRecordingScreen() {
     Recode2(navController = rememberNavController())
 }
+
+
