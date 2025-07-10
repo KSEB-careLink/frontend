@@ -4,7 +4,10 @@ import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -12,7 +15,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -24,6 +26,7 @@ import com.example.myapplication.network.RetrofitInstance
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
 import kotlinx.coroutines.launch
+import androidx.compose.ui.text.font.FontWeight
 
 @Composable
 fun Patient_Login(navController: NavController) {
@@ -123,34 +126,54 @@ fun Patient_Login(navController: NavController) {
         ) {
             Button(
                 onClick = {
+                    if (email.isBlank() || password.isBlank()) {
+                        Toast.makeText(context, "이메일과 비밀번호를 입력해주세요.", Toast.LENGTH_SHORT).show()
+                        return@Button
+                    }
+
                     // 1) Firebase 로그인
                     auth.signInWithEmailAndPassword(email, password)
                         .addOnCompleteListener { task ->
                             if (task.isSuccessful) {
-                                // 2) 백엔드에서 환자 정보 조회
+                                // 2) 백엔드에 토큰 검증 요청
                                 coroutineScope.launch {
                                     try {
-                                        val res = RetrofitInstance.api.getPatient()
-                                        if (res.isSuccessful) {
-                                            // 3) 조회 성공 시 다음 화면으로 이동
-                                            navController.navigate("sentence") {
-                                                popUpTo("Patient_Login") { inclusive = true }
+                                        val verifyRes = RetrofitInstance.api.verifyToken()
+                                        if (verifyRes.isSuccessful) {
+                                            val role = verifyRes.body()?.role
+                                            if (role == "patient") {
+                                                // 3) 환자 메인 화면으로 이동
+                                                navController.navigate("code") {
+                                                    popUpTo("Patient_Login") { inclusive = true }
+                                                }
+                                            } else {
+                                                Toast.makeText(
+                                                    context,
+                                                    "권한 오류: role=$role",
+                                                    Toast.LENGTH_SHORT
+                                                ).show()
                                             }
                                         } else {
-                                            Toast
-                                                .makeText(context, "조회 실패: ${res.code()}", Toast.LENGTH_SHORT)
-                                                .show()
+                                            Toast.makeText(
+                                                context,
+                                                "토큰 검증 실패: ${verifyRes.code()}",
+                                                Toast.LENGTH_SHORT
+                                            ).show()
                                         }
                                     } catch (e: Exception) {
-                                        Toast
-                                            .makeText(context, "통신 오류: ${e.message}", Toast.LENGTH_SHORT)
-                                            .show()
+                                        Toast.makeText(
+                                            context,
+                                            "통신 오류: ${e.message}",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
                                     }
                                 }
                             } else {
-                                Toast
-                                    .makeText(context, "로그인 실패: ${task.exception?.message}", Toast.LENGTH_SHORT)
-                                    .show()
+                                Toast.makeText(
+                                    context,
+                                    "로그인 실패: ${task.exception?.message}",
+                                    Toast.LENGTH_SHORT
+                                ).show()
                             }
                         }
                 },
@@ -166,7 +189,7 @@ fun Patient_Login(navController: NavController) {
             Spacer(modifier = Modifier.height(16.dp))
 
             Button(
-                onClick = { navController.navigate("patientSignUp") },
+                onClick = { navController.navigate("patient") },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp),

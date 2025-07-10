@@ -124,44 +124,41 @@ fun Guardian_Login(navController: NavController) {
         ) {
             Button(
                 onClick = {
-                    // 1) Firebase 로그인
+                    if (email.isBlank() || password.isBlank()) {
+                        Toast.makeText(context, "이메일과 비밀번호를 입력해주세요.", Toast.LENGTH_SHORT).show()
+                        return@Button
+                    }
+                    // 2) Firebase 로그인
                     auth.signInWithEmailAndPassword(email, password)
                         .addOnCompleteListener { task ->
                             if (task.isSuccessful) {
-                                // 2) 백엔드에 보호자 등록 호출
+                                // 3) 백엔드 토큰 검증
                                 coroutineScope.launch {
                                     try {
-                                        val res = RetrofitInstance.api
-                                            .signupGuardian(email, password)
-                                        if (res.isSuccessful) {
-                                            // 3) 다음 화면으로 이동
-                                            navController.navigate("registerInfo") {
-                                                popUpTo("Guardian_Login") { inclusive = true }
+                                        val verifyRes = RetrofitInstance.api.verifyToken()
+                                        if (verifyRes.isSuccessful) {
+                                            val body = verifyRes.body()
+                                            if (body?.role == "guardian") {
+                                                navController.navigate("code") {
+                                                    popUpTo("code") { inclusive = true }
+                                                }
+                                            } else {
+                                                Toast.makeText(context, "권한 없음: ${body?.role}", Toast.LENGTH_SHORT).show()
                                             }
                                         } else {
-                                            Toast.makeText(
-                                                context,
-                                                "서버 오류: ${res.code()}",
-                                                Toast.LENGTH_SHORT
-                                            ).show()
+                                            Toast.makeText(context, "토큰 검증 오류: ${verifyRes.code()}", Toast.LENGTH_SHORT).show()
                                         }
                                     } catch (e: Exception) {
-                                        Toast.makeText(
-                                            context,
-                                            "통신 실패: ${e.message}",
-                                            Toast.LENGTH_SHORT
-                                        ).show()
+                                        Toast.makeText(context, "통신 실패: ${e.message}", Toast.LENGTH_SHORT).show()
                                     }
                                 }
                             } else {
-                                Toast.makeText(
-                                    context,
-                                    "로그인 실패: ${task.exception?.message}",
-                                    Toast.LENGTH_SHORT
-                                ).show()
+                                Toast.makeText(context, "로그인 실패: ${task.exception?.message}", Toast.LENGTH_SHORT).show()
                             }
                         }
                 },
+                // 입력이 모두 채워져야만 클릭 가능하도록
+//                enabled = email.isNotBlank() && password.isNotBlank(),
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp),
@@ -171,10 +168,11 @@ fun Guardian_Login(navController: NavController) {
                 Text("로그인", color = Color.White, fontSize = 16.sp)
             }
 
+
             Spacer(modifier = Modifier.height(16.dp))
 
             Button(
-                onClick = { navController.navigate("code") },
+                onClick = { navController.navigate("guardian") },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp),
@@ -186,6 +184,7 @@ fun Guardian_Login(navController: NavController) {
         }
     }
 }
+
 
 @Preview(showBackground = true)
 @Composable
