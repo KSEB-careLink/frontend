@@ -91,6 +91,11 @@ class MainActivity : ComponentActivity() {
                         )
                     }
 
+                    // 녹음2 페이지
+                    composable("recode2") {
+                        Recode2(navController)
+                    }
+
                     // 환자 문장 페이지
                     composable("sentence") {
                         Patient_Sentence(navController)
