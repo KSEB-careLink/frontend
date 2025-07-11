@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- 기본 테마 -->
+    <style name="Theme.MyApplication" parent="android:Theme.Material.Light.NoActionBar" />
+
+    <!-- 스플래시 제거용 테마 -->
+    <style name="Theme.NoSplash" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@android:color/white</item> <!-- 흰 배경 -->
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowFullscreen">true</item>
+    </style>
+
+</resources>
+
