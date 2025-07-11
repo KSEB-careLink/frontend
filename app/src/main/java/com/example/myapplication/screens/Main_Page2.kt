@@ -59,7 +59,7 @@ fun Main_Page2(navController: NavController) {
             }
 
             Button(
-                onClick = { /* TODO: 회상 정보 입력 */ },
+                onClick = { navController.navigate("memoryinfo") },
                 colors = ButtonDefaults.buttonColors(containerColor = buttonColor),
                 shape = RoundedCornerShape(12.dp),
                 modifier = Modifier
@@ -75,7 +75,7 @@ fun Main_Page2(navController: NavController) {
             }
 
             Button(
-                onClick = { /* TODO: 회상 정보 데이터 확인 */ },
+                onClick = { navController.navigate("memoryinfolist") },
                 colors = ButtonDefaults.buttonColors(containerColor = buttonColor),
                 shape = RoundedCornerShape(12.dp),
                 modifier = Modifier
