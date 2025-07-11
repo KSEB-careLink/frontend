@@ -9,79 +9,86 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.Density
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
 import com.example.myapplication.R
+import androidx.compose.ui.graphics.Color
 
 @Composable
 fun ChoosePositionPage(navController: NavController) {
-    // 이 두 값만 바꿔 보세요!
-    val imageGroupTopPadding = 220.dp      // 이미지(로고+텍스트) 그룹이 화면 상단에서 얼마나 내려올지
-    val buttonGroupTopPadding = 500.dp    // 버튼 그룹이 화면 상단에서 얼마나 내려올지
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        // 화면 크기를 Dp 단위로 가져오기
+        val screenW: Dp = maxWidth
+        val screenH: Dp = maxHeight
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 24.dp)
-    ) {
-        // 1) 이미지 그룹: 로고와 텍스트 이미지를 겹쳐서 중앙에 배치
-        Box(
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .padding(top = imageGroupTopPadding),
-            contentAlignment = Alignment.Center
-        ) {
+        // — 이미지 크기 (화면 너비의 비율)
+        val rogoSize = screenW * 0.5f    // 로고: 너비 50%
+        val textSize = screenW * 0.3f    // 텍스트: 너비 30%
+
+        // — Y 오프셋 (화면 높이의 비율)
+        val rogoY = screenH * 0.25f      // 로고는 높이 25% 지점
+        val textY = screenH * 0.40f      // 텍스트는 높이 38% 지점
+        val buttonsY = screenH * 0.55f   // 버튼 그룹은 높이 60% 지점
+
+        Box(modifier = Modifier.fillMaxSize()) {
+            // 1) 로고
             Image(
                 painter = painterResource(id = R.drawable.rogo),
                 contentDescription = "로고",
+                contentScale = ContentScale.Fit,
                 modifier = Modifier
-                    .size(200.dp)
-                    .offset(y = (-20).dp),   // 로고를 위로 20dp 이동 (조절 가능)
-                contentScale = ContentScale.Fit
+                    .size(rogoSize)
+                    .align(Alignment.TopCenter)
+                    .offset(y = rogoY)
             )
+
+            // 2) 텍스트 로고
             Image(
                 painter = painterResource(id = R.drawable.ai_text),
                 contentDescription = "텍스트 로고",
+                contentScale = ContentScale.Fit,
                 modifier = Modifier
-                    .size(150.dp)
-                    .offset(y = 90.dp),     // 텍스트를 아래로 90dp 이동 (조절 가능)
-                contentScale = ContentScale.Fit
+                    .size(textSize)
+                    .align(Alignment.TopCenter)
+                    .offset(y = textY)
             )
-        }
 
-        // 2) 버튼 그룹: TopCenter에 붙이고, top padding으로 위치 조절
-        Column(
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .padding(top = buttonGroupTopPadding)
-                .fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Button(
-                onClick = { navController.navigate("p_login") },
+            // 3) 버튼 그룹
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(80.dp),    // 버튼 높이 (조절 가능)
-                shape = RoundedCornerShape(40.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color.Black)
+                    .align(Alignment.TopCenter)
+                    .offset(y = buttonsY)
+                    .fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp) // 버튼 사이 고정 dp
             ) {
-                Text("🧓 어르신으로 시작하기", color = Color.White)
-            }
-            Spacer(modifier = Modifier.height(16.dp))
-            Button(
-                onClick = { navController.navigate("G_login") },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(80.dp),
-                shape = RoundedCornerShape(40.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color.Black)
-            ) {
-                Text("👪 보호자로 시작하기", color = Color.White)
+                val buttonHeight = screenH * 0.10f  // 버튼 높이: 화면 높이의 10%
+                Button(
+                    onClick = { navController.navigate("p_login") },
+                    modifier = Modifier
+                        .fillMaxWidth(0.8f)           // 버튼 너비: 화면 너비의 80%
+                        .height(buttonHeight),
+                    shape = RoundedCornerShape(buttonHeight / 2),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Black)
+                ) {
+                    Text("🧓 어르신으로 시작하기", color = Color.White)
+                }
+                Button(
+                    onClick = { navController.navigate("G_login") },
+                    modifier = Modifier
+                        .fillMaxWidth(0.8f)
+                        .height(buttonHeight),
+                    shape = RoundedCornerShape(buttonHeight / 2),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Black)
+                ) {
+                    Text("👪 보호자로 시작하기", color = Color.White)
+                }
             }
         }
     }
@@ -92,6 +99,7 @@ fun ChoosePositionPage(navController: NavController) {
 fun PreviewChoosePositionPage() {
     ChoosePositionPage(navController = rememberNavController())
 }
+
 
 
 
