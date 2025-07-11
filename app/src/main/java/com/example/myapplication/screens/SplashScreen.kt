@@ -2,13 +2,13 @@ package com.example.myapplication.screens
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
 import com.example.myapplication.R
@@ -23,40 +23,40 @@ fun SplashScreen(navController: NavController) {
         }
     }
 
-    Box(
-        modifier = Modifier.fillMaxSize()
-    ) {
-        // 배경 이미지: un.png 전체화면
-//        Image(
-//            painter = painterResource(id = R.drawable.un),
-//            contentDescription = "Background Image",
-//            contentScale = ContentScale.Crop,
-//            modifier = Modifier.fillMaxSize()
-//        )
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        // 1) 화면의 너비·높이를 Dp 단위로 가져온다
+        val screenW = maxWidth
+        val screenH = maxHeight
 
-        // 가운데 rogo.png와 ai_text.png를 겹치듯 배치
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
-        ) {
-            // 기준이 되는 rogo.png (y축으로 조금 올림)
+        // 2) 화면 너비 대비 이미지 크기를 비율로 결정
+        val rogoSize = screenW * 0.5f     // 너비의 50%
+        val textSize = screenW * 0.3f     // 너비의 30%
+
+        // 3) 화면 높이 대비 배치 Y 좌표를 비율로 결정
+        val rogoY = screenH * 0.35f       // 높이의 35% 지점
+        val textY = screenH * 0.50f       // 높이의 50% 지점
+
+        Box(modifier = Modifier.fillMaxSize()) {
+            // 로고
             Image(
                 painter = painterResource(id = R.drawable.rogo),
-                contentDescription = "Rogo Image",
+                contentDescription = "Rogo",
+                contentScale = ContentScale.Fit,
                 modifier = Modifier
-                    .size(200.dp)
-                    .offset(y = (-20).dp), // 로고를 위로 20dp 이동
-                contentScale = ContentScale.Fit
+                    .size(rogoSize)
+                    .align(Alignment.TopCenter)   // 부모 Box의 위쪽 중앙에 붙이고
+                    .offset(y = rogoY)            // 위에서 rogoY 만큼 아래로 이동
             )
 
-            // rogo.png 아래에 ai_text.png를 겹치게 배치 (필요시 y값 조정)
+            // AI 텍스트
             Image(
                 painter = painterResource(id = R.drawable.ai_text),
-                contentDescription = "AI Text Image",
+                contentDescription = "AI Text",
+                contentScale = ContentScale.Fit,
                 modifier = Modifier
-                    .size(150.dp)
-                    .offset(y = 90.dp),
-                contentScale = ContentScale.Fit
+                    .size(textSize)
+                    .align(Alignment.TopCenter)
+                    .offset(y = textY)
             )
         }
     }
@@ -68,8 +68,6 @@ fun SplashScreenPreview() {
     val dummyNavController = rememberNavController()
     SplashScreen(navController = dummyNavController)
 }
-
-
 
 
 

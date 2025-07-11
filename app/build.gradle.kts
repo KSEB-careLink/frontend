@@ -123,10 +123,9 @@ dependencies {
     // 백엔드 로그인 기능 연동을 위한 코드
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.7.1")
 
-//   Compose에서 ConstraintLayout 사용 방법
+    //Compose용 ConstraintLayout을 사용
     implementation("androidx.constraintlayout:constraintlayout-compose:1.0.1")
 }
-
 
 
 
