@@ -42,7 +42,7 @@ class MainActivity : ComponentActivity() {
                     composable("guardian") {
                         GuardianSignInPage(navController)
                     }
-                    
+
 
                     composable("choose") {
                         ChoosePositionPage(navController)

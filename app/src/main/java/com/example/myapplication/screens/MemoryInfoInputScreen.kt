@@ -18,6 +18,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.constraintlayout.compose.ConstraintLayout
+import androidx.constraintlayout.compose.Dimension
 import com.example.myapplication.R
 
 @Composable
@@ -32,31 +34,59 @@ fun MemoryInputScreen() {
         imageUri = uri
     }
 
-    Column(
+    ConstraintLayout(
         modifier = Modifier
             .fillMaxSize()
-            .padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+            .padding(24.dp)
     ) {
-        // 상단 로고
+        val (
+            logo, title1, title2, imageBox, uploadButton,
+            descriptionLabel, descriptionInput
+        ) = createRefs()
+
+        // 로고
         Image(
             painter = painterResource(id = R.drawable.rogo),
             contentDescription = "로고",
-            modifier = Modifier.size(80.dp)
+            modifier = Modifier
+                .size(80.dp)
+                .constrainAs(logo) {
+                    top.linkTo(parent.top, margin = 32.dp)
+                    start.linkTo(parent.start)
+                    end.linkTo(parent.end)
+                }
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
+        // 제목
+        Text(
+            "회상정보 ",
+            fontSize = 24.sp,
+            modifier = Modifier.constrainAs(title1) {
+                top.linkTo(logo.bottom, margin = 16.dp)
+                start.linkTo(parent.start)
+            }
+        )
 
-        Text("회상정보 ", fontSize = 24.sp)
-        Text("입력", fontSize = 24.sp, color = Color(0xFF00BFA5))
+        Text(
+            "입력",
+            fontSize = 24.sp,
+            color = Color(0xFF00BFA5),
+            modifier = Modifier.constrainAs(title2) {
+                top.linkTo(logo.bottom, margin = 16.dp)
+                start.linkTo(title1.end)
+            }
+        )
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // 사진 선택
+        // 사진 선택 박스
         Box(
             modifier = Modifier
                 .size(250.dp)
-                .background(Color.LightGray, RoundedCornerShape(8.dp)),
+                .background(Color.LightGray, RoundedCornerShape(8.dp))
+                .constrainAs(imageBox) {
+                    top.linkTo(title1.bottom, margin = 24.dp)
+                    start.linkTo(parent.start)
+                    end.linkTo(parent.end)
+                },
             contentAlignment = Alignment.Center
         ) {
             if (imageUri != null) {
@@ -74,19 +104,30 @@ fun MemoryInputScreen() {
             }
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
-
+        // 업로드 버튼
         Button(
             onClick = { launcher.launch("image/*") },
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF80DEEA))
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF80DEEA)),
+            modifier = Modifier.constrainAs(uploadButton) {
+                top.linkTo(imageBox.bottom, margin = 8.dp)
+                start.linkTo(parent.start)
+                end.linkTo(parent.end)
+            }
         ) {
             Text("사진 업로드", color = Color.White)
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        // 설명 입력 안내 텍스트
+        Text(
+            "해당 미디어에 대한 설명을 해주세요",
+            fontSize = 16.sp,
+            modifier = Modifier.constrainAs(descriptionLabel) {
+                top.linkTo(uploadButton.bottom, margin = 16.dp)
+                start.linkTo(parent.start)
+            }
+        )
 
-        // 설명 입력
-        Text("해당 미디어에 대한 설명을 해주세요")
+        // 설명 입력 필드
         TextField(
             value = description,
             onValueChange = { description = it },
@@ -95,10 +136,16 @@ fun MemoryInputScreen() {
                 focusedContainerColor = Color(0xFFFFEBEE),
                 unfocusedContainerColor = Color(0xFFFFEBEE)
             ),
+            shape = RoundedCornerShape(8.dp),
             modifier = Modifier
-                .fillMaxWidth()
-                .height(100.dp),
-            shape = RoundedCornerShape(8.dp)
+                .constrainAs(descriptionInput) {
+                    top.linkTo(descriptionLabel.bottom, margin = 8.dp)
+                    start.linkTo(parent.start)
+                    end.linkTo(parent.end)
+                    width = Dimension.fillToConstraints
+                }
+                .height(100.dp)
         )
     }
 }
+

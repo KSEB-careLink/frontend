@@ -11,54 +11,67 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.constraintlayout.compose.ConstraintLayout
+import androidx.constraintlayout.compose.Dimension
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
 import com.example.myapplication.R
 
 @Composable
 fun Guardian_Alarm(navController: NavController) {
-    Column(
+    ConstraintLayout(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+            .padding(horizontal = 24.dp, vertical = 16.dp)
     ) {
-        Spacer(modifier = Modifier.height(24.dp))
+        val (
+            logo, title, regularButton, regularDesc,
+            alerts, irregularButton, irregularDesc, submitButton
+        ) = createRefs()
 
         // 1) 로고
         Image(
             painter = painterResource(id = R.drawable.rogo),
             contentDescription = "로고",
-            modifier = Modifier.size(200.dp)
+            modifier = Modifier
+                .size(200.dp)
+                .constrainAs(logo) {
+                    top.linkTo(parent.top)
+                    start.linkTo(parent.start)
+                    end.linkTo(parent.end)
+                }
         )
-
-        Spacer(modifier = Modifier.height(16.dp))
 
         // 2) 타이틀
         Text(
             text = "알림 전달",
             fontSize = 24.sp,
-            fontWeight = FontWeight.Bold
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.constrainAs(title) {
+                top.linkTo(logo.bottom, margin = 16.dp)
+                start.linkTo(parent.start)
+                end.linkTo(parent.end)
+            }
         )
-
-        Spacer(modifier = Modifier.height(24.dp))
 
         // 3) 정기 알림 버튼
         Button(
-            onClick = { /* TODO: 정기 알림 설정 화면으로 */ },
+            onClick = { /* TODO: 정기 알림 설정 */ },
             modifier = Modifier
                 .fillMaxWidth()
-                .height(56.dp),
+                .height(56.dp)
+                .constrainAs(regularButton) {
+                    top.linkTo(title.bottom, margin = 24.dp)
+                    start.linkTo(parent.start)
+                    end.linkTo(parent.end)
+                },
             shape = RoundedCornerShape(8.dp),
             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C4B4))
         ) {
             Text("정기 알림", fontSize = 18.sp, color = Color.White)
         }
-
-        Spacer(modifier = Modifier.height(8.dp))
 
         // 4) 정기 알림 설명
         Text(
@@ -66,39 +79,50 @@ fun Guardian_Alarm(navController: NavController) {
             fontSize = 14.sp,
             textAlign = TextAlign.Center,
             color = Color.Black,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .constrainAs(regularDesc) {
+                    top.linkTo(regularButton.bottom, margin = 8.dp)
+                    start.linkTo(parent.start)
+                    end.linkTo(parent.end)
+                }
         )
 
-        Spacer(modifier = Modifier.height(24.dp))
-
-        // 5) 설정된 정기 알림 목록
+        // 5) 정기 알림 목록
         Column(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .constrainAs(alerts) {
+                    top.linkTo(regularDesc.bottom, margin = 24.dp)
+                    start.linkTo(parent.start)
+                    end.linkTo(parent.end)
+                }
+                .fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             AlertItem(number = 1, text = "약 드실 시간이에요!") {
-                /* TODO: 시간 설정 다이얼로그 */
+                // TODO: 시간 설정
             }
             AlertItem(number = 2, text = "좋은 아침이에요!") {
-                /* TODO: 시간 설정 다이얼로그 */
+                // TODO: 시간 설정
             }
         }
 
-        Spacer(modifier = Modifier.height(150.dp))
-
         // 6) 비정기 알림 버튼
         Button(
-            onClick = { /* TODO: 비정기 알림 설정 화면으로 */ },
+            onClick = { /* TODO: 비정기 알림 설정 */ },
             modifier = Modifier
                 .fillMaxWidth()
-                .height(56.dp),
+                .height(56.dp)
+                .constrainAs(irregularButton) {
+                    top.linkTo(alerts.bottom, margin = 40.dp)
+                    start.linkTo(parent.start)
+                    end.linkTo(parent.end)
+                },
             shape = RoundedCornerShape(8.dp),
             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C4B4))
         ) {
             Text("비정기 알림", fontSize = 18.sp, color = Color.White)
         }
-
-        Spacer(modifier = Modifier.height(8.dp))
 
         // 7) 비정기 알림 설명
         Text(
@@ -106,17 +130,26 @@ fun Guardian_Alarm(navController: NavController) {
             fontSize = 14.sp,
             textAlign = TextAlign.Center,
             color = Color.Black,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .constrainAs(irregularDesc) {
+                    top.linkTo(irregularButton.bottom, margin = 8.dp)
+                    start.linkTo(parent.start)
+                    end.linkTo(parent.end)
+                }
         )
-
-        Spacer(modifier = Modifier.height(24.dp))
 
         // 8) 등록하기 버튼
         Button(
-            onClick = { /* TODO: 등록 로직 */ },
+            onClick = { /* TODO: 등록 */ },
             modifier = Modifier
                 .width(150.dp)
-                .height(44.dp),
+                .height(44.dp)
+                .constrainAs(submitButton) {
+                    top.linkTo(irregularDesc.bottom, margin = 24.dp)
+                    start.linkTo(parent.start)
+                    end.linkTo(parent.end)
+                },
             shape = RoundedCornerShape(8.dp),
             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C4B4))
         ) {
@@ -143,8 +176,7 @@ private fun AlertItem(
         )
         Button(
             onClick = onTimeClick,
-            modifier = Modifier
-                .height(36.dp),
+            modifier = Modifier.height(36.dp),
             shape = RoundedCornerShape(8.dp),
             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C4B4))
         ) {

@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -16,11 +15,12 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.constraintlayout.compose.ConstraintLayout
+import androidx.constraintlayout.compose.Dimension
 import com.example.myapplication.R
 
 @Composable
 fun MemoryInfoListScreen() {
-    // 더미 데이터 목록
     val memoryList = listOf(
         "1번 사진. 이 사진은 12월 25일 크리스마스...",
         "2번 영상. 이 영상은 4월 4일 봄가족여행...",
@@ -29,34 +29,50 @@ fun MemoryInfoListScreen() {
         ""
     )
 
-    Column(
+    ConstraintLayout(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 24.dp, vertical = 16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+            .padding(24.dp)
     ) {
-        // 로고
+        val (logo, title, list) = createRefs()
+
+        // 상단 로고
         Image(
-            painter = painterResource(id = R.drawable.rogo), // res/drawable에 logo.png 필요
+            painter = painterResource(id = R.drawable.rogo),
             contentDescription = "Logo",
-            modifier = Modifier.size(64.dp)
+            modifier = Modifier
+                .size(64.dp)
+                .constrainAs(logo) {
+                    top.linkTo(parent.top, margin = 16.dp)
+                    start.linkTo(parent.start)
+                    end.linkTo(parent.end)
+                }
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // 타이틀
+        // 제목 텍스트
         Text(
             text = "회상 정보 데이터 확인",
             fontSize = 20.sp,
-            fontWeight = FontWeight.Bold
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.constrainAs(title) {
+                top.linkTo(logo.bottom, margin = 16.dp)
+                start.linkTo(parent.start)
+                end.linkTo(parent.end)
+            }
         )
-
-        Spacer(modifier = Modifier.height(24.dp))
 
         // 데이터 리스트
         LazyColumn(
             verticalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .constrainAs(list) {
+                    top.linkTo(title.bottom, margin = 24.dp)
+                    start.linkTo(parent.start)
+                    end.linkTo(parent.end)
+                    bottom.linkTo(parent.bottom)
+                    height = Dimension.fillToConstraints
+                }
+                .fillMaxWidth()
         ) {
             items(memoryList) { item ->
                 Box(
