@@ -43,16 +43,19 @@ class MainActivity : ComponentActivity() {
                         GuardianSignInPage(navController)
                     }
 
+<<<<<<< HEAD
                     composable("patient") {
                         PatientSignInPage(navController)
                     }
+=======
+>>>>>>> f652f6e1eba56f1d99da6c90caebf57f3a04980e
 
                     composable("choose") {
                         ChoosePositionPage(navController)
                     }
 
                     composable("p_login") {
-                        Patient_Login(navController)
+                        PatientLinkPage(navController)
                     }
 
                     composable("G_login") {

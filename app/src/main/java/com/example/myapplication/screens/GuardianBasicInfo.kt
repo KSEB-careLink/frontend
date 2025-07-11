@@ -46,7 +46,7 @@ fun GuardianBasicInfoScreen() {
         Spacer(modifier = Modifier.height(32.dp))
 
         // 1번 질문
-        Text("1. 보호 대상과의 관계", fontSize = 16.sp, color = Color.Black)
+        Text("1. 보호 대상을 부르는 호칭을 알려주세요", fontSize = 16.sp, color = Color.Black)
         Spacer(modifier = Modifier.height(8.dp))
         TextField(
             value = relationship,

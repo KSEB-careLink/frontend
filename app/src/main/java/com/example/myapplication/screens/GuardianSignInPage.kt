@@ -27,6 +27,7 @@ import com.example.myapplication.network.RetrofitInstance
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
 import kotlinx.coroutines.launch
+import com.example.myapplication.network.GuardianSignupRequest
 
 @Composable
 fun GuardianSignInPage(navController: NavController) {
@@ -140,25 +141,32 @@ fun GuardianSignInPage(navController: NavController) {
             // 1) 가입하기: Firebase + 백엔드
             Button(
                 onClick = {
-                    // 1) 빈 값 체크
+                    // 빈 값 체크
                     if (name.isBlank() || email.isBlank() || password.isBlank()) {
                         Toast.makeText(context, "모든 필드를 입력해주세요.", Toast.LENGTH_SHORT).show()
                         return@Button
                     }
-                    // 2) 이메일 포맷 검증
+                    // 이메일 포맷 검증
                     val trimmedEmail = email.trim()
                     if (!Patterns.EMAIL_ADDRESS.matcher(trimmedEmail).matches()) {
                         Toast.makeText(context, "유효한 이메일 주소를 입력하세요.", Toast.LENGTH_SHORT).show()
                         return@Button
                     }
-                    // 3) Firebase 회원가입
+                    // Firebase 회원가입
                     auth.createUserWithEmailAndPassword(trimmedEmail, password)
                         .addOnCompleteListener { task ->
                             if (task.isSuccessful) {
-                                // 4) 백엔드 보호자 가입
+                                // 백엔드 보호자 가입
                                 coroutineScope.launch {
                                     try {
-                                        val res = RetrofitInstance.api.signupGuardian(trimmedEmail, password)
+                                        // ★ 여기만 바뀌었습니다 ★
+                                        val req = GuardianSignupRequest(
+                                            email = trimmedEmail,
+                                            password = password,
+                                            name = name
+                                        )
+                                        val res = RetrofitInstance.api.signupGuardian(req)
+
                                         if (res.isSuccessful) {
                                             Toast.makeText(context, "가입 성공!", Toast.LENGTH_SHORT).show()
                                             navController.navigate("G_login") {
