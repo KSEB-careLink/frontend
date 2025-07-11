@@ -43,7 +43,7 @@ fun Main_Page2(navController: NavController) {
 
             // 버튼들
             Button(
-                onClick = { /* TODO: 기본 정보 입력 */ },
+                onClick = { navController.navigate("guardian_basic_info") },
                 colors = ButtonDefaults.buttonColors(containerColor = buttonColor),
                 shape = RoundedCornerShape(12.dp),
                 modifier = Modifier
