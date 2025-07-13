@@ -39,13 +39,13 @@ class MainActivity : ComponentActivity() {
                     }
 
                     // Guardian Sign-in
-                    composable("guardian") {
-                        GuardianSignInPage(navController)
+                    composable("guardianSignup") {
+                        GuardianSignUpScreen(navController)
                     }
 
                     // Patient Sign-in
                     composable("patient") {
-                        PatientSignInPage(navController)
+                        PatientSignUpScreen(navController)
                     }
 
                     // 위치 선택 페이지
@@ -55,12 +55,12 @@ class MainActivity : ComponentActivity() {
 
                     // 환자 로그인 페이지
                     composable("p_login") {
-                        Patient_Login(navController)
+                        PatientLoginScreen(navController)
                     }
 
                     // 보호자 로그인 페이지
                     composable("G_login") {
-                        Guardian_Login(navController)
+                        GuardianLoginScreen(navController)
                     }
 
                     // 코드 페이지

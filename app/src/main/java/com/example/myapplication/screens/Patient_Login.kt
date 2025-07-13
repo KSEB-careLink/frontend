@@ -1,13 +1,12 @@
+// app/src/main/java/com/example/myapplication/screens/PatientLoginScreen.kt
 package com.example.myapplication.screens
 
 import android.widget.Toast
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background       // for overlay
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Text
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -15,49 +14,53 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
 import com.example.myapplication.R
-import com.example.myapplication.network.RetrofitInstance
-import com.google.firebase.auth.ktx.auth
+import com.example.myapplication.ui.auth.AuthState
+import com.example.myapplication.ui.auth.AuthViewModel
 import com.google.firebase.ktx.Firebase
+import com.google.firebase.auth.ktx.auth
 import kotlinx.coroutines.launch
-import androidx.compose.ui.text.font.FontWeight
+import kotlinx.coroutines.tasks.await
 
 @Composable
-fun Patient_Login(navController: NavController) {
-    // Firebase Auth & CoroutineScope
+fun PatientLoginScreen(
+    navController: NavController,
+    authViewModel: AuthViewModel = viewModel()
+) {
     val auth = Firebase.auth
-    val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
-    // ★ 위치 조절 변수 ★
-    val imageGroupTopPadding = 80.dp
-    val formTopPadding = 320.dp
-
-    // 입력값 상태
+    // 입력 상태
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+
+    // ViewModel 상태 구독
+    val state by authViewModel.state.collectAsState()
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = 24.dp)
     ) {
-        // 1) 가운데 로고
+        // 로고 영역
         Box(
             modifier = Modifier
                 .align(Alignment.TopCenter)
-                .padding(top = imageGroupTopPadding)
+                .padding(top = 80.dp)
                 .sizeIn(minWidth = 0.dp, minHeight = 0.dp),
             contentAlignment = Alignment.Center
         ) {
             Image(
-                painter = painterResource(id = R.drawable.rogo),
+                painter = painterResource(R.drawable.rogo),
                 contentDescription = "로고",
                 modifier = Modifier
                     .size(200.dp)
@@ -65,7 +68,7 @@ fun Patient_Login(navController: NavController) {
                 contentScale = ContentScale.Fit
             )
             Image(
-                painter = painterResource(id = R.drawable.ai_text),
+                painter = painterResource(R.drawable.ai_text),
                 contentDescription = "텍스트 로고",
                 modifier = Modifier
                     .size(150.dp)
@@ -74,11 +77,11 @@ fun Patient_Login(navController: NavController) {
             )
         }
 
-        // 2) 로그인 폼
+        // 폼 영역
         Column(
             modifier = Modifier
                 .align(Alignment.TopCenter)
-                .padding(top = formTopPadding)
+                .padding(top = 320.dp)
                 .fillMaxWidth(),
             horizontalAlignment = Alignment.Start
         ) {
@@ -88,9 +91,9 @@ fun Patient_Login(navController: NavController) {
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.align(Alignment.CenterHorizontally)
             )
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(Modifier.height(24.dp))
 
-            Text(text = "이메일 주소", fontSize = 16.sp)
+            Text("이메일 주소", fontSize = 16.sp)
             OutlinedTextField(
                 value = email,
                 onValueChange = { email = it },
@@ -100,10 +103,9 @@ fun Patient_Login(navController: NavController) {
                     .height(56.dp),
                 singleLine = true
             )
+            Spacer(Modifier.height(16.dp))
 
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Text(text = "비밀번호", fontSize = 16.sp)
+            Text("비밀번호", fontSize = 16.sp)
             OutlinedTextField(
                 value = password,
                 onValueChange = { password = it },
@@ -116,7 +118,7 @@ fun Patient_Login(navController: NavController) {
             )
         }
 
-        // 3) 버튼
+        // 버튼 영역
         Column(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
@@ -130,52 +132,16 @@ fun Patient_Login(navController: NavController) {
                         Toast.makeText(context, "이메일과 비밀번호를 입력해주세요.", Toast.LENGTH_SHORT).show()
                         return@Button
                     }
-
-                    // 1) Firebase 로그인
-                    auth.signInWithEmailAndPassword(email, password)
-                        .addOnCompleteListener { task ->
-                            if (task.isSuccessful) {
-                                // 2) 백엔드에 토큰 검증 요청
-                                coroutineScope.launch {
-                                    try {
-                                        val verifyRes = RetrofitInstance.api.verifyToken()
-                                        if (verifyRes.isSuccessful) {
-                                            val role = verifyRes.body()?.role
-                                            if (role == "patient") {
-                                                // 3) 환자 메인 화면으로 이동
-                                                navController.navigate("code") {
-                                                    popUpTo("Patient_Login") { inclusive = true }
-                                                }
-                                            } else {
-                                                Toast.makeText(
-                                                    context,
-                                                    "권한 오류: role=$role",
-                                                    Toast.LENGTH_SHORT
-                                                ).show()
-                                            }
-                                        } else {
-                                            Toast.makeText(
-                                                context,
-                                                "토큰 검증 실패: ${verifyRes.code()}",
-                                                Toast.LENGTH_SHORT
-                                            ).show()
-                                        }
-                                    } catch (e: Exception) {
-                                        Toast.makeText(
-                                            context,
-                                            "통신 오류: ${e.message}",
-                                            Toast.LENGTH_SHORT
-                                        ).show()
-                                    }
-                                }
-                            } else {
-                                Toast.makeText(
-                                    context,
-                                    "로그인 실패: ${task.exception?.message}",
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                            }
+                    scope.launch {
+                        try {
+                            // Firebase 로그인
+                            auth.signInWithEmailAndPassword(email.trim(), password).await()
+                            // 토큰 검증
+                            authViewModel.verifyToken()
+                        } catch (e: Exception) {
+                            Toast.makeText(context, "로그인 실패: ${e.message}", Toast.LENGTH_SHORT).show()
                         }
+                    }
                 },
                 modifier = Modifier
                     .fillMaxWidth()
@@ -186,10 +152,10 @@ fun Patient_Login(navController: NavController) {
                 Text("로그인", color = Color.White, fontSize = 16.sp)
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(Modifier.height(16.dp))
 
             Button(
-                onClick = { navController.navigate("patient") },
+                onClick = { navController.navigate("patientSignUp") },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp),
@@ -199,12 +165,47 @@ fun Patient_Login(navController: NavController) {
                 Text("회원가입", color = Color.White, fontSize = 16.sp)
             }
         }
+
+        // 상태 기반 오버레이 & 내비게이션
+        when (state) {
+            is AuthState.Loading -> {
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .background(Color(0x88000000)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(color = Color.White)
+                }
+            }
+            is AuthState.VerifiedRole -> {
+                LaunchedEffect(state) {
+                    val role = (state as AuthState.VerifiedRole).role
+                    if (role == "patient") {
+                        navController.navigate("patientHome") {
+                            popUpTo("patientLogin") { inclusive = true }
+                        }
+                    } else {
+                        Toast.makeText(context, "권한 오류: role=$role", Toast.LENGTH_SHORT).show()
+                    }
+                    authViewModel.resetState()
+                }
+            }
+            is AuthState.Error -> {
+                LaunchedEffect(state) {
+                    Toast.makeText(context, (state as AuthState.Error).error, Toast.LENGTH_LONG).show()
+                    authViewModel.resetState()
+                }
+            }
+            else -> { /* Idle */ }
+        }
     }
 }
 
 @Preview(showBackground = true)
 @Composable
 fun PreviewPatientLogin() {
-    Patient_Login(navController = rememberNavController())
+    PatientLoginScreen(navController = rememberNavController())
 }
+
 

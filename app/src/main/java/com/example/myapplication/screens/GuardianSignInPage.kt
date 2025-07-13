@@ -1,3 +1,4 @@
+// app/src/main/java/com/example/myapplication/screens/GuardianSignUpScreen.kt
 package com.example.myapplication.screens
 
 import android.util.Patterns
@@ -19,47 +20,49 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
 import com.example.myapplication.R
-import com.example.myapplication.network.RetrofitInstance
-import com.google.firebase.auth.ktx.auth
-import com.google.firebase.ktx.Firebase
-import kotlinx.coroutines.launch
+import com.example.myapplication.ui.auth.AuthState
+import com.example.myapplication.ui.auth.AuthViewModel
+import androidx.compose.foundation.background
 
 @Composable
-fun GuardianSignInPage(navController: NavController) {
-    val auth    = Firebase.auth
-    val scope   = rememberCoroutineScope()
-    val ctx     = LocalContext.current
+fun GuardianSignUpScreen(
+    navController: NavController,
+    authViewModel: AuthViewModel = viewModel()
+) {
+    val ctx = LocalContext.current
 
+    // 1) 입력 필드 상태
     var name     by remember { mutableStateOf("") }
     var email    by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+
+    // 2) ViewModel 상태 구독
+    val state by authViewModel.state.collectAsState()
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val screenW = maxWidth
         val screenH = maxHeight
 
-        // 이미지 크기 (너비 비율)
         val logoSize     = screenW * 0.5f
         val textLogoSize = screenW * 0.3f
 
-        // Y 오프셋 (높이 비율)
         val logoY    = screenH * 0.10f
         val textY    = screenH * 0.25f
         val formY    = screenH * 0.35f
         val buttonsY = screenH * 0.80f
 
-        // 폼 필드 높이 및 간격
         val fieldHeight  = screenH * 0.07f
         val fieldSpacer  = screenH * 0.02f
 
-        // 버튼 크기 및 간격
         val btnHeight    = screenH * 0.08f
         val btnWidthFrac = 0.45f
         val btnSpacer    = screenH * 0.02f
 
+        // 배경 레이아웃
         Box(modifier = Modifier.fillMaxSize()) {
             // 1) 로고
             Image(
@@ -147,44 +150,34 @@ fun GuardianSignInPage(navController: NavController) {
             ) {
                 Button(
                     onClick = {
-                        // ← 여기가 그대로 유지됩니다!
-                        if (name.isBlank() || email.isBlank() || password.isBlank()) {
-                            Toast.makeText(ctx, "모든 필드를 입력해주세요.", Toast.LENGTH_SHORT).show()
-                            return@Button
-                        }
-                        if (!Patterns.EMAIL_ADDRESS.matcher(email.trim()).matches()) {
-                            Toast.makeText(ctx, "유효한 이메일을 입력하세요.", Toast.LENGTH_SHORT).show()
-                            return@Button
-                        }
-                        auth.createUserWithEmailAndPassword(email.trim(), password)
-                            .addOnCompleteListener { task ->
-                                if (task.isSuccessful) {
-                                    scope.launch {
-                                        try {
-                                            val res = RetrofitInstance.api.signupGuardian(email.trim(), password)
-                                            if (res.isSuccessful) {
-                                                Toast.makeText(ctx, "가입 성공!", Toast.LENGTH_SHORT).show()
-                                                navController.navigate("G_login") {
-                                                    popUpTo("GuardianSignInPage") { inclusive = true }
-                                                }
-                                            } else {
-                                                Toast.makeText(ctx, "서버 오류: ${res.code()}", Toast.LENGTH_SHORT).show()
-                                            }
-                                        } catch (e: Exception) {
-                                            Toast.makeText(ctx, "통신 오류: ${e.message}", Toast.LENGTH_SHORT).show()
-                                        }
-                                    }
-                                } else {
-                                    Toast.makeText(ctx, "Firebase 가입 실패: ${task.exception?.message}", Toast.LENGTH_SHORT).show()
-                                }
+                        // 유효성 검사
+                        when {
+                            name.isBlank() || email.isBlank() || password.isBlank() -> {
+                                Toast.makeText(ctx, "모든 필드를 입력해주세요.", Toast.LENGTH_SHORT).show()
                             }
+                            !Patterns.EMAIL_ADDRESS.matcher(email).matches() -> {
+                                Toast.makeText(ctx, "유효한 이메일을 입력하세요.", Toast.LENGTH_SHORT).show()
+                            }
+                            password.length < 6 -> {
+                                Toast.makeText(ctx, "비밀번호를 6자 이상 입력해주세요.", Toast.LENGTH_SHORT).show()
+                            }
+                            else -> {
+                                // 공통 signup 호출 (role="guardian")
+                                authViewModel.signup(
+                                    name     = name.trim(),
+                                    email    = email.trim(),
+                                    password = password,
+                                    role     = "guardian"
+                                )
+                            }
+                        }
                     },
                     modifier = Modifier
-                        .width(screenW * btnWidthFrac)  // 여기만 바뀌어요
+                        .width(screenW * btnWidthFrac)
                         .height(btnHeight),
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C4B4)),
-                    enabled = name.isNotBlank() && email.isNotBlank() && password.isNotBlank()
+                    enabled = name.isNotBlank() && email.isNotBlank() && password.length >= 6
                 ) {
                     Text("가입하기", color = Color.White, fontSize = 16.sp)
                 }
@@ -201,13 +194,52 @@ fun GuardianSignInPage(navController: NavController) {
                 }
             }
         }
+
+        // 5) 상태에 따른 오버레이 처리
+        when (state) {
+            is AuthState.Loading -> {
+                // 화면 중앙에 로딩 인디케이터
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .background(Color(0x88000000)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(color = Color.White)
+                }
+            }
+
+            is AuthState.GuardianSignedUp -> {
+                // 가입 성공 → 로그인 화면으로 이동
+                LaunchedEffect(state) {
+                    Toast
+                        .makeText(ctx, (state as AuthState.GuardianSignedUp).message, Toast.LENGTH_SHORT)
+                        .show()
+                    authViewModel.resetState()
+                    navController.navigate("G_login") {
+                        popUpTo("GuardianSignUp") { inclusive = true }
+                    }
+                }
+            }
+
+            is AuthState.Error -> {
+                // 에러 → 토스트 후 상태 초기화
+                LaunchedEffect(state) {
+                    Toast.makeText(ctx, (state as AuthState.Error).error, Toast.LENGTH_LONG).show()
+                    authViewModel.resetState()
+                }
+            }
+
+            else -> { /* Idle 상태 */ }
+        }
     }
 }
 
 @Preview(showBackground = true)
 @Composable
-fun PreviewGuardianSignInPage() {
-    GuardianSignInPage(navController = rememberNavController())
+fun PreviewGuardianSignUp() {
+    GuardianSignUpScreen(navController = rememberNavController())
 }
+
 
 
