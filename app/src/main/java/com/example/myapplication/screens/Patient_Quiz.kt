@@ -5,10 +5,15 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -21,28 +26,42 @@ import androidx.navigation.NavController
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.example.myapplication.R
+import kotlinx.coroutines.delay
+import androidx.compose.material.icons.filled.Star
 
 @Composable
 fun Patient_Quiz(navController: NavController) {
-    // — 레이아웃 조절용 값들 —
-    val logoSize      = 150.dp
-    val logoOffsetY   = 1.dp
-    val speakerGap    = 16.dp
-    val greyGap       = 16.dp
-    val greyHeight    = 330.dp
-    val greyCorner    = 12.dp
-    val questionGap   = 16.dp
-    val optionGap     = 12.dp
+    // — 레이아웃 값들 —
+    val speakerGap  = 16.dp
+    val greyGap     = 16.dp
+    val greyHeight  = 450.dp
+    val greyCorner  = 12.dp
+    val questionGap = 16.dp
+    val optionGap   = 12.dp
 
     // — 문제/정답 데이터 —
     val options       = listOf("냉면", "비빔밥", "떡볶이", "칼국수")
     val correctAnswer = "냉면"
 
-    // — 상태: 선택된 보기, 결과 표시 여부 —
-    var selected   by remember { mutableStateOf<String?>(null) }
-    var showResult by remember { mutableStateOf(false) }
+    // — 상태들 —
+    var selected     by remember { mutableStateOf<String?>(null) }
+    var showResult   by remember { mutableStateOf(false) }
+    var elapsedTime  by remember { mutableStateOf(0L) }       // 초 단위 타이머
+    var questionTime by remember { mutableStateOf<Long?>(null) } // 제출 시 타임
 
-    // — 탭 바용 현재 route 확인 —
+    // 타이머: showResult==false 일 때만 1초마다 갱신
+    LaunchedEffect(showResult) {
+        if (!showResult) {
+            elapsedTime = 0L
+            val start = System.currentTimeMillis()
+            while (true) {
+                delay(1000)
+                elapsedTime = (System.currentTimeMillis() - start) / 1000
+            }
+        }
+    }
+
+    // 네비게이션 바 상태
     val navBackStack by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStack?.destination?.route
 
@@ -88,16 +107,16 @@ fun Patient_Quiz(navController: NavController) {
         ) {
             Spacer(Modifier.height(24.dp))
 
-            // 1) 로고
-            if (!showResult) { // 결과 화면에선 로고 숨기고 싶으면 이 조건을 그대로 두시면 됩니다.
-                Image(
-                    painter = painterResource(R.drawable.rogo),
-                    contentDescription = "로고",
-                    modifier = Modifier
-                        .size(logoSize)
-                        .offset(y = logoOffsetY),
-                    contentScale = ContentScale.Fit
-                )
+            // ───────── 타이머 ─────────
+            if (!showResult) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Timer, contentDescription = "타이머", modifier = Modifier.size(24.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = String.format("%02d:%02d", elapsedTime / 60, elapsedTime % 60),
+                        fontSize = 20.sp
+                    )
+                }
                 Spacer(Modifier.height(speakerGap))
             }
 
@@ -107,12 +126,7 @@ fun Patient_Quiz(navController: NavController) {
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        Icons.Default.VolumeUp,
-                        contentDescription = "소리",
-                        modifier = Modifier.size(28.dp),
-                        tint = Color.Black
-                    )
+                    Icon(Icons.Default.VolumeUp, contentDescription = "소리", modifier = Modifier.size(28.dp))
                     Spacer(Modifier.width(8.dp))
                     Text(
                         "작년 봄, 손녀와 함께 전주에서 특별한 음식을 먹었을 때의 사진이네요!",
@@ -132,15 +146,66 @@ fun Patient_Quiz(navController: NavController) {
 
                 Spacer(Modifier.height(questionGap))
 
+                Text("무엇을 드셨을까요?", fontSize = 28.sp, color = Color(0xFF00C4B4))
+
+                Spacer(Modifier.height(questionGap))
+
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(optionGap)
+                ) {
+                    options.chunked(2).forEach { rowItems ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(optionGap)
+                        ) {
+                            rowItems.forEach { text ->
+                                OptionButton(
+                                    text = text,
+                                    modifier = Modifier.weight(1f),
+                                    onClick = {
+                                        selected = text
+                                        questionTime = elapsedTime
+                                        showResult = true
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+
+            } else {
+                // ───────── 결과 화면 ─────────
+                Spacer(Modifier.height(100.dp))
+                val isCorrect = selected == correctAnswer
+
                 Text(
-                    "무엇을 드셨을까요?",
-                    fontSize = 28.sp,
-                    color = Color(0xFF00C4B4)
+                    text = if (isCorrect) "정답이에요!" else "정답이 아니에요!",
+                    fontSize = 32.sp,
+                    color = if (isCorrect) Color(0xFF00A651) else Color(0xFFE2101A)
+                )
+                Spacer(Modifier.height(16.dp))
+
+                if (questionTime != null) {
+                    Text("풀이 시간: ${questionTime}초", fontSize = 18.sp)
+                    Spacer(Modifier.height(16.dp))
+                }
+
+                Image(
+                    painter = painterResource(if (isCorrect) R.drawable.ch else R.drawable.wr),
+                    contentDescription = null,
+                    modifier = Modifier.size(300.dp),
+                    contentScale = ContentScale.Fit
+                )
+
+                Spacer(Modifier.height(16.dp))
+                Text(
+                    text = if (isCorrect) "정말 잘 기억하셨어요😊" else "다시 기억해볼까요?",
+                    fontSize = 20.sp
                 )
 
                 Spacer(Modifier.height(questionGap))
 
-                // ───────── 2×2 보기 그리드 ─────────
                 Column(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(optionGap)
@@ -156,6 +221,7 @@ fun Patient_Quiz(navController: NavController) {
                                     modifier = Modifier.weight(1f),
                                     onClick = {
                                         selected = text
+                                        questionTime = elapsedTime
                                         showResult = true
                                     }
                                 )
@@ -163,112 +229,26 @@ fun Patient_Quiz(navController: NavController) {
                         }
                     }
                 }
-                // ─────────────────────────────────
-            } else {
-                //결과 화면
-                // 여기에 원하는 만큼 여백을 더 줍니다
-                val resultTopPadding = 100.dp    // ↑↑ 여기 값을 키우면 전체가 더 아래로 내려갑니다
-                Spacer(Modifier.height(resultTopPadding))
-                val isCorrect = selected == correctAnswer
-
-                if (isCorrect) {
-                    Text(
-                        "정답이에요!",
-                        fontSize = 32.sp,
-                        color = Color(0xFF00A651)
-                    )
-                    Spacer(Modifier.height(20.dp))
-                    Image(
-                        painter = painterResource(R.drawable.ch),
-                        contentDescription = "정답 이미지",
-                        modifier = Modifier.size(300.dp),
-                        contentScale = ContentScale.Fit
-                    )
-                    Spacer(Modifier.height(1.dp))
-                    Text(
-                        "정말 잘 기억하셨어요😊",
-                        fontSize = 20.sp,
-                        color = Color(0xFF00C4B4)
-                    )
-                } else {
-                    Text(
-                        "정답이 아니에요!",
-                        fontSize = 32.sp,
-                        color = Color(0xFFE2101A)
-                    )
-                    Spacer(Modifier.height(16.dp))
-                    Image(
-                        painter = painterResource(R.drawable.wr),
-                        contentDescription = "오답 이미지",
-                        modifier = Modifier.size(300.dp),
-                        contentScale = ContentScale.Fit
-                    )
-                    Spacer(Modifier.height(16.dp))
-                    Text(
-                        "다시 기억해볼까요?",
-                        fontSize = 20.sp,
-                        color = Color(0xFF00C4B4)
-                    )
-                }
-
-                Spacer(Modifier.height(questionGap))
-
-                // ───────── 피드백 뒤에도 2×2 보기 그리드 ─────────
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(optionGap)
-                ) {
-                    options.chunked(2).forEach { rowItems ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(optionGap)
-                        ) {
-                            rowItems.forEach { text ->
-                                OptionButton(
-                                    text = text,
-                                    modifier = Modifier.weight(1f),
-                                    onClick = {
-                                        // 결과에서도 다시 누르면 showResult 갱신
-                                        selected = text
-                                        showResult = true
-                                    }
-                                )
-                            }
-                        }
-                    }
-                }
-                // ──────────────────────────────────────────────
 
                 Spacer(Modifier.height(24.dp))
 
-                // ───────── 정답/오답 공통 하단 버튼 ─────────
-                if (isCorrect) {
-                    Button(
-                        onClick = { /* TODO: 다음 문제로 */ },
-                        modifier = Modifier
-                            .width(130.dp)
-                            .height(56.dp),
-                        shape = RoundedCornerShape(8.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C4B4))
-                    ) {
-                        Text("다음 문제로", color = Color.White)
-                    }
-                } else {
-                    Button(
-                        onClick = {
+                Button(
+                    onClick = {
+                        if (isCorrect) {
+                            // TODO: 다음 문제로
+                        } else {
                             selected = null
                             showResult = false
-                        },
-                        modifier = Modifier
-                            .width(130.dp)
-                            .height(56.dp),
-                        shape = RoundedCornerShape(8.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C4B4))
-                    ) {
-                        Text("다시 풀기", color = Color.White)
-                    }
+                        }
+                    },
+                    modifier = Modifier
+                        .width(130.dp)
+                        .height(56.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C4B4))
+                ) {
+                    Text(if (isCorrect) "다음 문제로" else "다시 풀기", color = Color.White)
                 }
-                // ──────────────────────────────────────────────
             }
         }
     }
@@ -295,6 +275,8 @@ private fun OptionButton(
 fun PreviewPatient_Quiz() {
     Patient_Quiz(navController = rememberNavController())
 }
+
+
 
 
 

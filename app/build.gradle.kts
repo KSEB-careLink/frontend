@@ -109,6 +109,8 @@ dependencies {
 // (필요하다면) Analytics, Firestore 등 다른 제품도 버전 없이 추가
     implementation("com.google.firebase:firebase-analytics-ktx")
 
+    // Firebase 알림
+    implementation ("com.google.firebase:firebase-messaging:23.1.2")
 
     // Accompanist Permissions (Compose 런타임 권한 요청)
     implementation("com.google.accompanist:accompanist-permissions:0.37.3")
@@ -125,6 +127,9 @@ dependencies {
 
     //Compose용 ConstraintLayout을 사용
     implementation("androidx.constraintlayout:constraintlayout-compose:1.0.1")
+
+    // WorkManager 코어 + 코틀린 확장
+    implementation ("androidx.work:work-runtime-ktx:2.8.1")
 }
 
 

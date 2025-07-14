@@ -3,7 +3,7 @@ package com.example.myapplication.screens
 
 import android.widget.Toast
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background       // for overlay
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -14,7 +14,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -25,25 +24,27 @@ import androidx.navigation.compose.rememberNavController
 import com.example.myapplication.R
 import com.example.myapplication.ui.auth.AuthState
 import com.example.myapplication.ui.auth.AuthViewModel
-import com.google.firebase.ktx.Firebase
 import com.google.firebase.auth.ktx.auth
+import com.google.firebase.ktx.Firebase
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.LaunchedEffect
 
 @Composable
 fun PatientLoginScreen(
     navController: NavController,
     authViewModel: AuthViewModel = viewModel()
 ) {
-    val auth = Firebase.auth
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val auth = Firebase.auth
 
-    // 입력 상태
+    // 1) 입력 폼 상태
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
 
-    // ViewModel 상태 구독
+    // 2) ViewModel 상태 구독
     val state by authViewModel.state.collectAsState()
 
     Box(
@@ -77,7 +78,7 @@ fun PatientLoginScreen(
             )
         }
 
-        // 폼 영역
+        // 로그인 폼
         Column(
             modifier = Modifier
                 .align(Alignment.TopCenter)
@@ -86,9 +87,8 @@ fun PatientLoginScreen(
             horizontalAlignment = Alignment.Start
         ) {
             Text(
-                text = "어르신 로그인",
+                text = "환자 로그인",
                 fontSize = 32.sp,
-                fontWeight = FontWeight.Bold,
                 modifier = Modifier.align(Alignment.CenterHorizontally)
             )
             Spacer(Modifier.height(24.dp))
@@ -110,15 +110,15 @@ fun PatientLoginScreen(
                 value = password,
                 onValueChange = { password = it },
                 placeholder = { Text("••••••••") },
+                visualTransformation = PasswordVisualTransformation(),
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp),
-                singleLine = true,
-                visualTransformation = PasswordVisualTransformation()
+                singleLine = true
             )
         }
 
-        // 버튼 영역
+        // 로그인 / 회원가입 버튼
         Column(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
@@ -136,7 +136,7 @@ fun PatientLoginScreen(
                         try {
                             // Firebase 로그인
                             auth.signInWithEmailAndPassword(email.trim(), password).await()
-                            // 토큰 검증
+                            // 토큰 검증 및 role 조회
                             authViewModel.verifyToken()
                         } catch (e: Exception) {
                             Toast.makeText(context, "로그인 실패: ${e.message}", Toast.LENGTH_SHORT).show()
@@ -155,7 +155,7 @@ fun PatientLoginScreen(
             Spacer(Modifier.height(16.dp))
 
             Button(
-                onClick = { navController.navigate("patientSignUp") },
+                onClick = { navController.navigate("patient") },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp),
@@ -165,40 +165,40 @@ fun PatientLoginScreen(
                 Text("회원가입", color = Color.White, fontSize = 16.sp)
             }
         }
+    }
 
-        // 상태 기반 오버레이 & 내비게이션
-        when (state) {
-            is AuthState.Loading -> {
-                Box(
-                    Modifier
-                        .fillMaxSize()
-                        .background(Color(0x88000000)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator(color = Color.White)
-                }
+    // 3) ViewModel 상태 처리
+    when (state) {
+        is AuthState.Loading -> {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(Color(0x88000000)),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(color = Color.White)
             }
-            is AuthState.VerifiedRole -> {
-                LaunchedEffect(state) {
-                    val role = (state as AuthState.VerifiedRole).role
-                    if (role == "patient") {
-                        navController.navigate("patientHome") {
-                            popUpTo("patientLogin") { inclusive = true }
-                        }
-                    } else {
-                        Toast.makeText(context, "권한 오류: role=$role", Toast.LENGTH_SHORT).show()
-                    }
-                    authViewModel.resetState()
-                }
-            }
-            is AuthState.Error -> {
-                LaunchedEffect(state) {
-                    Toast.makeText(context, (state as AuthState.Error).error, Toast.LENGTH_LONG).show()
-                    authViewModel.resetState()
-                }
-            }
-            else -> { /* Idle */ }
         }
+        is AuthState.VerifiedRole -> {
+            LaunchedEffect(state) {
+                val role = (state as AuthState.VerifiedRole).role
+                if (role == "patient") {
+                    navController.navigate("code") {
+                        popUpTo("patientLogin") { inclusive = true }
+                    }
+                } else {
+                    Toast.makeText(context, "권한 오류: role=$role", Toast.LENGTH_SHORT).show()
+                }
+                authViewModel.resetState()
+            }
+        }
+        is AuthState.Error -> {
+            LaunchedEffect(state) {
+                Toast.makeText(context, (state as AuthState.Error).error, Toast.LENGTH_LONG).show()
+                authViewModel.resetState()
+            }
+        }
+        else -> { /* Idle */ }
     }
 }
 
@@ -207,5 +207,9 @@ fun PatientLoginScreen(
 fun PreviewPatientLogin() {
     PatientLoginScreen(navController = rememberNavController())
 }
+
+
+
+
 
 
