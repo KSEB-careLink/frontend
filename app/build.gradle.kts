@@ -125,6 +125,7 @@ dependencies {
 
     //Compose용 ConstraintLayout을 사용
     implementation("androidx.constraintlayout:constraintlayout-compose:1.0.1")
+
 }
 
 

@@ -8,6 +8,9 @@
       <SelectionState runConfigName="PreviewGuardianBasicInfo">
         <option name="selectionMode" value="DROPDOWN" />
       </SelectionState>
+      <SelectionState runConfigName="EmergencyAlertPopupPreview">
+        <option name="selectionMode" value="DROPDOWN" />
+      </SelectionState>
     </selectionStates>
   </component>
 </project>

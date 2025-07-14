@@ -114,6 +114,8 @@ class MainActivity : ComponentActivity() {
                     composable("result") {
                         ResultScreen(navController)
                     }
+
+
                 }
             }
         }
