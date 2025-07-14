@@ -32,7 +32,7 @@ class MainActivity : ComponentActivity() {
                 // ② 선택된 음성 상태 (선택 시 이 값이 업데이트됩니다)
                 var selectedVoice by remember { mutableStateOf<String?>(null) }
 
-                NavHost(navController = navController, startDestination = "splash") {
+                NavHost(navController = navController, startDestination = "alarm") {
                     // 스플래시
                     composable("splash") {
                         SplashScreen(navController)
