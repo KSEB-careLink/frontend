@@ -185,9 +185,4 @@ private fun AlertItem(
     }
 }
 
-@Preview(showBackground = true)
-@Composable
-fun Preview_Guardian_Alarm() {
-    Guardian_Alarm(navController = rememberNavController())
-}
 

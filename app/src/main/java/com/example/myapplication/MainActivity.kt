@@ -39,10 +39,6 @@ class MainActivity : ComponentActivity() {
                         SplashScreen(navController)
                     }
 
-                    composable("guardian") {
-                        GuardianSignInPage(navController)
-                    }
-
 
                     composable("choose") {
                         ChoosePositionPage(navController)

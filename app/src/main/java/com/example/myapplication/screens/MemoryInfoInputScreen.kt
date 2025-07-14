@@ -51,7 +51,7 @@ fun MemoryInputScreen() {
             modifier = Modifier
                 .size(80.dp)
                 .constrainAs(logo) {
-                    top.linkTo(parent.top, margin = 32.dp)
+                    top.linkTo(parent.top, margin = 24.dp)
                     start.linkTo(parent.start)
                     end.linkTo(parent.end)
                 }
@@ -100,7 +100,7 @@ fun MemoryInputScreen() {
                     )
                 }
             } else {
-                Text("사진 또는 영상 선택", color = Color.White)
+                Text("사진 선택", color = Color.White)
             }
         }
 
@@ -131,7 +131,6 @@ fun MemoryInputScreen() {
         TextField(
             value = description,
             onValueChange = { description = it },
-            placeholder = { Text("이 사진은 ...") },
             colors = TextFieldDefaults.colors(
                 focusedContainerColor = Color(0xFFFFEBEE),
                 unfocusedContainerColor = Color(0xFFFFEBEE)
@@ -148,4 +147,3 @@ fun MemoryInputScreen() {
         )
     }
 }
-
