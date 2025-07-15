@@ -76,7 +76,7 @@ class MainActivity : ComponentActivity() {
                         PatientLoginScreen(navController)
                     }
                     composable("G_login") {
-                        GuardianLoginScreen(navController)
+                        Guardian_Login(navController)
                     }
                     composable("code") {
                         Code(navController)
