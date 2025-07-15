@@ -18,6 +18,7 @@ import androidx.constraintlayout.compose.Dimension
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
 import com.example.myapplication.R
+import androidx.compose.ui.tooling.preview.Preview
 
 @Composable
 fun Guardian_Alarm(navController: NavController) {
@@ -183,6 +184,12 @@ private fun AlertItem(
             Text("시간 설정", fontSize = 14.sp, color = Color.White)
         }
     }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun Guardian_Alarm() {
+    EmergencyAlertPopup()
 }
 
 
