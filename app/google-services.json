@@ -7,26 +7,7 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:1043106500906:android:f157dcfaacc5ac59398e53",
-        "android_client_info": {
-          "package_name": "com.example.carelink"
-        }
-      },
-      "oauth_client": [],
-      "api_key": [
-        {
-          "current_key": "AIzaSyAVd5Ibm0sPMKDAoDrz_dstoOmPKctm8ag"
-        }
-      ],
-      "services": {
-        "appinvite_service": {
-          "other_platform_oauth_client": []
-        }
-      }
-    },
-    {
-      "client_info": {
-        "mobilesdk_app_id": "1:1043106500906:android:c327bd9aa45e64fd398e53",
+        "mobilesdk_app_id": "1:1043106500906:android:d10c11186f5c61f9398e53",
         "android_client_info": {
           "package_name": "com.example.myapplication"
         }

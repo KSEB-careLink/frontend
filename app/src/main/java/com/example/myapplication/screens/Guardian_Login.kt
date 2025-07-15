@@ -1,4 +1,3 @@
-// app/src/main/java/com/example/myapplication/screens/GuardianLoginScreen.kt
 package com.example.myapplication.screens
 
 import android.widget.Toast
@@ -13,193 +12,189 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import androidx.navigation.compose.rememberNavController
 import com.example.myapplication.R
-import com.example.myapplication.ui.auth.AuthState
-import com.example.myapplication.ui.auth.AuthViewModel
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.tasks.await
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.LaunchedEffect
+import androidx.constraintlayout.compose.ConstraintLayout
+import androidx.constraintlayout.compose.Dimension
 
 @Composable
-fun GuardianLoginScreen(
-    navController: NavController,
-    authViewModel: AuthViewModel = viewModel()
-) {
-    val ctx = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val firebaseAuth = Firebase.auth
+fun Guardian_Login(navController: NavController) {
+    val auth = Firebase.auth
+    val coroutineScope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
 
-    // ViewModel 상태 구독
-    val state by authViewModel.state.collectAsState()
+    ConstraintLayout(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 24.dp)
+    ) {
+        val (logo, textLogo, title, emailLabel, emailField, passwordLabel, passwordField,
+            loginButton, registerButton) = createRefs()
 
-    BoxWithConstraints(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        val screenW = maxWidth
-        val screenH = maxHeight
-
-        val logoSize   = screenW * 0.5f
-        val textSize   = screenW * 0.3f
-        val logoY      = screenH * 0.10f
-        val textY      = screenH * 0.25f
-        val formY      = screenH * 0.37f
-        val fieldH     = screenH * 0.07f
-        val fieldSpacer= screenH * 0.02f
-        val buttonsY   = screenH * 0.70f
-        val btnH       = screenH * 0.08f
-        val btnWFrac   = 0.8f
-        val btnSpacer  = screenH * 0.02f
-
-        // 1) 로고 & 텍스트
+        // 로고
         Image(
-            painter = painterResource(R.drawable.rogo),
+            painter = painterResource(id = R.drawable.rogo),
             contentDescription = "로고",
             contentScale = ContentScale.Fit,
             modifier = Modifier
-                .size(logoSize)
-                .align(Alignment.TopCenter)
-                .offset(y = logoY)
+                .size(160.dp)
+                .constrainAs(logo) {
+                    top.linkTo(parent.top, margin = 64.dp)
+                    start.linkTo(parent.start)
+                    end.linkTo(parent.end)
+                }
         )
+
+        // 텍스트 로고
         Image(
-            painter = painterResource(R.drawable.ai_text),
+            painter = painterResource(id = R.drawable.ai_text),
             contentDescription = "텍스트 로고",
             contentScale = ContentScale.Fit,
             modifier = Modifier
-                .size(textSize)
-                .align(Alignment.TopCenter)
-                .offset(y = textY)
+                .size(120.dp)
+                .constrainAs(textLogo) {
+                    top.linkTo(logo.bottom, margin = 24.dp)
+                    start.linkTo(parent.start)
+                    end.linkTo(parent.end)
+                }
         )
 
-        // 2) 로그인 폼
-        Column(
+        // 타이틀
+        Text(
+            text = "보호자 로그인",
+            fontSize = 28.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.constrainAs(title) {
+                top.linkTo(textLogo.bottom, margin = 32.dp)
+                start.linkTo(parent.start)
+                end.linkTo(parent.end)
+            }
+        )
+
+        // 이메일 라벨
+        Text(
+            text = "이메일 주소",
+            fontSize = 16.sp,
+            modifier = Modifier.constrainAs(emailLabel) {
+                top.linkTo(title.bottom, margin = 24.dp)
+                start.linkTo(parent.start)
+            }
+        )
+
+        // 이메일 입력
+        OutlinedTextField(
+            value = email,
+            onValueChange = { email = it },
+            placeholder = { Text("example@mail.com") },
             modifier = Modifier
-                .align(Alignment.TopCenter)
-                .offset(y = formY)
-                .fillMaxWidth(0.9f),
-            horizontalAlignment = Alignment.Start
-        ) {
-            Text(
-                text = "보호자 로그인",
-                fontSize = 32.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.align(Alignment.CenterHorizontally)
-            )
-            Spacer(Modifier.height(fieldSpacer))
-
-            Text("이메일 주소", fontSize = 16.sp)
-            OutlinedTextField(
-                value = email,
-                onValueChange = { email = it },
-                placeholder = { Text("example@mail.com") },
-                singleLine = true,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(fieldH)
-            )
-            Spacer(Modifier.height(fieldSpacer))
-
-            Text("비밀번호", fontSize = 16.sp)
-            OutlinedTextField(
-                value = password,
-                onValueChange = { password = it },
-                placeholder = { Text("••••••••") },
-                singleLine = true,
-                visualTransformation = PasswordVisualTransformation(),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(fieldH)
-            )
-        }
-
-        // 3) 버튼 그룹
-        Column(
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .offset(y = buttonsY)
-                .fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(btnSpacer)
-        ) {
-            Button(
-                onClick = {
-                    if (email.isBlank() || password.isBlank()) {
-                        Toast.makeText(ctx, "이메일과 비밀번호를 입력해주세요.", Toast.LENGTH_SHORT).show()
-                        return@Button
-                    }
-                    scope.launch {
-                        try {
-                            // A) Firebase 로그인
-                            firebaseAuth
-                                .signInWithEmailAndPassword(email.trim(), password)
-                                .await()
-                            // B) 백엔드 토큰 검증
-                            authViewModel.verifyToken()
-                        } catch (e: Exception) {
-                            Toast.makeText(ctx, "로그인 실패: ${e.message}", Toast.LENGTH_SHORT).show()
-                        }
-                    }
+                .fillMaxWidth()
+                .height(56.dp)
+                .constrainAs(emailField) {
+                    top.linkTo(emailLabel.bottom, margin = 8.dp)
+                    start.linkTo(parent.start)
+                    end.linkTo(parent.end)
+                    width = Dimension.fillToConstraints
                 },
-                modifier = Modifier
-                    .fillMaxWidth(btnWFrac)
-                    .height(btnH),
-                shape = RoundedCornerShape(btnH / 2),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C4B4))
-            ) {
-                Text("로그인", color = Color.White, fontSize = 16.sp)
-            }
+            singleLine = true
+        )
 
-            Button(
-                onClick = { navController.navigate("guardianSignUp") },
-                modifier = Modifier
-                    .fillMaxWidth(btnWFrac)
-                    .height(btnH),
-                shape = RoundedCornerShape(btnH / 2),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C4B4))
-            ) {
-                Text("회원가입", color = Color.White, fontSize = 16.sp)
+        // 비밀번호 라벨
+        Text(
+            text = "비밀번호",
+            fontSize = 16.sp,
+            modifier = Modifier.constrainAs(passwordLabel) {
+                top.linkTo(emailField.bottom, margin = 16.dp)
+                start.linkTo(parent.start)
             }
-        }
-    }
+        )
 
-    // 4) ViewModel 상태 처리
-    when (state) {
-        is AuthState.Loading -> {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
-            }
-        }
-        is AuthState.VerifiedRole -> {
-            LaunchedEffect(state) {
-                val role = (state as AuthState.VerifiedRole).role
-                val dest = if (role == "guardian") "guardianHome" else "patientHome"
-                navController.navigate(dest) {
-                    popUpTo("guardianLogin") { inclusive = true }
+        // 비밀번호 입력
+        OutlinedTextField(
+            value = password,
+            onValueChange = { password = it },
+            placeholder = { Text("••••••••") },
+            visualTransformation = PasswordVisualTransformation(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp)
+                .constrainAs(passwordField) {
+                    top.linkTo(passwordLabel.bottom, margin = 8.dp)
+                    start.linkTo(parent.start)
+                    end.linkTo(parent.end)
+                    width = Dimension.fillToConstraints
+                },
+            singleLine = true
+        )
+
+        // 로그인 버튼
+        Button(
+            onClick = {
+                coroutineScope.launch {
+                    try {
+                        auth.signInWithEmailAndPassword(email, password)
+                            .addOnCompleteListener { task ->
+                                if (task.isSuccessful) {
+                                    Toast.makeText(context, "로그인 성공", Toast.LENGTH_SHORT).show()
+                                    navController.navigate("guardian")
+                                } else {
+                                    Toast.makeText(context, "로그인 실패", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                    } catch (e: Exception) {
+                        Toast.makeText(context, "오류: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
                 }
-                authViewModel.resetState()
-            }
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp)
+                .constrainAs(loginButton) {
+                    top.linkTo(passwordField.bottom, margin = 32.dp)
+                    start.linkTo(parent.start)
+                    end.linkTo(parent.end)
+                    width = Dimension.fillToConstraints
+                },
+            shape = RoundedCornerShape(28.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C4B4))
+        ) {
+            Text("로그인", color = Color.White, fontSize = 16.sp)
         }
-        is AuthState.Error -> {
-            LaunchedEffect(state) {
-                Toast.makeText(ctx, (state as AuthState.Error).error, Toast.LENGTH_LONG).show()
-                authViewModel.resetState()
-            }
+
+        // 회원가입 버튼
+        Button(
+            onClick = { navController.navigate("guardian") },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp)
+                .constrainAs(registerButton) {
+                    top.linkTo(loginButton.bottom, margin = 16.dp)
+                    start.linkTo(parent.start)
+                    end.linkTo(parent.end)
+                    width = Dimension.fillToConstraints
+                },
+            shape = RoundedCornerShape(28.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C4B4))
+        ) {
+            Text("회원가입", color = Color.White, fontSize = 16.sp)
         }
-        else -> { /* Idle */ }
     }
 }
 
-
-
-
+@Preview(showBackground = true)
+@Composable
+fun PreviewLogin2() {
+    Guardian_Login(navController = rememberNavController())
+}
 

@@ -130,6 +130,7 @@ dependencies {
 
     // WorkManager 코어 + 코틀린 확장
     implementation ("androidx.work:work-runtime-ktx:2.8.1")
+
 }
 
 
