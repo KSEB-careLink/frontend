@@ -90,6 +90,11 @@ class MainActivity : ComponentActivity() {
                     composable("alarm") {
                         Guardian_Alarm(navController)
                     }
+
+                    composable("alarm2") {
+                        Guardian_Alarm2(navController)
+                    }
+
                     composable("recode") {
                         Recode(
                             navController = navController,

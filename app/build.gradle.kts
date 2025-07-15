@@ -131,6 +131,8 @@ dependencies {
     // WorkManager 코어 + 코틀린 확장
     implementation ("androidx.work:work-runtime-ktx:2.8.1")
 
+    // LocalActivity 컴포지션
+    implementation ("androidx.activity:activity-compose:1.10.0")
 }
 
 
