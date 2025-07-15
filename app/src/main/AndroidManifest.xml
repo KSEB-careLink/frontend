@@ -22,6 +22,9 @@
     <!-- 알림 권한 (Android 13 이상에서 필요) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
 
+    <!-- 녹음 권한 -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
     <!-- 하드웨어 카메라는 필수가 아님 (에뮬레이터 설치 가능하게) -->
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 

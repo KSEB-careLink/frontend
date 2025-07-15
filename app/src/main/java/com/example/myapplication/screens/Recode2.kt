@@ -1,36 +1,64 @@
+// Recode2.kt
 package com.example.myapplication.screens
 
+import android.Manifest
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale              // ← 이 줄을 추가!
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
-import com.example.myapplication.R
 import androidx.navigation.compose.rememberNavController
-import androidx.compose.foundation.Image                 // ← Image 도 import
+import com.example.myapplication.R
+import com.example.myapplication.audio.AudioRecorder
+import androidx.compose.foundation.Image
 
 @Composable
 fun Recode2(navController: NavController) {
-    // ✏️ 조절값
-    val topPadding           = 80.dp
-    val betweenLogoAndTitle  = 12.dp
-    val betweenTitleAndSub   = 8.dp
-    val greyBoxTopGap        = 16.dp
-    val greyBoxHeight        = 400.dp
-    val greyBoxCorner        = 12.dp
-    val bottomButtonOffsetY   = 48.dp
+    val context = LocalContext.current
+    var isRecording by remember { mutableStateOf(false) }
+    var audioPath by remember { mutableStateOf<String?>(null) }
+
+    // 권한 요청 런처
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+        onResult = { granted ->
+            if (!granted) {
+                Toast.makeText(context, "녹음 권한이 필요합니다", Toast.LENGTH_SHORT).show()
+            }
+        }
+    )
+
+    // Composable 로딩 시 권한 요청
+    LaunchedEffect(Unit) {
+        permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+    }
+
+    // 녹음 매니저
+    val recorder = remember { AudioRecorder(context) }
+
+    // UI 파라미터
+    val topPadding = 80.dp
+    val betweenLogoAndTitle = 12.dp
+    val betweenTitleAndSub = 8.dp
+    val greyBoxTopGap = 16.dp
+    val greyBoxHeight = 400.dp
+    val greyBoxCorner = 12.dp
+    val bottomButtonOffsetY = 48.dp
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -40,7 +68,7 @@ fun Recode2(navController: NavController) {
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.fillMaxWidth()
         ) {
-            // 1) 로고
+            // 로고
             Image(
                 painter = painterResource(id = R.drawable.rogo),
                 contentDescription = "로고",
@@ -48,28 +76,31 @@ fun Recode2(navController: NavController) {
                 contentScale = ContentScale.Fit
             )
 
-            Spacer(modifier = Modifier.height(betweenLogoAndTitle))
+            Spacer(Modifier.height(betweenLogoAndTitle))
 
-            // 2) 타이틀
+            // 타이틀
             Text(
-                text = "녹음중...",
+                text = if (!isRecording) "녹음 전" else "녹음 중",
                 fontSize = 32.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color.Black
             )
 
-            Spacer(modifier = Modifier.height(betweenTitleAndSub))
+            Spacer(Modifier.height(betweenTitleAndSub))
 
-            // 3) 서브텍스트
+            // 서브텍스트
             Text(
-                text = "최대한 생동감 있게 텍스트를 읽어주세요",
+                text = if (!isRecording)
+                    "버튼을 눌러 녹음을 시작하세요"
+                else
+                    "최대한 생동감 있게 텍스트를 읽어주세요",
                 fontSize = 16.sp,
                 color = Color.DarkGray
             )
 
-            Spacer(modifier = Modifier.height(greyBoxTopGap))
+            Spacer(Modifier.height(greyBoxTopGap))
 
-            // 4) 회색 박스 + 플레이스홀더 텍스트
+            // 텍스트 박스
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -88,9 +119,22 @@ fun Recode2(navController: NavController) {
             }
         }
 
-        // 5) 하단 버튼 (약간 위로 띄워서 배치)
+        // 녹음 버튼
         Button(
-            onClick = { /* TODO: 녹음 완료 후 navController.navigate(...) */ },
+            onClick = {
+                if (!isRecording) {
+                    // 녹음 시작
+                    audioPath = recorder.startRecording()
+                    isRecording = true
+                } else {
+                    // 녹음 종료
+                    val savedPath = recorder.stopRecording()
+                    isRecording = false
+                    Toast.makeText(context, "녹음 저장: $savedPath", Toast.LENGTH_LONG).show()
+                    // 녹음 완료 후 네비게이션
+                    navController.navigate("recode")
+                }
+            },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(56.dp)
@@ -99,7 +143,11 @@ fun Recode2(navController: NavController) {
             shape = RoundedCornerShape(8.dp),
             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C4B4))
         ) {
-            Text("녹음 완료", color = Color.White, fontSize = 18.sp)
+            Text(
+                text = if (!isRecording) "녹음 시작" else "녹음 완료",
+                color = Color.White,
+                fontSize = 18.sp
+            )
         }
     }
 }
