@@ -40,6 +40,9 @@ import com.example.myapplication.receiver.AlarmReceiver
 import com.example.myapplication.viewmodel.OneTimeAlarmViewModel
 import androidx.compose.foundation.border
 import java.util.Calendar
+import android.util.Log
+import android.provider.Settings
+import android.net.Uri
 
 /**
  * 지정한 날짜·시간에 한 번만 울리는 알람을 예약합니다.
@@ -62,7 +65,23 @@ private fun scheduleOneTimeAlarm(
         set(Calendar.SECOND, 0)
     }
 
+    if (cal.timeInMillis <= System.currentTimeMillis()) {
+        Log.e("AlarmDebug", "⛔ 과거 시간으로 알람이 설정됨. 등록 취소됨.")
+        return
+    }
+
     val am = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        if (!alarmManager.canScheduleExactAlarms()) {
+            val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
+                data = Uri.parse("package:${context.packageName}")
+            }
+            context.startActivity(intent)
+        }
+    }
+
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !am.canScheduleExactAlarms()) {
         // 정확 알람 권한이 없으면 예약하지 않습니다.
         return
@@ -76,6 +95,7 @@ private fun scheduleOneTimeAlarm(
         context, id, intent,
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )
+
 
     try {
         am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, cal.timeInMillis, pi)

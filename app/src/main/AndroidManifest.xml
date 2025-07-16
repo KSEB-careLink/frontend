@@ -83,7 +83,7 @@
         <!-- 로컬 비정기 알림 -->
         <receiver
             android:name=".receiver.AlarmReceiver"
-            android:exported="false"/>
+            android:exported="true"/>
 
     </application>
 </manifest>

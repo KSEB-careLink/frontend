@@ -143,6 +143,9 @@ dependencies {
     // datetime 모듈 (timepicker)
     implementation("io.github.vanpra.compose-material-dialogs:datetime:0.9.0")
 
+   //휠형 TimePicker
+    implementation("io.github.smarttoolfactory:numberpicker:1.0.3")
+
 }
 
 
