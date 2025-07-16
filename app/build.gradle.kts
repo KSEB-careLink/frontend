@@ -135,6 +135,7 @@ dependencies {
     // LocalActivity 컴포지션
     implementation ("androidx.activity:activity-compose:1.10.0")
 
+
     // java.time API desugaring
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.3")
 
@@ -143,8 +144,6 @@ dependencies {
     // datetime 모듈 (timepicker)
     implementation("io.github.vanpra.compose-material-dialogs:datetime:0.9.0")
 
-   //휠형 TimePicker
-    implementation("io.github.smarttoolfactory:numberpicker:1.0.3")
 
 }
 

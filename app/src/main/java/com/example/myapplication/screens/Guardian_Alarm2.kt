@@ -1,4 +1,4 @@
-// app/src/main/java/com/example/myapplication/screens/GuardianAlarm2.kt
+//app/src/main/java/com/example/myapplication/screens/GuardianAlarm2.kt
 package com.example.myapplication.screens
 
 import android.app.AlarmManager
@@ -315,7 +315,6 @@ fun Guardian_Alarm2(navController: NavController) {
         }
     }
 }
-
 
 
 
