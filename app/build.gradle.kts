@@ -32,6 +32,7 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
+        isCoreLibraryDesugaringEnabled = true
     }
 
     kotlinOptions {
@@ -133,6 +134,15 @@ dependencies {
 
     // LocalActivity 컴포지션
     implementation ("androidx.activity:activity-compose:1.10.0")
+
+    // java.time API desugaring
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.3")
+
+    // core 모듈 (버튼 API 포함)
+    implementation("io.github.vanpra.compose-material-dialogs:core:0.9.0")
+    // datetime 모듈 (timepicker)
+    implementation("io.github.vanpra.compose-material-dialogs:datetime:0.9.0")
+
 }
 
 
