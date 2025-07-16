@@ -21,7 +21,7 @@ fun SplashScreen(navController: NavController) {
     // 3초 뒤 메인 화면으로 이동
     LaunchedEffect(Unit) {
         delay(3000)
-        navController.navigate("alarm") {
+        navController.navigate("recode") {
             popUpTo("splash") { inclusive = true }
         }
     }
