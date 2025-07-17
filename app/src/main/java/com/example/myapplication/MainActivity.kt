@@ -95,6 +95,10 @@ class MainActivity : ComponentActivity() {
                         Guardian_Alarm2(navController)
                     }
 
+                    composable("memorylist") {
+                        MemoryInfoListScreen(navController)
+                    }
+
                     composable("recode") {
                         Recode(
                             navController = navController,
