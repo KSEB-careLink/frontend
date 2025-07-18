@@ -58,7 +58,7 @@ fun Guardian_Login(navController: NavController) {
             modifier = Modifier
                 .size(160.dp)
                 .constrainAs(logo) {
-                    top.linkTo(parent.top, margin = 64.dp)
+                    top.linkTo(parent.top, margin = 154.dp)
                     start.linkTo(parent.start)
                     end.linkTo(parent.end)
                 }
@@ -72,7 +72,7 @@ fun Guardian_Login(navController: NavController) {
             modifier = Modifier
                 .size(120.dp)
                 .constrainAs(textLogo) {
-                    top.linkTo(logo.bottom, margin = 24.dp)
+                    top.linkTo(logo.bottom, margin = -54.dp)
                     start.linkTo(parent.start)
                     end.linkTo(parent.end)
                 }
@@ -84,7 +84,7 @@ fun Guardian_Login(navController: NavController) {
             fontSize = 28.sp,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.constrainAs(title) {
-                top.linkTo(textLogo.bottom, margin = 32.dp)
+                top.linkTo(textLogo.bottom, margin = -20.dp)
                 start.linkTo(parent.start)
                 end.linkTo(parent.end)
             }

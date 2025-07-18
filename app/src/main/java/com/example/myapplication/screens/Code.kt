@@ -41,7 +41,7 @@ fun Code(navController: NavController, joinCode: String) {
             modifier = Modifier
                 .size(160.dp)
                 .constrainAs(logo) {
-                    top.linkTo(parent.top, margin = 80.dp)
+                    top.linkTo(parent.top, margin = 180.dp)
                     start.linkTo(parent.start)
                     end.linkTo(parent.end)
                 }
@@ -97,7 +97,7 @@ fun Code(navController: NavController, joinCode: String) {
             modifier = Modifier
                 .height(56.dp)
                 .constrainAs(button) {
-                    bottom.linkTo(parent.bottom, margin = 80.dp)
+                    bottom.linkTo(parent.bottom, margin = 250.dp)
                     start.linkTo(parent.start)
                     end.linkTo(parent.end)
                     width = Dimension.fillToConstraints
@@ -105,7 +105,7 @@ fun Code(navController: NavController, joinCode: String) {
             shape = RoundedCornerShape(8.dp),
             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C4B4))
         ) {
-            Text("보호자 pin 코드 입력", color = Color.White, fontSize = 16.sp)
+            Text("장치관리 화면으로 이동", color = Color.White, fontSize = 16.sp)
         }
     }
 }

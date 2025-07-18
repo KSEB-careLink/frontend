@@ -40,7 +40,7 @@ fun ChoosePositionPage(navController: NavController) {
             modifier = Modifier
                 .size(160.dp)
                 .constrainAs(logoImage) {
-                    top.linkTo(parent.top, margin = 80.dp)
+                    top.linkTo(parent.top, margin = 220.dp)
                     start.linkTo(parent.start)
                     end.linkTo(parent.end)
                 }
@@ -54,7 +54,7 @@ fun ChoosePositionPage(navController: NavController) {
             modifier = Modifier
                 .size(120.dp)
                 .constrainAs(textImage) {
-                    top.linkTo(logoImage.bottom, margin = 32.dp)
+                    top.linkTo(logoImage.bottom, margin = -32.dp)
                     start.linkTo(parent.start)
                     end.linkTo(parent.end)
                 }
@@ -65,9 +65,9 @@ fun ChoosePositionPage(navController: NavController) {
             onClick = { navController.navigate("p_login") },
             modifier = Modifier
                 .fillMaxWidth(0.8f)
-                .height(56.dp)
+                .height(76.dp)
                 .constrainAs(elderButton) {
-                    top.linkTo(textImage.bottom, margin = 64.dp)
+                    top.linkTo(textImage.bottom, margin = 1.dp)
                     start.linkTo(parent.start)
                     end.linkTo(parent.end)
                 },
@@ -82,7 +82,7 @@ fun ChoosePositionPage(navController: NavController) {
             onClick = { navController.navigate("G_login") },
             modifier = Modifier
                 .fillMaxWidth(0.8f)
-                .height(56.dp)
+                .height(76.dp)
                 .constrainAs(guardianButton) {
                     top.linkTo(elderButton.bottom, margin = 16.dp)
                     start.linkTo(parent.start)
