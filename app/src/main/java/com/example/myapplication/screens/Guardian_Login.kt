@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -19,12 +18,18 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
+import com.example.myapplication.BuildConfig
 import com.example.myapplication.R
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.constraintlayout.compose.ConstraintLayout
 import androidx.constraintlayout.compose.Dimension
+import okhttp3.*
+import org.json.JSONObject
+import java.io.IOException
 
 @Composable
 fun Guardian_Login(navController: NavController) {
@@ -35,6 +40,8 @@ fun Guardian_Login(navController: NavController) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
 
+    val client = remember { OkHttpClient() }
+
     ConstraintLayout(
         modifier = Modifier
             .fillMaxSize()
@@ -43,7 +50,7 @@ fun Guardian_Login(navController: NavController) {
         val (logo, textLogo, title, emailLabel, emailField, passwordLabel, passwordField,
             loginButton, registerButton) = createRefs()
 
-        // 로고
+        // 로고 이미지
         Image(
             painter = painterResource(id = R.drawable.rogo),
             contentDescription = "로고",
@@ -93,7 +100,7 @@ fun Guardian_Login(navController: NavController) {
             }
         )
 
-        // 이메일 입력
+        // 이메일 입력창
         OutlinedTextField(
             value = email,
             onValueChange = { email = it },
@@ -120,7 +127,7 @@ fun Guardian_Login(navController: NavController) {
             }
         )
 
-        // 비밀번호 입력
+        // 비밀번호 입력창
         OutlinedTextField(
             value = password,
             onValueChange = { password = it },
@@ -142,18 +149,59 @@ fun Guardian_Login(navController: NavController) {
         Button(
             onClick = {
                 coroutineScope.launch {
+                    val emailTrimmed = email.trim()
+                    val passwordTrimmed = password.trim()
+
                     try {
-                        auth.signInWithEmailAndPassword(email, password)
-                            .addOnCompleteListener { task ->
-                                if (task.isSuccessful) {
-                                    Toast.makeText(context, "로그인 성공", Toast.LENGTH_SHORT).show()
-                                    navController.navigate("guardian")
-                                } else {
-                                    Toast.makeText(context, "로그인 실패", Toast.LENGTH_SHORT).show()
+                        auth.signInWithEmailAndPassword(emailTrimmed, passwordTrimmed)
+                            .addOnSuccessListener { result ->
+                                result.user?.getIdToken(true)?.addOnSuccessListener { tokenResult ->
+                                    val idToken = tokenResult.token
+                                    val request = Request.Builder()
+                                        .url("${BuildConfig.BASE_URL}/auth/me")
+                                        .addHeader("Authorization", "Bearer $idToken")
+                                        .get()
+                                        .build()
+
+                                    client.newCall(request).enqueue(object : Callback {
+                                        override fun onFailure(call: Call, e: IOException) {
+                                            coroutineScope.launch {
+                                                withContext(Dispatchers.Main) {
+                                                    Toast.makeText(context, "서버 연결 실패", Toast.LENGTH_SHORT).show()
+                                                }
+                                            }
+                                        }
+
+                                        override fun onResponse(call: Call, response: Response) {
+                                            coroutineScope.launch {
+                                                withContext(Dispatchers.Main) {
+                                                    if (response.isSuccessful) {
+                                                        val body = response.body?.string()
+                                                        val role = JSONObject(body ?: "{}").optString("role")
+                                                        if (role == "guardian") {
+                                                            withContext(Dispatchers.Main) {
+                                                                Toast.makeText(context, "로그인 성공!", Toast.LENGTH_SHORT).show()
+                                                                navController.navigate("code")
+                                                            }
+                                                        } else {
+                                                            Toast.makeText(context, "잘못된 사용자 역할", Toast.LENGTH_SHORT).show()
+                                                        }
+                                                    } else {
+                                                        Toast.makeText(context, "사용자 정보 조회 실패", Toast.LENGTH_SHORT).show()
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    })
                                 }
                             }
+                            .addOnFailureListener {
+                                Toast.makeText(context, "로그인 실패", Toast.LENGTH_SHORT).show()
+                            }
                     } catch (e: Exception) {
-                        Toast.makeText(context, "오류: ${e.message}", Toast.LENGTH_SHORT).show()
+                        withContext(Dispatchers.Main) {
+                            Toast.makeText(context, "오류: ${e.message}", Toast.LENGTH_SHORT).show()
+                        }
                     }
                 }
             },
@@ -164,7 +212,6 @@ fun Guardian_Login(navController: NavController) {
                     top.linkTo(passwordField.bottom, margin = 32.dp)
                     start.linkTo(parent.start)
                     end.linkTo(parent.end)
-                    width = Dimension.fillToConstraints
                 },
             shape = RoundedCornerShape(28.dp),
             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C4B4))
@@ -174,7 +221,7 @@ fun Guardian_Login(navController: NavController) {
 
         // 회원가입 버튼
         Button(
-            onClick = { navController.navigate("guardian") },
+            onClick = { navController.navigate("guardianSignup") },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(56.dp)
@@ -182,7 +229,6 @@ fun Guardian_Login(navController: NavController) {
                     top.linkTo(loginButton.bottom, margin = 16.dp)
                     start.linkTo(parent.start)
                     end.linkTo(parent.end)
-                    width = Dimension.fillToConstraints
                 },
             shape = RoundedCornerShape(28.dp),
             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C4B4))
@@ -197,4 +243,5 @@ fun Guardian_Login(navController: NavController) {
 fun PreviewLogin2() {
     Guardian_Login(navController = rememberNavController())
 }
+
 

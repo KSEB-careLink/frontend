@@ -1,4 +1,3 @@
-// app/src/main/java/com/example/myapplication/screens/PatientLoginScreen.kt
 package com.example.myapplication.screens
 
 import android.widget.Toast
@@ -18,187 +17,237 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.constraintlayout.compose.ConstraintLayout
+import androidx.constraintlayout.compose.Dimension
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
+import com.example.myapplication.BuildConfig
 import com.example.myapplication.R
-import com.example.myapplication.ui.auth.AuthState
-import com.example.myapplication.ui.auth.AuthViewModel
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.*
+import okhttp3.*
+import org.json.JSONObject
+import java.io.IOException
 import kotlinx.coroutines.tasks.await
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.LaunchedEffect
 
 @Composable
-fun PatientLoginScreen(
-    navController: NavController,
-    authViewModel: AuthViewModel = viewModel()
-) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
+fun PatientLoginScreen(navController: NavController) {
     val auth = Firebase.auth
+    val coroutineScope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val client = remember { OkHttpClient() }
 
-    // 1) 입력 폼 상태
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    var isLoading by remember { mutableStateOf(false) }
 
-    // 2) ViewModel 상태 구독
-    val state by authViewModel.state.collectAsState()
-
-    Box(
+    ConstraintLayout(
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = 24.dp)
     ) {
-        // 로고 영역
-        Box(
+        val (logo, textLogo, title, emailLabel, emailField, passwordLabel, passwordField,
+            loginButton, registerButton, loadingBox) = createRefs()
+
+        // 로고
+        Image(
+            painter = painterResource(id = R.drawable.rogo),
+            contentDescription = "로고",
+            contentScale = ContentScale.Fit,
             modifier = Modifier
-                .align(Alignment.TopCenter)
-                .padding(top = 80.dp)
-                .sizeIn(minWidth = 0.dp, minHeight = 0.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Image(
-                painter = painterResource(R.drawable.rogo),
-                contentDescription = "로고",
-                modifier = Modifier
-                    .size(200.dp)
-                    .offset(y = (-20).dp),
-                contentScale = ContentScale.Fit
-            )
-            Image(
-                painter = painterResource(R.drawable.ai_text),
-                contentDescription = "텍스트 로고",
-                modifier = Modifier
-                    .size(150.dp)
-                    .offset(y = 90.dp),
-                contentScale = ContentScale.Fit
-            )
-        }
+                .size(160.dp)
+                .constrainAs(logo) {
+                    top.linkTo(parent.top, margin = 64.dp)
+                    start.linkTo(parent.start)
+                    end.linkTo(parent.end)
+                }
+        )
 
-        // 로그인 폼
-        Column(
+        // 텍스트 로고
+        Image(
+            painter = painterResource(id = R.drawable.ai_text),
+            contentDescription = "텍스트 로고",
+            contentScale = ContentScale.Fit,
             modifier = Modifier
-                .align(Alignment.TopCenter)
-                .padding(top = 320.dp)
-                .fillMaxWidth(),
-            horizontalAlignment = Alignment.Start
-        ) {
-            Text(
-                text = "환자 로그인",
-                fontSize = 32.sp,
-                modifier = Modifier.align(Alignment.CenterHorizontally)
-            )
-            Spacer(Modifier.height(24.dp))
+                .size(120.dp)
+                .constrainAs(textLogo) {
+                    top.linkTo(logo.bottom, margin = 24.dp)
+                    start.linkTo(parent.start)
+                    end.linkTo(parent.end)
+                }
+        )
 
-            Text("이메일 주소", fontSize = 16.sp)
-            OutlinedTextField(
-                value = email,
-                onValueChange = { email = it },
-                placeholder = { Text("example@mail.com") },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp),
-                singleLine = true
-            )
-            Spacer(Modifier.height(16.dp))
+        // 제목
+        Text(
+            text = "환자 로그인",
+            fontSize = 28.sp,
+            modifier = Modifier.constrainAs(title) {
+                top.linkTo(textLogo.bottom, margin = 32.dp)
+                start.linkTo(parent.start)
+                end.linkTo(parent.end)
+            }
+        )
 
-            Text("비밀번호", fontSize = 16.sp)
-            OutlinedTextField(
-                value = password,
-                onValueChange = { password = it },
-                placeholder = { Text("••••••••") },
-                visualTransformation = PasswordVisualTransformation(),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp),
-                singleLine = true
-            )
-        }
+        // 이메일 라벨
+        Text(
+            text = "이메일 주소",
+            fontSize = 16.sp,
+            modifier = Modifier.constrainAs(emailLabel) {
+                top.linkTo(title.bottom, margin = 24.dp)
+                start.linkTo(parent.start)
+            }
+        )
 
-        // 로그인 / 회원가입 버튼
-        Column(
+        // 이메일 입력
+        OutlinedTextField(
+            value = email,
+            onValueChange = { email = it.trim() },
+            placeholder = { Text("example@mail.com") },
+            singleLine = true,
             modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 170.dp)
-                .fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Button(
-                onClick = {
-                    if (email.isBlank() || password.isBlank()) {
-                        Toast.makeText(context, "이메일과 비밀번호를 입력해주세요.", Toast.LENGTH_SHORT).show()
-                        return@Button
-                    }
-                    scope.launch {
-                        try {
-                            // Firebase 로그인
-                            auth.signInWithEmailAndPassword(email.trim(), password).await()
-                            // 토큰 검증 및 role 조회
-                            authViewModel.verifyToken()
-                        } catch (e: Exception) {
-                            Toast.makeText(context, "로그인 실패: ${e.message}", Toast.LENGTH_SHORT).show()
+                .fillMaxWidth()
+                .height(56.dp)
+                .constrainAs(emailField) {
+                    top.linkTo(emailLabel.bottom, margin = 8.dp)
+                    start.linkTo(parent.start)
+                    end.linkTo(parent.end)
+                    width = Dimension.fillToConstraints
+                }
+        )
+
+        // 비밀번호 라벨
+        Text(
+            text = "비밀번호",
+            fontSize = 16.sp,
+            modifier = Modifier.constrainAs(passwordLabel) {
+                top.linkTo(emailField.bottom, margin = 16.dp)
+                start.linkTo(parent.start)
+            }
+        )
+
+        // 비밀번호 입력
+        OutlinedTextField(
+            value = password,
+            onValueChange = { password = it.trim() },
+            placeholder = { Text("••••••••") },
+            visualTransformation = PasswordVisualTransformation(),
+            singleLine = true,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp)
+                .constrainAs(passwordField) {
+                    top.linkTo(passwordLabel.bottom, margin = 8.dp)
+                    start.linkTo(parent.start)
+                    end.linkTo(parent.end)
+                    width = Dimension.fillToConstraints
+                }
+        )
+
+        // 로그인 버튼
+        Button(
+            onClick = {
+                coroutineScope.launch {
+                    isLoading = true
+                    try {
+                        val result = auth.signInWithEmailAndPassword(email, password).await()
+                        val user = result.user ?: throw Exception("Firebase 유저 없음")
+                        user.getIdToken(true).addOnSuccessListener { tokenResult ->
+                            val idToken = tokenResult.token
+                            val request = Request.Builder()
+                                .url("${BuildConfig.BASE_URL}/auth/me")
+                                .addHeader("Authorization", "Bearer $idToken")
+                                .get()
+                                .build()
+
+                            client.newCall(request).enqueue(object : Callback {
+                                override fun onFailure(call: Call, e: IOException) {
+                                    coroutineScope.launch {
+                                        withContext(Dispatchers.Main) {
+                                            isLoading = false
+                                            Toast.makeText(context, "서버 연결 실패", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                }
+
+                                override fun onResponse(call: Call, response: Response) {
+                                    coroutineScope.launch {
+                                        withContext(Dispatchers.Main) {
+                                            isLoading = false
+                                            if (response.isSuccessful) {
+                                                val body = response.body?.string()
+                                                val role = JSONObject(body ?: "{}").optString("role")
+                                                if (role == "patient") {
+                                                    Toast.makeText(context, "로그인 성공!", Toast.LENGTH_SHORT).show()
+                                                    navController.navigate("code")
+                                                } else {
+                                                    Toast.makeText(context, "환자 계정이 아닙니다.", Toast.LENGTH_SHORT).show()
+                                                }
+                                            } else {
+                                                Toast.makeText(context, "사용자 정보 조회 실패", Toast.LENGTH_SHORT).show()
+                                            }
+                                        }
+                                    }
+                                }
+                            })
+                        }.addOnFailureListener {
+                            isLoading = false
+                            Toast.makeText(context, "토큰 획득 실패", Toast.LENGTH_SHORT).show()
                         }
+                    } catch (e: Exception) {
+                        isLoading = false
+                        Toast.makeText(context, "로그인 실패: ${e.message}", Toast.LENGTH_SHORT).show()
                     }
+                }
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp)
+                .constrainAs(loginButton) {
+                    top.linkTo(passwordField.bottom, margin = 32.dp)
+                    start.linkTo(parent.start)
+                    end.linkTo(parent.end)
                 },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp),
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C4B4))
-            ) {
-                Text("로그인", color = Color.White, fontSize = 16.sp)
-            }
-
-            Spacer(Modifier.height(16.dp))
-
-            Button(
-                onClick = { navController.navigate("patient") },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp),
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C4B4))
-            ) {
-                Text("회원가입", color = Color.White, fontSize = 16.sp)
-            }
+            shape = RoundedCornerShape(28.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C4B4))
+        ) {
+            Text("로그인", color = Color.White, fontSize = 16.sp)
         }
-    }
 
-    // 3) ViewModel 상태 처리
-    when (state) {
-        is AuthState.Loading -> {
+        // 회원가입 버튼
+        Button(
+            onClick = { navController.navigate("patient") },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp)
+                .constrainAs(registerButton) {
+                    top.linkTo(loginButton.bottom, margin = 16.dp)
+                    start.linkTo(parent.start)
+                    end.linkTo(parent.end)
+                },
+            shape = RoundedCornerShape(28.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C4B4))
+        ) {
+            Text("회원가입", color = Color.White, fontSize = 16.sp)
+        }
+
+        // 로딩 인디케이터
+        if (isLoading) {
             Box(
-                Modifier
+                modifier = Modifier
                     .fillMaxSize()
-                    .background(Color(0x88000000)),
+                    .background(Color(0x88000000))
+                    .constrainAs(loadingBox) {
+                        top.linkTo(parent.top)
+                        bottom.linkTo(parent.bottom)
+                        start.linkTo(parent.start)
+                        end.linkTo(parent.end)
+                    },
                 contentAlignment = Alignment.Center
             ) {
                 CircularProgressIndicator(color = Color.White)
             }
         }
-        is AuthState.VerifiedRole -> {
-            LaunchedEffect(state) {
-                val role = (state as AuthState.VerifiedRole).role
-                if (role == "patient") {
-                    navController.navigate("code") {
-                        popUpTo("patientLogin") { inclusive = true }
-                    }
-                } else {
-                    Toast.makeText(context, "권한 오류: role=$role", Toast.LENGTH_SHORT).show()
-                }
-                authViewModel.resetState()
-            }
-        }
-        is AuthState.Error -> {
-            LaunchedEffect(state) {
-                Toast.makeText(context, (state as AuthState.Error).error, Toast.LENGTH_LONG).show()
-                authViewModel.resetState()
-            }
-        }
-        else -> { /* Idle */ }
     }
 }
 
@@ -207,6 +256,10 @@ fun PatientLoginScreen(
 fun PreviewPatientLogin() {
     PatientLoginScreen(navController = rememberNavController())
 }
+
+
+
+
 
 
 

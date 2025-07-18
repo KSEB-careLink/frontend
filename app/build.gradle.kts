@@ -17,6 +17,12 @@ android {
         versionCode = 1
         versionName = "1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField("String", "BASE_URL", "\"http://10.0.2.2:3000\"")
+    }
+    
+    buildFeatures {
+        compose = true
+        buildConfig = true  // ✅ 이 줄을 꼭 추가하세요!
     }
 
     buildTypes {
@@ -143,7 +149,6 @@ dependencies {
     implementation("io.github.vanpra.compose-material-dialogs:core:0.9.0")
     // datetime 모듈 (timepicker)
     implementation("io.github.vanpra.compose-material-dialogs:datetime:0.9.0")
-
 
 }
 
