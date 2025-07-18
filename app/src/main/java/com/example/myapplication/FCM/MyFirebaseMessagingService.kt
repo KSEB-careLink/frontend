@@ -1,69 +1,89 @@
 package com.example.myapplication.fcm
 
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.content.Context
+import android.app.*
+import android.content.*
 import android.media.RingtoneManager
 import android.os.Build
+import android.util.Log
 import androidx.core.app.NotificationCompat
+import com.example.myapplication.MainActivity
+import com.example.myapplication.R
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
-import com.example.myapplication.R
-
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.OkHttpClient
+import java.io.IOException
+import okhttp3.RequestBody.Companion.toRequestBody
 class MyFirebaseMessagingService : FirebaseMessagingService() {
 
-    // 새로운 FCM 토큰이 생성됐을 때 호출
     override fun onNewToken(token: String) {
-        super.onNewToken(token)
-        // TODO: 서버에 토큰 전송 (Push 발송 대상 관리용)
-        sendRegistrationToServer(token)
+        Log.d("FCM", "🎯 새 FCM 토큰: $token")
+
+        // 서버로 토큰 전송 (환자 전용)
+        // 서버는 JS 코드 그대로 유지하므로, 반드시 /auth/save-token API가 있어야 함
+        // 이 부분은 JS 수정 없이 사용자가 미리 구현해 둔 API 기준
+        sendTokenToServer(token)
     }
 
-    // 백그라운드/포그라운드 상관없이 메시지 수신 시 호출
-    override fun onMessageReceived(remoteMessage: RemoteMessage) {
-        super.onMessageReceived(remoteMessage)
+    private fun sendTokenToServer(token: String) {
+        val user = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser ?: return
+        user.getIdToken(true).addOnSuccessListener { result ->
+            val jwt = result.token ?: return@addOnSuccessListener
 
-        // 페이로드에서 title/body 가져오기
-        val title = remoteMessage.notification?.title ?: remoteMessage.data["title"]
-        val message = remoteMessage.notification?.body ?: remoteMessage.data["body"]
+            val json = "{\"fcmToken\":\"$token\"}"
+                .toRequestBody("application/json".toMediaTypeOrNull())
 
-        if (title != null && message != null) {
-            sendNotification(title, message)
+            val request = okhttp3.Request.Builder()
+                .url("http://<서버주소>/auth/save-token")
+                .post(json)
+                .addHeader("Authorization", "Bearer $jwt")
+                .build()
+
+            OkHttpClient().newCall(request).enqueue(object : okhttp3.Callback {
+                override fun onFailure(call: okhttp3.Call, e: IOException) {
+                    Log.e("FCM", "토큰 저장 실패: ${e.message}")
+                }
+
+                override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
+                    Log.i("FCM", "토큰 저장 성공")
+                }
+            })
         }
     }
 
-    private fun sendRegistrationToServer(token: String) {
-        // Retrofit, Ktor 등으로 내 서버에 토큰 전송
+
+    override fun onMessageReceived(remoteMessage: RemoteMessage) {
+        val title = remoteMessage.notification?.title ?: "CareLink 알림"
+        val body = remoteMessage.notification?.body ?: ""
+        showNotification(title, body)
     }
 
-    private fun sendNotification(title: String, message: String) {
+    private fun showNotification(title: String, message: String) {
         val channelId = "carelink_channel"
-        val notificationManager =
-            getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
-        // O 이상은 채널 생성 필수
+        // Android 8.0 이상: 알림 채널 필요
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
-                channelId,
-                "CareLink 알림",
-                NotificationManager.IMPORTANCE_HIGH
-            ).apply {
-                description = "CareLink 앱 푸시 알림 채널"
-            }
+                channelId, "CareLink 알림", NotificationManager.IMPORTANCE_HIGH
+            )
             notificationManager.createNotificationChannel(channel)
         }
 
-        val defaultSoundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
-        val notificationBuilder = NotificationCompat.Builder(this, channelId)
-            .setSmallIcon(R.drawable.ic_notification) // 앱에 맞는 아이콘
+        val intent = Intent(this, MainActivity::class.java)
+        val pendingIntent = PendingIntent.getActivity(
+            this, 0, intent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        val builder = NotificationCompat.Builder(this, channelId)
+            .setSmallIcon(R.drawable.ic_notification) // 꼭 아이콘 있어야 함
             .setContentTitle(title)
             .setContentText(message)
             .setAutoCancel(true)
-            .setSound(defaultSoundUri)
+            .setContentIntent(pendingIntent)
 
-        notificationManager.notify(
-            System.currentTimeMillis().toInt(), // 고유 아이디
-            notificationBuilder.build()
-        )
+        notificationManager.notify(0, builder.build())
     }
 }
+

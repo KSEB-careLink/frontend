@@ -30,6 +30,7 @@ import androidx.constraintlayout.compose.Dimension
 import okhttp3.*
 import org.json.JSONObject
 import java.io.IOException
+import android.content.Context
 
 @Composable
 fun Guardian_Login(navController: NavController) {
@@ -41,6 +42,16 @@ fun Guardian_Login(navController: NavController) {
     var password by remember { mutableStateOf("") }
 
     val client = remember { OkHttpClient() }
+
+    fun savePatientIdToPrefs(context: Context, patientId: String) {
+        val prefs = context.getSharedPreferences("MyPrefs", Context.MODE_PRIVATE)
+        prefs.edit().putString("patient_id", patientId).apply()
+    }
+
+    fun saveTokenToPrefs(context: Context, token: String) {
+        val prefs = context.getSharedPreferences("MyPrefs", Context.MODE_PRIVATE)
+        prefs.edit().putString("jwt_token", token).apply()
+    }
 
     ConstraintLayout(
         modifier = Modifier
@@ -179,11 +190,18 @@ fun Guardian_Login(navController: NavController) {
                                                         val body = response.body?.string()
                                                         val json = JSONObject(body ?: "{}")
                                                         val role = json.optString("role")
-                                                        val joinCode = json.optString("joinCode") // 🔹 joinCode 추출
+                                                        val joinCode = json.optString("joinCode")
+
+                                                        // ✅ linkedPatients[0] 저장
+                                                        val linkedPatients = json.optJSONArray("linkedPatients")
+                                                        if (linkedPatients != null && linkedPatients.length() > 0) {
+                                                            val patientId = linkedPatients.getString(0)
+                                                            savePatientIdToPrefs(context, patientId)
+                                                        }
 
                                                         if (role == "guardian" && joinCode.isNotBlank()) {
                                                             Toast.makeText(context, "로그인 성공!", Toast.LENGTH_SHORT).show()
-                                                            navController.navigate("code/$joinCode") // 🔹 화면 이동
+                                                            navController.navigate("code/$joinCode")
                                                         } else {
                                                             Toast.makeText(context, "잘못된 사용자 역할 또는 joinCode 없음", Toast.LENGTH_SHORT).show()
                                                         }
@@ -193,7 +211,6 @@ fun Guardian_Login(navController: NavController) {
                                                 }
                                             }
                                         }
-
                                     })
                                 }
                             }
@@ -220,6 +237,7 @@ fun Guardian_Login(navController: NavController) {
         ) {
             Text("로그인", color = Color.White, fontSize = 16.sp)
         }
+
 
         // 회원가입 버튼
         Button(
