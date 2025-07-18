@@ -168,6 +168,7 @@ fun Guardian_Login(navController: NavController) {
                             .addOnSuccessListener { result ->
                                 result.user?.getIdToken(true)?.addOnSuccessListener { tokenResult ->
                                     val idToken = tokenResult.token
+                                    saveTokenToPrefs(context, idToken ?: "")
                                     val request = Request.Builder()
                                         .url("${BuildConfig.BASE_URL}/auth/me")
                                         .addHeader("Authorization", "Bearer $idToken")
