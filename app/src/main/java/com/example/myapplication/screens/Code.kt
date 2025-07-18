@@ -21,8 +21,9 @@ import androidx.navigation.compose.rememberNavController
 import com.example.myapplication.R
 
 @Composable
-fun Code(navController: NavController) {
-    val codeLength = 5
+fun Code(navController: NavController, joinCode: String) {
+    val codeLength = 6
+    val paddedCode = joinCode.padEnd(codeLength, ' ')
 
     ConstraintLayout(
         modifier = Modifier
@@ -30,15 +31,15 @@ fun Code(navController: NavController) {
             .padding(24.dp)
     ) {
         val (
-            logo, title, codeRow, expirationText, button
+            logo, title, codeRow, button
         ) = createRefs()
 
-        // 1) 로고
+        // 로고
         Image(
             painter = painterResource(id = R.drawable.rogo),
             contentDescription = "로고",
             modifier = Modifier
-                .size(200.dp)
+                .size(160.dp)
                 .constrainAs(logo) {
                     top.linkTo(parent.top, margin = 80.dp)
                     start.linkTo(parent.start)
@@ -46,7 +47,7 @@ fun Code(navController: NavController) {
                 }
         )
 
-        // 2) 타이틀
+        // 타이틀
         Text(
             text = "코드 주고 받기",
             fontSize = 24.sp,
@@ -58,47 +59,45 @@ fun Code(navController: NavController) {
             }
         )
 
-        // 3) 코드 박스들
+        // 코드 박스들
         Row(
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.constrainAs(codeRow) {
-                top.linkTo(title.bottom, margin = 32.dp)
-                start.linkTo(parent.start)
-                end.linkTo(parent.end)
-            }
+            modifier = Modifier
+                .padding(horizontal = 16.dp)
+                .constrainAs(codeRow) {
+                    top.linkTo(title.bottom, margin = 32.dp)
+                    start.linkTo(parent.start)
+                    end.linkTo(parent.end)
+                }
         ) {
-            repeat(codeLength) {
+            for (i in 0 until codeLength) {
                 Box(
                     modifier = Modifier
-                        .size(56.dp)
+                        .size(48.dp)
                         .background(
                             color = Color(0xFF333333),
                             shape = RoundedCornerShape(8.dp)
-                        )
-                )
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = paddedCode.getOrNull(i)?.toString() ?: "",
+                        fontSize = 22.sp,
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
         }
 
-        // 4) 유효기간 텍스트
-        Text(
-            text = "코드 유효 기간 xx/xx/xx",
-            fontSize = 14.sp,
-            color = Color.Black,
-            modifier = Modifier.constrainAs(expirationText) {
-                top.linkTo(codeRow.bottom, margin = 16.dp)
-                start.linkTo(parent.start)
-                end.linkTo(parent.end)
-            }
-        )
-
-        // 5) 하단 버튼
+        // 버튼
         Button(
             onClick = { navController.navigate("main") },
             modifier = Modifier
-                .height(76.dp)
+                .height(56.dp)
                 .constrainAs(button) {
-                    bottom.linkTo(parent.bottom, margin = 250.dp)
+                    bottom.linkTo(parent.bottom, margin = 80.dp)
                     start.linkTo(parent.start)
                     end.linkTo(parent.end)
                     width = Dimension.fillToConstraints
@@ -111,11 +110,7 @@ fun Code(navController: NavController) {
     }
 }
 
-@Preview(showBackground = true)
-@Composable
-fun PreviewCodeExchangePage() {
-    Code(navController = rememberNavController())
-}
+
 
 
 

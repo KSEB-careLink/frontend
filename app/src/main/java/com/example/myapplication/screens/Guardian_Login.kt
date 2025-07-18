@@ -177,14 +177,15 @@ fun Guardian_Login(navController: NavController) {
                                                 withContext(Dispatchers.Main) {
                                                     if (response.isSuccessful) {
                                                         val body = response.body?.string()
-                                                        val role = JSONObject(body ?: "{}").optString("role")
-                                                        if (role == "guardian") {
-                                                            withContext(Dispatchers.Main) {
-                                                                Toast.makeText(context, "로그인 성공!", Toast.LENGTH_SHORT).show()
-                                                                navController.navigate("code")
-                                                            }
+                                                        val json = JSONObject(body ?: "{}")
+                                                        val role = json.optString("role")
+                                                        val joinCode = json.optString("joinCode") // 🔹 joinCode 추출
+
+                                                        if (role == "guardian" && joinCode.isNotBlank()) {
+                                                            Toast.makeText(context, "로그인 성공!", Toast.LENGTH_SHORT).show()
+                                                            navController.navigate("code/$joinCode") // 🔹 화면 이동
                                                         } else {
-                                                            Toast.makeText(context, "잘못된 사용자 역할", Toast.LENGTH_SHORT).show()
+                                                            Toast.makeText(context, "잘못된 사용자 역할 또는 joinCode 없음", Toast.LENGTH_SHORT).show()
                                                         }
                                                     } else {
                                                         Toast.makeText(context, "사용자 정보 조회 실패", Toast.LENGTH_SHORT).show()
@@ -192,6 +193,7 @@ fun Guardian_Login(navController: NavController) {
                                                 }
                                             }
                                         }
+
                                     })
                                 }
                             }

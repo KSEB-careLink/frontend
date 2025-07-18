@@ -78,9 +78,11 @@ class MainActivity : ComponentActivity() {
                     composable("G_login") {
                         Guardian_Login(navController)
                     }
-                    composable("code") {
-                        Code(navController)
+                    composable("code/{joinCode}") { backStackEntry ->
+                        val joinCode = backStackEntry.arguments?.getString("joinCode") ?: ""
+                        Code(navController = navController, joinCode = joinCode)
                     }
+
                     composable("main") {
                         Main_Page(navController)
                     }
