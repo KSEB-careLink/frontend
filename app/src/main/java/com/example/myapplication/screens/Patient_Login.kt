@@ -179,7 +179,7 @@ fun PatientLoginScreen(navController: NavController) {
                                                 val role = JSONObject(body ?: "{}").optString("role")
                                                 if (role == "patient") {
                                                     Toast.makeText(context, "로그인 성공!", Toast.LENGTH_SHORT).show()
-                                                    navController.navigate("code")
+                                                    navController.navigate("code2")
                                                 } else {
                                                     Toast.makeText(context, "환자 계정이 아닙니다.", Toast.LENGTH_SHORT).show()
                                                 }

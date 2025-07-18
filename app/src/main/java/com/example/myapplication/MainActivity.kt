@@ -83,6 +83,10 @@ class MainActivity : ComponentActivity() {
                         Code(navController = navController, joinCode = joinCode)
                     }
 
+                    composable("code2") {
+                        Code2(navController = navController)
+                    }
+
                     composable("main") {
                         Main_Page(navController)
                     }
