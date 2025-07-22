@@ -158,80 +158,61 @@ fun GuardianSignUpScreen(navController: NavController) {
                     scope.launch {
                         isLoading = true
                         try {
-                            val json = JSONObject().apply {
+                            // 1) 백엔드에 회원가입 요청
+                            val signupJson = JSONObject().apply {
                                 put("email", email)
                                 put("password", password)
                                 put("name", name)
                                 put("role", "guardian")
                             }
-
-                            val requestBody = json.toString()
-                                .toRequestBody("application/json".toMediaType())
-
-                            val request = Request.Builder()
+                            val signupReq = Request.Builder()
                                 .url("${BuildConfig.BASE_URL}/auth/signup")
-                                .post(requestBody)
+                                .post(
+                                    signupJson.toString()
+                                        .toRequestBody("application/json".toMediaType())
+                                )
                                 .build()
-
-                            val response = withContext(Dispatchers.IO) {
-                                client.newCall(request).execute()
+                            val signupRes = withContext(Dispatchers.IO) {
+                                client.newCall(signupReq).execute()
+                            }
+                            if (!signupRes.isSuccessful) {
+                                throw Exception("signup 실패: ${signupRes.code}")
+                            }
+                            val signupBody = signupRes.body?.string().orEmpty()
+                            val signupJsonRes = JSONObject(signupBody)
+                            val joinCode = signupJsonRes.optString("joinCode")
+                            if (joinCode.isBlank()) {
+                                throw Exception("joinCode 누락")
                             }
 
-                            val responseBody = withContext(Dispatchers.IO) { response.body?.string() }
-                            val jsonRes = JSONObject(responseBody ?: "{}")
-                            val uid = jsonRes.optString("uid", "")
-                            val joinCode = jsonRes.optString("joinCode", "")
+                            // 2) Firebase 이메일/비번 로그인
+                            Firebase.auth
+                                .signInWithEmailAndPassword(email, password)
+                                .await()
 
-                            if (response.isSuccessful && uid.isNotBlank() && joinCode.isNotBlank()) {
-                                // Firebase 커스텀 토큰 요청
-                                val tokenReqJson = JSONObject().apply {
-                                    put("uid", uid)
-                                }
-                                val tokenReqBody = tokenReqJson.toString().toRequestBody("application/json".toMediaType())
-                                val tokenReq = Request.Builder()
-                                    .url("${BuildConfig.BASE_URL}/auth/generateFirebaseToken")
-                                    .post(tokenReqBody)
-                                    .build()
+                            // 3) ID 토큰 강제 갱신 (Firestore/Storage 규칙 통과용)
+                            Firebase.auth.currentUser
+                                ?.getIdToken(true)
+                                ?.await()
+                                ?.token
+                                ?: throw Exception("ID 토큰 획득 실패")
 
-                                val tokenRes = withContext(Dispatchers.IO) {
-                                    client.newCall(tokenReq).execute()
-                                }
-
-                                val tokenBody = withContext(Dispatchers.IO) { tokenRes.body?.string() }
-                                val tokenJson = JSONObject(tokenBody ?: "{}")
-                                val customToken = tokenJson.optString("token")
-
-                                if (tokenRes.isSuccessful && customToken.isNotBlank()) {
-                                    try {
-                                        Firebase.auth.signInWithCustomToken(customToken).await()
-                                        withContext(Dispatchers.Main) {
-                                            Toast.makeText(ctx, "회원가입 및 로그인 성공!", Toast.LENGTH_SHORT).show()
-                                            navController.navigate("code/$joinCode") {
-                                                popUpTo("GuardianSignUp") { inclusive = true }
-                                            }
-                                        }
-                                    } catch (e: Exception) {
-                                        withContext(Dispatchers.Main) {
-                                            Toast.makeText(ctx, "Firebase 로그인 실패: ${e.message}", Toast.LENGTH_LONG).show()
-                                        }
-                                    }
-                                } else {
-                                    withContext(Dispatchers.Main) {
-                                        Toast.makeText(ctx, "Firebase 토큰 발급 실패", Toast.LENGTH_LONG).show()
-                                    }
-                                }
+                            // 4) 화면 전환
+                            Toast.makeText(ctx, "회원가입 및 로그인 성공!", Toast.LENGTH_SHORT).show()
+                            navController.navigate("code/$joinCode") {
+                                popUpTo("GuardianSignUp") { inclusive = true }
                             }
 
                         } catch (e: Exception) {
-                            Log.e("GuardianSignUp", "회원가입 중 오류", e)
-                            Toast.makeText(ctx, "네트워크 오류 또는 서버 오류", Toast.LENGTH_LONG).show()
+                            Log.e("GuardianSignUp", "오류", e)
+                            Toast.makeText(ctx, "오류: ${e.message}", Toast.LENGTH_LONG).show()
                         } finally {
                             isLoading = false
                         }
                     }
                 },
                 modifier = Modifier.weight(1f),
-                enabled = name.isNotBlank() && email.isNotBlank() && password.length >= 6,
+                enabled = name.isNotBlank() && Patterns.EMAIL_ADDRESS.matcher(email).matches() && password.length >= 6,
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C4B4))
             ) {

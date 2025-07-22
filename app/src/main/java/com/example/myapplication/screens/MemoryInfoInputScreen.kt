@@ -24,20 +24,27 @@ import androidx.constraintlayout.compose.Dimension
 import androidx.navigation.NavController
 import com.example.myapplication.R
 import com.example.myapplication.BuildConfig
-import okhttp3.*
-import okhttp3.MediaType.Companion.toMediaTypeOrNull
-import java.io.IOException
-import android.os.Handler
-import android.os.Looper
-import android.content.Context
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.MultipartBody
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody
+import android.content.Context
 
 @Composable
 fun MemoryInfoInputScreen(navController: NavController) {
     var imageUri by remember { mutableStateOf<Uri?>(null) }
     var description by remember { mutableStateOf("") }
+    var isLoading by remember { mutableStateOf(false) }
     val context = LocalContext.current
+    val client = remember { OkHttpClient() }
+    val coroutineScope = rememberCoroutineScope()
 
     val launcher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -98,7 +105,7 @@ fun MemoryInfoInputScreen(navController: NavController) {
             contentAlignment = Alignment.Center
         ) {
             if (imageUri != null) {
-                val inputStream = imageUri?.let { context.contentResolver.openInputStream(it) }
+                val inputStream = context.contentResolver.openInputStream(imageUri!!)
                 val bitmap = BitmapFactory.decodeStream(inputStream)
                 bitmap?.let {
                     Image(
@@ -128,23 +135,72 @@ fun MemoryInfoInputScreen(navController: NavController) {
             onClick = {
                 if (imageUri == null || description.isBlank()) {
                     Toast.makeText(context, "사진과 설명을 모두 입력해주세요", Toast.LENGTH_SHORT).show()
-                } else {
-                    uploadMemory(
-                        context = context,
-                        imageUri = imageUri!!,
-                        description = description,
-                        onSuccess = {
-                            Toast.makeText(context, "업로드 성공!", Toast.LENGTH_SHORT).show()
-                            imageUri = null
-                            description = ""
-                            navController.popBackStack()
-                        },
-                        onFailure = { error ->
-                            Toast.makeText(context, error, Toast.LENGTH_SHORT).show()
+                    return@Button
+                }
+                val uri = imageUri!!
+                val prefs = context.getSharedPreferences("MyPrefs", Context.MODE_PRIVATE)
+                val patientId = prefs.getString("patient_id", null)
+                if (patientId.isNullOrEmpty()) {
+                    Toast.makeText(context, "환자 ID가 없습니다.", Toast.LENGTH_SHORT).show()
+                    return@Button
+                }
+                coroutineScope.launch {
+                    isLoading = true
+                    try {
+                        // 이미지 바이트 읽기
+                        val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                            ?: throw Exception("이미지를 불러올 수 없습니다.")
+                        val mime = context.contentResolver.getType(uri) ?: "image/jpeg"
+                        val ext = mime.substringAfterLast('/')
+                        val fileName = "media.$ext"
+
+                        // Firebase ID 토큰 획득
+                        val idToken = Firebase.auth.currentUser
+                            ?.getIdToken(true)
+                            ?.await()
+                            ?.token
+                            ?: throw Exception("토큰 획득 실패")
+
+                        // Multipart 요청 구성
+                        val multipart = MultipartBody.Builder()
+                            .setType(MultipartBody.FORM)
+                            .addFormDataPart("description", description)
+                            .addFormDataPart("patientId", patientId)
+                            .addFormDataPart(
+                                "media", fileName,
+                                RequestBody.create(mime.toMediaTypeOrNull(), bytes)
+                            )
+                            .build()
+
+                        // 서버 업로드
+                        val request = Request.Builder()
+                            .url("${BuildConfig.BASE_URL}/memory/upload")
+                            .addHeader("Authorization", "Bearer $idToken")
+                            .post(multipart)
+                            .build()
+                        val response = withContext(Dispatchers.IO) {
+                            client.newCall(request).execute()
                         }
-                    )
+                        if (response.isSuccessful) {
+                            Toast.makeText(context, "업로드 성공!", Toast.LENGTH_SHORT).show()
+                            navController.popBackStack()
+                        } else {
+                            val err = response.body?.string().orEmpty()
+                            Toast.makeText(
+                                context,
+                                "업로드 실패: ${response.code} - $err",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
+                    } catch (e: Exception) {
+                        Toast.makeText(context, "오류: ${e.message}", Toast.LENGTH_LONG).show()
+                    } finally {
+                        isLoading = false
+                    }
                 }
             },
+            enabled = !isLoading,
+            shape = RoundedCornerShape(8.dp),
             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00BFA5)),
             modifier = Modifier.constrainAs(uploadButton) {
                 top.linkTo(selectButton.bottom, margin = 8.dp)
@@ -181,95 +237,20 @@ fun MemoryInfoInputScreen(navController: NavController) {
                 }
                 .height(100.dp)
         )
-    }
-}
 
-fun uriToByteArray(context: android.content.Context, uri: Uri): ByteArray? {
-    return context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-}
-
-fun uploadMemory(
-    context: Context,
-    imageUri: Uri,
-    description: String,
-    onSuccess: () -> Unit,
-    onFailure: (String) -> Unit
-) {
-    val prefs = context.getSharedPreferences("MyPrefs", Context.MODE_PRIVATE)
-    val patientId = prefs.getString("patient_id", null)
-
-    if (patientId == null) {
-        onFailure("환자 ID가 없습니다.")
-        return
-    }
-
-    val imageBytes = uriToByteArray(context, imageUri)
-    if (imageBytes == null) {
-        onFailure("이미지를 불러올 수 없습니다.")
-        return
-    }
-
-    val mimeType = context.contentResolver.getType(imageUri) ?: "image/jpeg"
-    val extension = mimeType.substringAfterLast("/")
-    val finalFileName = "image.$extension"
-
-    val client = OkHttpClient()
-
-    // Firebase에서 ID 토큰을 가져와 Authorization 헤더로 사용
-    val user = Firebase.auth.currentUser
-    if (user == null) {
-        onFailure("로그인이 필요합니다.")
-        return
-    }
-
-    user.getIdToken(true)
-        .addOnSuccessListener { tokenResult ->
-            val idToken = tokenResult.token
-            if (idToken.isNullOrEmpty()) {
-                onFailure("토큰 획득 실패")
-                return@addOnSuccessListener
+        if (isLoading) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(Color(0x88000000)),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(color = Color.White)
             }
-
-            val requestBody = MultipartBody.Builder().setType(MultipartBody.FORM)
-                .addFormDataPart("description", description)
-                .addFormDataPart("patientId", patientId)
-                .addFormDataPart(
-                    "media", finalFileName,
-                    RequestBody.create(mimeType.toMediaTypeOrNull(), imageBytes)
-                )
-                .build()
-
-            val request = Request.Builder()
-                .url("${BuildConfig.BASE_URL}/memory/upload")
-                .addHeader("Authorization", "Bearer $idToken")
-                .post(requestBody)
-                .build()
-
-            val mainHandler = Handler(Looper.getMainLooper())
-
-            client.newCall(request).enqueue(object : Callback {
-                override fun onFailure(call: Call, e: IOException) {
-                    mainHandler.post {
-                        onFailure("업로드 실패: ${e.message}")
-                    }
-                }
-
-                override fun onResponse(call: Call, response: Response) {
-                    mainHandler.post {
-                        if (response.isSuccessful) {
-                            onSuccess()
-                        } else {
-                            val errorMsg = response.body?.string() ?: "서버 오류"
-                            onFailure("업로드 실패: ${response.code} - $errorMsg")
-                        }
-                    }
-                }
-            })
         }
-        .addOnFailureListener {
-            onFailure("Firebase 토큰 획득 실패")
-        }
+    }
 }
+
 
 
 

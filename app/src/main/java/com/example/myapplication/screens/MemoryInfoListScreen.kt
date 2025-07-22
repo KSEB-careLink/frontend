@@ -2,6 +2,9 @@ package com.example.myapplication.screens
 
 import android.content.Context
 import android.util.Log
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -25,11 +28,20 @@ import androidx.constraintlayout.compose.Dimension
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import com.example.myapplication.R
-import com.google.firebase.auth.FirebaseAuth
+import com.example.myapplication.BuildConfig
+import com.google.firebase.auth.ktx.auth
+import com.google.firebase.ktx.Firebase
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.Query
 import com.google.firebase.storage.FirebaseStorage
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import org.json.JSONObject
+
+// 메모리 아이템 데이터 클래스
 
 data class MemoryItemCloud(
     val id: String,
@@ -38,20 +50,19 @@ data class MemoryItemCloud(
     val mediaPath: String
 )
 
+// SharedPreferences에서 환자 ID 가져오기
 fun getPatientIdFromPrefs(context: Context): String? {
-    val prefs = context.getSharedPreferences("MyPrefs", Context.MODE_PRIVATE)
-    return prefs.getString("patient_id", null)
-}
-
-fun getCustomTokenFromPrefs(context: Context): String? {
-    val prefs = context.getSharedPreferences("MyPrefs", Context.MODE_PRIVATE)
-    return prefs.getString("firebase_custom_token", null)
+    return context
+        .getSharedPreferences("MyPrefs", Context.MODE_PRIVATE)
+        .getString("patient_id", null)
 }
 
 @Composable
 fun MemoryInfoListScreen(navController: NavController) {
     val memoryList = remember { mutableStateListOf<MemoryItemCloud>() }
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    val client = remember { OkHttpClient() }
 
     var showDialog by remember { mutableStateOf(false) }
     var editingItem by remember { mutableStateOf<MemoryItemCloud?>(null) }
@@ -60,71 +71,50 @@ fun MemoryInfoListScreen(navController: NavController) {
     var itemToDelete by remember { mutableStateOf<MemoryItemCloud?>(null) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
 
+    // 데이터 로드: 백엔드 API 호출 + 서명 URL 사용
     LaunchedEffect(Unit) {
         val patientId = getPatientIdFromPrefs(context)
-        if (patientId == null) {
-            Log.e("MemoryList", "❌ 환자 ID 없음")
+        if (patientId.isNullOrBlank()) {
+            Log.e("MemoryList", "환자 ID 없음")
             return@LaunchedEffect
         }
-
-        val customToken = getCustomTokenFromPrefs(context)
-        if (customToken.isNullOrBlank()) {
-            Log.e("MemoryList", "❌ 커스텀 토큰 없음")
+        // Firebase 토큰 획득
+        val idToken = Firebase.auth.currentUser
+            ?.getIdToken(true)
+            ?.await()
+            ?.token
+        if (idToken.isNullOrBlank()) {
+            Log.e("MemoryList", "토큰 획득 실패")
             return@LaunchedEffect
         }
-
-        if (FirebaseAuth.getInstance().currentUser == null) {
-            try {
-                FirebaseAuth.getInstance().signInWithCustomToken(customToken).await()
-                Log.d("MemoryList", "✅ Firebase 커스텀 토큰 로그인 성공")
-            } catch (e: Exception) {
-                Log.e("MemoryList", "❌ Firebase 로그인 실패: ${e.message}")
+        try {
+            val req = Request.Builder()
+                .url("${BuildConfig.BASE_URL}/memory/list/$patientId")
+                .addHeader("Authorization", "Bearer $idToken")
+                .get()
+                .build()
+            val res = withContext(Dispatchers.IO) { client.newCall(req).execute() }
+            if (!res.isSuccessful) {
+                Log.e("MemoryList", "API 호출 실패: ${'$'}{res.code}")
                 return@LaunchedEffect
             }
-        } else {
-            Log.d("MemoryList", "✅ 이미 Firebase에 로그인됨: ${FirebaseAuth.getInstance().currentUser?.uid}")
+            val bodyStr = res.body?.string().orEmpty()
+            val arr = JSONObject(bodyStr).getJSONArray("memoryItems")
+            for (i in 0 until arr.length()) {
+                val obj = arr.getJSONObject(i)
+                val id = obj.getString("id")
+                val desc = obj.getString("description")
+                val mediaPath = obj.getString("mediaPath")
+                val imageUrl = obj.getString("imageUrl")
+                memoryList.add(MemoryItemCloud(id, desc, imageUrl, mediaPath))
+            }
+        } catch (e: Exception) {
+            Log.e("MemoryList", "데이터 로드 실패: ${'$'}{e.message}")
+            Toast.makeText(context, "불러오기 실패: ${'$'}{e.message}", Toast.LENGTH_LONG).show()
         }
-
-        val db = FirebaseFirestore.getInstance()
-
-        db.collection("patients")
-            .document(patientId)
-            .collection("memory")
-            .orderBy("createdAt", Query.Direction.DESCENDING)
-            .get()
-            .addOnSuccessListener { snapshot ->
-                if (snapshot.isEmpty) {
-                    Log.d("MemoryList", "🔥 No memory items found.")
-                }
-
-                snapshot.documents.forEach { doc ->
-                    val description = doc.getString("description") ?: ""
-                    val mediaPath = doc.getString("mediaPath") ?: ""
-                    val id = doc.id
-
-                    FirebaseStorage.getInstance().getReference(mediaPath)
-                        .downloadUrl
-                        .addOnSuccessListener { uri ->
-                            memoryList.add(
-                                MemoryItemCloud(
-                                    id = id,
-                                    description = description,
-                                    imageUrl = uri.toString(),
-                                    mediaPath = mediaPath
-                                )
-                            )
-                        }
-                        .addOnFailureListener { e ->
-                            Log.e("MemoryList", "❌ downloadUrl 실패: $mediaPath: ${e.message}")
-                        }
-                }
-            }
-            .addOnFailureListener {
-                Log.e("MemoryList", "❌ Firestore 조회 실패: ${it.message}")
-            }
     }
 
-
+    // UI 레이아웃
     ConstraintLayout(
         modifier = Modifier
             .fillMaxSize()
@@ -181,9 +171,7 @@ fun MemoryInfoListScreen(navController: NavController) {
                             .padding(12.dp)
                     ) {
                         Text(item.description, fontSize = 14.sp, color = Color.Black)
-
                         Spacer(modifier = Modifier.height(8.dp))
-
                         AsyncImage(
                             model = item.imageUrl,
                             contentDescription = "기억 사진",
@@ -193,9 +181,7 @@ fun MemoryInfoListScreen(navController: NavController) {
                                 .height(150.dp)
                                 .clip(RoundedCornerShape(8.dp))
                         )
-
                         Spacer(modifier = Modifier.height(8.dp))
-
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.End
@@ -227,7 +213,7 @@ fun MemoryInfoListScreen(navController: NavController) {
             }
         }
 
-        // 설명 수정 다이얼로그
+        // 수정 다이얼로그
         if (showDialog && editingItem != null) {
             AlertDialog(
                 onDismissRequest = { showDialog = false },
@@ -243,31 +229,34 @@ fun MemoryInfoListScreen(navController: NavController) {
                 confirmButton = {
                     TextButton(onClick = {
                         editingItem?.let { item ->
-                            val index = memoryList.indexOfFirst { it.id == item.id }
-                            if (index != -1) {
-                                memoryList[index] = item.copy(description = newDescription)
-                                FirebaseFirestore.getInstance()
-                                    .collection("patients")
-                                    .document(getPatientIdFromPrefs(context) ?: "")
-                                    .collection("memory")
-                                    .document(item.id)
-                                    .update("description", newDescription)
+                            val idx = memoryList.indexOfFirst { it.id == item.id }
+                            if (idx != -1) {
+                                memoryList[idx] = item.copy(description = newDescription)
+                                coroutineScope.launch {
+                                    try {
+                                        FirebaseFirestore.getInstance()
+                                            .collection("patients")
+                                            .document(getPatientIdFromPrefs(context) ?: return@launch)
+                                            .collection("memory")
+                                            .document(item.id)
+                                            .update("description", newDescription)
+                                            .await()
+                                    } catch (e: Exception) {
+                                        Log.e("MemoryList", "설명 업데이트 실패: ${'$'}{e.message}")
+                                    }
+                                }
                             }
                         }
                         showDialog = false
-                    }) {
-                        Text("저장")
-                    }
+                    }) { Text("저장") }
                 },
                 dismissButton = {
-                    TextButton(onClick = { showDialog = false }) {
-                        Text("취소")
-                    }
+                    TextButton(onClick = { showDialog = false }) { Text("취소") }
                 }
             )
         }
 
-        // 삭제 다이얼로그
+        // 삭제 확인 다이얼로그
         if (showDeleteConfirm && itemToDelete != null) {
             AlertDialog(
                 onDismissRequest = {
@@ -279,37 +268,46 @@ fun MemoryInfoListScreen(navController: NavController) {
                 confirmButton = {
                     TextButton(onClick = {
                         itemToDelete?.let { item ->
-                            FirebaseFirestore.getInstance()
-                                .collection("patients")
-                                .document(getPatientIdFromPrefs(context) ?: "")
-                                .collection("memory")
-                                .document(item.id)
-                                .delete()
+                            coroutineScope.launch {
+                                try {
+                                    FirebaseFirestore.getInstance()
+                                        .collection("patients")
+                                        .document(getPatientIdFromPrefs(context) ?: return@launch)
+                                        .collection("memory")
+                                        .document(item.id)
+                                        .delete()
+                                        .await()
 
-                            FirebaseStorage.getInstance()
-                                .getReference(item.mediaPath)
-                                .delete()
+                                    FirebaseStorage.getInstance()
+                                        .getReference(item.mediaPath)
+                                        .delete()
+                                        .await()
 
-                            memoryList.remove(item)
+                                    memoryList.remove(item)
+                                } catch (e: Exception) {
+                                    Log.e("MemoryList", "삭제 실패: ${'$'}{e.message}")
+                                }
+                            }
                         }
                         showDeleteConfirm = false
                         itemToDelete = null
-                    }) {
-                        Text("삭제", color = Color.Red)
-                    }
+                    }) { Text("삭제", color = Color.Red) }
                 },
                 dismissButton = {
                     TextButton(onClick = {
                         showDeleteConfirm = false
                         itemToDelete = null
-                    }) {
-                        Text("취소")
-                    }
+                    }) { Text("취소") }
                 }
             )
         }
     }
 }
+
+
+
+
+
 
 
 

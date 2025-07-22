@@ -30,7 +30,7 @@ import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
-
+import kotlinx.coroutines.tasks.await
 @Composable
 fun PatientSignUpScreen(navController: NavController) {
     val ctx = LocalContext.current
@@ -136,79 +136,58 @@ fun PatientSignUpScreen(navController: NavController) {
                     scope.launch {
                         isLoading = true
                         try {
-                            val json = JSONObject().apply {
+                            // 1) 백엔드에 회원가입 요청
+                            val signupJson = JSONObject().apply {
                                 put("email", email)
                                 put("password", password)
                                 put("name", name)
                                 put("role", "patient")
                             }
-
-                            val requestBody = json.toString()
-                                .toRequestBody("application/json".toMediaType())
-
-                            val request = Request.Builder()
+                            val signupReq = Request.Builder()
                                 .url("${BuildConfig.BASE_URL}/auth/signup")
-                                .post(requestBody)
+                                .post(
+                                    signupJson.toString()
+                                        .toRequestBody("application/json".toMediaType())
+                                )
                                 .build()
-
-                            val response = withContext(Dispatchers.IO) {
-                                client.newCall(request).execute()
+                            val signupRes = withContext(Dispatchers.IO) {
+                                client.newCall(signupReq).execute()
+                            }
+                            if (!signupRes.isSuccessful) {
+                                throw Exception("signup 실패: ${signupRes.code}")
                             }
 
-                            val bodyStr = withContext(Dispatchers.IO) { response.body?.string() }
-                            val resJson = JSONObject(bodyStr ?: "{}")
+                            // 2) Firebase 이메일/비번 로그인
+                            auth.signInWithEmailAndPassword(email, password).await()
 
-                            if (response.isSuccessful) {
-                                val uid = resJson.optString("uid")
-                                val tokenReqBody = JSONObject().put("uid", uid).toString()
-                                    .toRequestBody("application/json".toMediaType())
+                            // 3) ID 토큰 강제 갱신 (Firestore/Storage 규칙 통과용)
+                            auth.currentUser
+                                ?.getIdToken(true)
+                                ?.await()
+                                ?.token
+                                ?: throw Exception("ID 토큰 획득 실패")
 
-                                val tokenReq = Request.Builder()
-                                    .url("${BuildConfig.BASE_URL}/auth/generateFirebaseToken")
-                                    .post(tokenReqBody)
-                                    .build()
-
-                                val tokenRes = withContext(Dispatchers.IO) {
-                                    client.newCall(tokenReq).execute()
-                                }
-
-                                val tokenBody = withContext(Dispatchers.IO) { tokenRes.body?.string() }
-                                val tokenJson = JSONObject(tokenBody ?: "{}")
-                                val customToken = tokenJson.optString("token")
-
-                                if (customToken.isNotBlank()) {
-                                    auth.signInWithCustomToken(customToken)
-                                        .addOnSuccessListener {
-                                            Toast.makeText(ctx, "회원가입 및 로그인 성공!", Toast.LENGTH_SHORT).show()
-                                            navController.navigate("code2") {
-                                                popUpTo("patient") { inclusive = true }
-                                            }
-                                        }
-                                        .addOnFailureListener {
-                                            Toast.makeText(ctx, "Firebase 로그인 실패", Toast.LENGTH_SHORT).show()
-                                        }
-                                } else {
-                                    Toast.makeText(ctx, "커스텀 토큰 획득 실패", Toast.LENGTH_LONG).show()
-                                }
-                            } else {
-                                val msg = resJson.optString("error", "회원가입 실패")
-                                Toast.makeText(ctx, msg, Toast.LENGTH_LONG).show()
+                            // 4) 화면 전환
+                            Toast.makeText(ctx, "회원가입 및 로그인 성공!", Toast.LENGTH_SHORT).show()
+                            navController.navigate("code2") {
+                                popUpTo("patient") { inclusive = true }
                             }
                         } catch (e: Exception) {
-                            Log.e("PatientSignUp", "예외 발생", e)
-                            Toast.makeText(ctx, "네트워크 오류 또는 서버 오류", Toast.LENGTH_LONG).show()
+                            Log.e("PatientSignUp", "오류", e)
+                            Toast.makeText(ctx, "오류: ${e.message}", Toast.LENGTH_LONG).show()
                         } finally {
                             isLoading = false
                         }
                     }
                 },
                 modifier = Modifier.weight(1f),
-                enabled = name.isNotBlank() && email.isNotBlank() && password.length >= 6,
+                enabled = name.isNotBlank() && Patterns.EMAIL_ADDRESS.matcher(email).matches() && password.length >= 6,
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C4B4))
             ) {
                 Text("가입하기", color = Color.White, fontSize = 16.sp)
             }
+
 
             Button(
                 onClick = { navController.navigate("p_login") },
