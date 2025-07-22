@@ -31,16 +31,16 @@ import okhttp3.*
 import org.json.JSONObject
 import java.io.IOException
 import android.content.Context
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
 
 @Composable
 fun Guardian_Login(navController: NavController) {
     val auth = Firebase.auth
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
-
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
-
     val client = remember { OkHttpClient() }
 
     fun savePatientIdToPrefs(context: Context, patientId: String) {
@@ -163,66 +163,131 @@ fun Guardian_Login(navController: NavController) {
                     val emailTrimmed = email.trim()
                     val passwordTrimmed = password.trim()
 
-                    try {
-                        auth.signInWithEmailAndPassword(emailTrimmed, passwordTrimmed)
-                            .addOnSuccessListener { result ->
-                                result.user?.getIdToken(true)?.addOnSuccessListener { tokenResult ->
-                                    val idToken = tokenResult.token
-                                    saveTokenToPrefs(context, idToken ?: "")
-                                    val request = Request.Builder()
-                                        .url("${BuildConfig.BASE_URL}/auth/me")
-                                        .addHeader("Authorization", "Bearer $idToken")
-                                        .get()
-                                        .build()
+                    val json = JSONObject()
+                    json.put("email", emailTrimmed)
+                    json.put("password", passwordTrimmed)
 
-                                    client.newCall(request).enqueue(object : Callback {
-                                        override fun onFailure(call: Call, e: IOException) {
-                                            coroutineScope.launch {
-                                                withContext(Dispatchers.Main) {
-                                                    Toast.makeText(context, "서버 연결 실패", Toast.LENGTH_SHORT).show()
-                                                }
-                                            }
-                                        }
+                    val requestBody = json.toString().toRequestBody("application/json".toMediaType())
+                    val request = Request.Builder()
+                        .url("${BuildConfig.BASE_URL}/auth/login")
+                        .post(requestBody)
+                        .build()
 
-                                        override fun onResponse(call: Call, response: Response) {
-                                            coroutineScope.launch {
-                                                withContext(Dispatchers.Main) {
-                                                    if (response.isSuccessful) {
-                                                        val body = response.body?.string()
-                                                        val json = JSONObject(body ?: "{}")
-                                                        val role = json.optString("role")
-                                                        val joinCode = json.optString("joinCode")
-
-                                                        // ✅ linkedPatients[0] 저장
-                                                        val linkedPatients = json.optJSONArray("linkedPatients")
-                                                        if (linkedPatients != null && linkedPatients.length() > 0) {
-                                                            val patientId = linkedPatients.getString(0)
-                                                            savePatientIdToPrefs(context, patientId)
-                                                        }
-
-                                                        if (role == "guardian" && joinCode.isNotBlank()) {
-                                                            Toast.makeText(context, "로그인 성공!", Toast.LENGTH_SHORT).show()
-                                                            navController.navigate("code/$joinCode")
-                                                        } else {
-                                                            Toast.makeText(context, "잘못된 사용자 역할 또는 joinCode 없음", Toast.LENGTH_SHORT).show()
-                                                        }
-                                                    } else {
-                                                        Toast.makeText(context, "사용자 정보 조회 실패", Toast.LENGTH_SHORT).show()
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    })
+                    client.newCall(request).enqueue(object : Callback {
+                        override fun onFailure(call: Call, e: IOException) {
+                            coroutineScope.launch {
+                                withContext(Dispatchers.Main) {
+                                    Toast.makeText(context, "서버 로그인 실패", Toast.LENGTH_SHORT).show()
                                 }
                             }
-                            .addOnFailureListener {
-                                Toast.makeText(context, "로그인 실패", Toast.LENGTH_SHORT).show()
-                            }
-                    } catch (e: Exception) {
-                        withContext(Dispatchers.Main) {
-                            Toast.makeText(context, "오류: ${e.message}", Toast.LENGTH_SHORT).show()
                         }
-                    }
+
+                        override fun onResponse(call: Call, response: Response) {
+                            val body = response.body?.string()
+                            val jsonRes = JSONObject(body ?: "{}")
+                            val token = jsonRes.optString("token", "")
+                            val uid = jsonRes.optString("uid", "")
+
+                            if (response.isSuccessful && token.isNotBlank() && uid.isNotBlank()) {
+                                saveTokenToPrefs(context, token)
+
+                                // 🔹 커스텀 토큰 발급 요청
+                                val firebaseTokenRequest = JSONObject()
+                                firebaseTokenRequest.put("uid", uid)
+
+                                val fbReqBody = firebaseTokenRequest.toString()
+                                    .toRequestBody("application/json".toMediaType())
+
+                                val fbRequest = Request.Builder()
+                                    .url("${BuildConfig.BASE_URL}/auth/generateFirebaseToken")
+                                    .post(fbReqBody)
+                                    .build()
+
+                                client.newCall(fbRequest).enqueue(object : Callback {
+                                    override fun onFailure(call: Call, e: IOException) {
+                                        coroutineScope.launch {
+                                            withContext(Dispatchers.Main) {
+                                                Toast.makeText(context, "Firebase 토큰 발급 실패", Toast.LENGTH_SHORT).show()
+                                            }
+                                        }
+                                    }
+
+                                    override fun onResponse(call: Call, response: Response) {
+                                        val resBody = response.body?.string()
+                                        val firebaseToken = JSONObject(resBody ?: "{}")
+                                            .optString("token", "")
+
+                                        if (response.isSuccessful && firebaseToken.isNotBlank()) {
+                                            // 🔹 Firebase에 로그인
+                                            auth.signInWithCustomToken(firebaseToken)
+                                                .addOnSuccessListener {
+                                                    // 🔹 사용자 정보 조회
+                                                    val meReq = Request.Builder()
+                                                        .url("${BuildConfig.BASE_URL}/auth/me")
+                                                        .addHeader("Authorization", "Bearer $token")
+                                                        .get()
+                                                        .build()
+
+                                                    client.newCall(meReq).enqueue(object : Callback {
+                                                        override fun onFailure(call: Call, e: IOException) {
+                                                            coroutineScope.launch {
+                                                                withContext(Dispatchers.Main) {
+                                                                    Toast.makeText(context, "사용자 정보 조회 실패", Toast.LENGTH_SHORT).show()
+                                                                }
+                                                            }
+                                                        }
+
+                                                        override fun onResponse(call: Call, response: Response) {
+                                                            val body = response.body?.string()
+                                                            val userJson = JSONObject(body ?: "{}")
+                                                            val role = userJson.optString("role")
+                                                            val joinCode = userJson.optString("joinCode")
+
+                                                            // linkedPatients[0] 저장
+                                                            val linkedPatients = userJson.optJSONArray("linkedPatients")
+                                                            if (linkedPatients != null && linkedPatients.length() > 0) {
+                                                                val patientId = linkedPatients.getString(0)
+                                                                savePatientIdToPrefs(context, patientId)
+                                                            }
+
+                                                            coroutineScope.launch {
+                                                                withContext(Dispatchers.Main) {
+                                                                    if (role == "guardian" && joinCode.isNotBlank()) {
+                                                                        Toast.makeText(context, "로그인 성공!", Toast.LENGTH_SHORT).show()
+                                                                        navController.navigate("code/$joinCode")
+                                                                    } else {
+                                                                        Toast.makeText(context, "역할 또는 코드 오류", Toast.LENGTH_SHORT).show()
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    })
+                                                }
+                                                .addOnFailureListener {
+                                                    coroutineScope.launch {
+                                                        withContext(Dispatchers.Main) {
+                                                            Toast.makeText(context, "Firebase 로그인 실패", Toast.LENGTH_SHORT).show()
+                                                        }
+                                                    }
+                                                }
+                                        } else {
+                                            coroutineScope.launch {
+                                                withContext(Dispatchers.Main) {
+                                                    Toast.makeText(context, "Firebase 토큰 오류", Toast.LENGTH_SHORT).show()
+                                                }
+                                            }
+                                        }
+                                    }
+                                })
+                            } else {
+                                coroutineScope.launch {
+                                    withContext(Dispatchers.Main) {
+                                        Toast.makeText(context, "로그인 실패", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            }
+                        }
+                    })
                 }
             },
             modifier = Modifier

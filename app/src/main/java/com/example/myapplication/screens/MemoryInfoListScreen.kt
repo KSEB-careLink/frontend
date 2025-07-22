@@ -1,5 +1,8 @@
 package com.example.myapplication.screens
 
+import android.content.Context
+import android.util.Log
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -12,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -21,12 +25,11 @@ import androidx.constraintlayout.compose.Dimension
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import com.example.myapplication.R
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.storage.FirebaseStorage
-import androidx.compose.foundation.Image
 import com.google.firebase.firestore.Query
-import android.util.Log
-import androidx.compose.ui.platform.LocalContext
+import com.google.firebase.storage.FirebaseStorage
+import kotlinx.coroutines.tasks.await
 
 data class MemoryItemCloud(
     val id: String,
@@ -35,10 +38,21 @@ data class MemoryItemCloud(
     val mediaPath: String
 )
 
+fun getPatientIdFromPrefs(context: Context): String? {
+    val prefs = context.getSharedPreferences("MyPrefs", Context.MODE_PRIVATE)
+    return prefs.getString("patient_id", null)
+}
+
+fun getCustomTokenFromPrefs(context: Context): String? {
+    val prefs = context.getSharedPreferences("MyPrefs", Context.MODE_PRIVATE)
+    return prefs.getString("firebase_custom_token", null)
+}
+
 @Composable
 fun MemoryInfoListScreen(navController: NavController) {
     val memoryList = remember { mutableStateListOf<MemoryItemCloud>() }
     val context = LocalContext.current
+
     var showDialog by remember { mutableStateOf(false) }
     var editingItem by remember { mutableStateOf<MemoryItemCloud?>(null) }
     var newDescription by remember { mutableStateOf("") }
@@ -46,20 +60,41 @@ fun MemoryInfoListScreen(navController: NavController) {
     var itemToDelete by remember { mutableStateOf<MemoryItemCloud?>(null) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
 
-    // Firebase에서 데이터 로드
     LaunchedEffect(Unit) {
-        val db = FirebaseFirestore.getInstance()
-        val storage = FirebaseStorage.getInstance()
+        val patientId = getPatientIdFromPrefs(context)
+        if (patientId == null) {
+            Log.e("MemoryList", "❌ 환자 ID 없음")
+            return@LaunchedEffect
+        }
 
-        val currentPatientId = getPatientIdFromPrefs(context) // SharedPreferences에서 불러오기
-        db.collection("memoryItems")
-            .whereEqualTo("patientId", currentPatientId)
+        val customToken = getCustomTokenFromPrefs(context)
+        if (customToken.isNullOrBlank()) {
+            Log.e("MemoryList", "❌ 커스텀 토큰 없음")
+            return@LaunchedEffect
+        }
+
+        if (FirebaseAuth.getInstance().currentUser == null) {
+            try {
+                FirebaseAuth.getInstance().signInWithCustomToken(customToken).await()
+                Log.d("MemoryList", "✅ Firebase 커스텀 토큰 로그인 성공")
+            } catch (e: Exception) {
+                Log.e("MemoryList", "❌ Firebase 로그인 실패: ${e.message}")
+                return@LaunchedEffect
+            }
+        } else {
+            Log.d("MemoryList", "✅ 이미 Firebase에 로그인됨: ${FirebaseAuth.getInstance().currentUser?.uid}")
+        }
+
+        val db = FirebaseFirestore.getInstance()
+
+        db.collection("patients")
+            .document(patientId)
+            .collection("memory")
             .orderBy("createdAt", Query.Direction.DESCENDING)
             .get()
-
             .addOnSuccessListener { snapshot ->
                 if (snapshot.isEmpty) {
-                    Log.d("MemoryList", "🔥 Firestore: No memory items found.")
+                    Log.d("MemoryList", "🔥 No memory items found.")
                 }
 
                 snapshot.documents.forEach { doc ->
@@ -67,10 +102,8 @@ fun MemoryInfoListScreen(navController: NavController) {
                     val mediaPath = doc.getString("mediaPath") ?: ""
                     val id = doc.id
 
-                    Log.d("MemoryList", "📄 Found doc: id=$id, path=$mediaPath")
-
-                    val storageRef = FirebaseStorage.getInstance().getReference(mediaPath)
-                    storageRef.downloadUrl
+                    FirebaseStorage.getInstance().getReference(mediaPath)
+                        .downloadUrl
                         .addOnSuccessListener { uri ->
                             memoryList.add(
                                 MemoryItemCloud(
@@ -82,19 +115,17 @@ fun MemoryInfoListScreen(navController: NavController) {
                             )
                         }
                         .addOnFailureListener { e ->
-                            Log.e(
-                                "MemoryList",
-                                "❌ Failed to get downloadUrl for $mediaPath: ${e.message}"
-                            )
+                            Log.e("MemoryList", "❌ downloadUrl 실패: $mediaPath: ${e.message}")
                         }
                 }
             }
             .addOnFailureListener {
-                Log.e("MemoryList", "❌ Firestore query failed: ${it.message}")
+                Log.e("MemoryList", "❌ Firestore 조회 실패: ${it.message}")
             }
     }
 
-        ConstraintLayout(
+
+    ConstraintLayout(
         modifier = Modifier
             .fillMaxSize()
             .padding(24.dp)
@@ -149,11 +180,7 @@ fun MemoryInfoListScreen(navController: NavController) {
                             .background(Color(0xFFFFC9D8), RoundedCornerShape(12.dp))
                             .padding(12.dp)
                     ) {
-                        Text(
-                            text = item.description,
-                            fontSize = 14.sp,
-                            color = Color.Black
-                        )
+                        Text(item.description, fontSize = 14.sp, color = Color.Black)
 
                         Spacer(modifier = Modifier.height(8.dp))
 
@@ -204,32 +231,31 @@ fun MemoryInfoListScreen(navController: NavController) {
         if (showDialog && editingItem != null) {
             AlertDialog(
                 onDismissRequest = { showDialog = false },
-                title = { Text(text = "설명 수정") },
+                title = { Text("설명 수정") },
                 text = {
                     OutlinedTextField(
                         value = newDescription,
                         onValueChange = { newDescription = it },
                         label = { Text("설명") },
-                        singleLine = false,
                         modifier = Modifier.fillMaxWidth()
                     )
                 },
                 confirmButton = {
-                    TextButton(
-                        onClick = {
-                            editingItem?.let { item ->
-                                val index = memoryList.indexOfFirst { it.id == item.id }
-                                if (index != -1) {
-                                    memoryList[index] = item.copy(description = newDescription)
-                                    FirebaseFirestore.getInstance()
-                                        .collection("memoryItems")
-                                        .document(item.id)
-                                        .update("description", newDescription)
-                                }
+                    TextButton(onClick = {
+                        editingItem?.let { item ->
+                            val index = memoryList.indexOfFirst { it.id == item.id }
+                            if (index != -1) {
+                                memoryList[index] = item.copy(description = newDescription)
+                                FirebaseFirestore.getInstance()
+                                    .collection("patients")
+                                    .document(getPatientIdFromPrefs(context) ?: "")
+                                    .collection("memory")
+                                    .document(item.id)
+                                    .update("description", newDescription)
                             }
-                            showDialog = false
                         }
-                    ) {
+                        showDialog = false
+                    }) {
                         Text("저장")
                     }
                 },
@@ -241,7 +267,7 @@ fun MemoryInfoListScreen(navController: NavController) {
             )
         }
 
-        // 삭제 확인 다이얼로그
+        // 삭제 다이얼로그
         if (showDeleteConfirm && itemToDelete != null) {
             AlertDialog(
                 onDismissRequest = {
@@ -254,12 +280,16 @@ fun MemoryInfoListScreen(navController: NavController) {
                     TextButton(onClick = {
                         itemToDelete?.let { item ->
                             FirebaseFirestore.getInstance()
-                                .collection("memoryItems")
+                                .collection("patients")
+                                .document(getPatientIdFromPrefs(context) ?: "")
+                                .collection("memory")
                                 .document(item.id)
                                 .delete()
+
                             FirebaseStorage.getInstance()
                                 .getReference(item.mediaPath)
                                 .delete()
+
                             memoryList.remove(item)
                         }
                         showDeleteConfirm = false
@@ -280,6 +310,8 @@ fun MemoryInfoListScreen(navController: NavController) {
         }
     }
 }
+
+
 
 
 

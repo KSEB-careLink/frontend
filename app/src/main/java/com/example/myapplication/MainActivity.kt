@@ -97,9 +97,9 @@ class MainActivity : ComponentActivity() {
                         Guardian_Alarm(navController)
                     }
 
-                    composable("alarm2") {
-                        Guardian_Alarm2(navController)
-                    }
+//                    composable("alarm2") {
+//                        Guardian_Alarm2(navController)
+//                    }
 
                     composable("guardian_basic_info") {
                         GuardianBasicInfoScreen()

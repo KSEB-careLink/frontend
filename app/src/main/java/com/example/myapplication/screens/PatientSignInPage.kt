@@ -1,3 +1,4 @@
+// imports 생략하지 않음
 package com.example.myapplication.screens
 
 import android.util.Log
@@ -5,30 +6,10 @@ import android.util.Patterns
 import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -42,12 +23,11 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.example.myapplication.BuildConfig
 import com.example.myapplication.R
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import com.google.firebase.auth.ktx.auth
+import com.google.firebase.ktx.Firebase
+import kotlinx.coroutines.*
+import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
-import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 
@@ -56,6 +36,7 @@ fun PatientSignUpScreen(navController: NavController) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     val client = remember { OkHttpClient() }
+    val auth = Firebase.auth
 
     var name by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
@@ -77,7 +58,6 @@ fun PatientSignUpScreen(navController: NavController) {
         val fieldHeight = screenH * 0.07f
         val fieldSpacer = screenH * 0.02f
 
-        // 로고 이미지
         Image(
             painter = painterResource(R.drawable.rogo),
             contentDescription = "로고",
@@ -148,68 +128,77 @@ fun PatientSignUpScreen(navController: NavController) {
         ) {
             Button(
                 onClick = {
-                    when {
-                        name.isBlank() || email.isBlank() || password.isBlank() -> {
-                            Toast.makeText(ctx, "모든 필드를 입력해주세요.", Toast.LENGTH_SHORT).show()
-                        }
-                        !Patterns.EMAIL_ADDRESS.matcher(email).matches() -> {
-                            Toast.makeText(ctx, "유효한 이메일을 입력하세요.", Toast.LENGTH_SHORT).show()
-                        }
-                        password.length < 6 -> {
-                            Toast.makeText(ctx, "비밀번호를 6자 이상 입력해주세요.", Toast.LENGTH_SHORT).show()
-                        }
-                        else -> {
-                            scope.launch {
-                                isLoading = true
-                                try {
-                                    val json = JSONObject().apply {
-                                        put("email", email)
-                                        put("password", password)
-                                        put("name", name)
-                                        put("role", "patient")
-                                    }
+                    if (name.isBlank() || email.isBlank() || password.length < 6) {
+                        Toast.makeText(ctx, "모든 필드를 올바르게 입력해주세요.", Toast.LENGTH_SHORT).show()
+                        return@Button
+                    }
 
-                                    val requestBody = json.toString()
-                                        .toRequestBody("application/json".toMediaType())
+                    scope.launch {
+                        isLoading = true
+                        try {
+                            val json = JSONObject().apply {
+                                put("email", email)
+                                put("password", password)
+                                put("name", name)
+                                put("role", "patient")
+                            }
 
-                                    val request = Request.Builder()
-                                        .url("${BuildConfig.BASE_URL}/auth/signup")
-                                        .post(requestBody)
-                                        .build()
+                            val requestBody = json.toString()
+                                .toRequestBody("application/json".toMediaType())
 
-                                    val response = withContext(Dispatchers.IO) {
-                                        client.newCall(request).execute()
-                                    }
+                            val request = Request.Builder()
+                                .url("${BuildConfig.BASE_URL}/auth/signup")
+                                .post(requestBody)
+                                .build()
 
-                                    if (response.isSuccessful) {
-                                        withContext(Dispatchers.Main) {
-                                            Toast.makeText(ctx, "회원가입 성공!", Toast.LENGTH_SHORT).show()
-                                            navController.navigate("p_login") {
+                            val response = withContext(Dispatchers.IO) {
+                                client.newCall(request).execute()
+                            }
+
+                            val bodyStr = withContext(Dispatchers.IO) { response.body?.string() }
+                            val resJson = JSONObject(bodyStr ?: "{}")
+
+                            if (response.isSuccessful) {
+                                val uid = resJson.optString("uid")
+                                val tokenReqBody = JSONObject().put("uid", uid).toString()
+                                    .toRequestBody("application/json".toMediaType())
+
+                                val tokenReq = Request.Builder()
+                                    .url("${BuildConfig.BASE_URL}/auth/generateFirebaseToken")
+                                    .post(tokenReqBody)
+                                    .build()
+
+                                val tokenRes = withContext(Dispatchers.IO) {
+                                    client.newCall(tokenReq).execute()
+                                }
+
+                                val tokenBody = withContext(Dispatchers.IO) { tokenRes.body?.string() }
+                                val tokenJson = JSONObject(tokenBody ?: "{}")
+                                val customToken = tokenJson.optString("token")
+
+                                if (customToken.isNotBlank()) {
+                                    auth.signInWithCustomToken(customToken)
+                                        .addOnSuccessListener {
+                                            Toast.makeText(ctx, "회원가입 및 로그인 성공!", Toast.LENGTH_SHORT).show()
+                                            navController.navigate("code2") {
                                                 popUpTo("patient") { inclusive = true }
                                             }
                                         }
-                                    } else {
-                                        val errorBody = response.body?.string()
-                                        val msg = try {
-                                            JSONObject(errorBody ?: "{}")
-                                                .optString("error", "회원가입 실패 (${response.code})")
-                                        } catch (e: Exception) {
-                                            "회원가입 실패 (${response.code})"
+                                        .addOnFailureListener {
+                                            Toast.makeText(ctx, "Firebase 로그인 실패", Toast.LENGTH_SHORT).show()
                                         }
-
-                                        withContext(Dispatchers.Main) {
-                                            Toast.makeText(ctx, msg, Toast.LENGTH_LONG).show()
-                                        }
-                                    }
-                                } catch (e: Exception) {
-                                    Log.e("PatientSignUp", "예외 발생", e)
-                                    withContext(Dispatchers.Main) {
-                                        Toast.makeText(ctx, "네트워크 오류 또는 서버 오류", Toast.LENGTH_LONG).show()
-                                    }
-                                } finally {
-                                    isLoading = false
+                                } else {
+                                    Toast.makeText(ctx, "커스텀 토큰 획득 실패", Toast.LENGTH_LONG).show()
                                 }
+                            } else {
+                                val msg = resJson.optString("error", "회원가입 실패")
+                                Toast.makeText(ctx, msg, Toast.LENGTH_LONG).show()
                             }
+                        } catch (e: Exception) {
+                            Log.e("PatientSignUp", "예외 발생", e)
+                            Toast.makeText(ctx, "네트워크 오류 또는 서버 오류", Toast.LENGTH_LONG).show()
+                        } finally {
+                            isLoading = false
                         }
                     }
                 },
@@ -233,9 +222,7 @@ fun PatientSignUpScreen(navController: NavController) {
 
         if (isLoading) {
             Box(
-                Modifier
-                    .fillMaxSize()
-                    .background(Color(0x88000000)),
+                Modifier.fillMaxSize().background(Color(0x88000000)),
                 contentAlignment = Alignment.Center
             ) {
                 CircularProgressIndicator(color = Color.White)
@@ -243,6 +230,8 @@ fun PatientSignUpScreen(navController: NavController) {
         }
     }
 }
+
+
 
 
 
