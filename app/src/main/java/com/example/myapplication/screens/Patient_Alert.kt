@@ -28,7 +28,7 @@ import com.example.myapplication.R
 @Composable
 fun Patient_Alert(navController: NavController) {
     // 조절용 값
-    val logoSize      = 200.dp
+
     val textTopGap    = 24.dp
     val circleSize    = 260.dp
     val titleGap      = 16.dp
@@ -77,14 +77,8 @@ fun Patient_Alert(navController: NavController) {
                 .padding(horizontal = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // 1) 로고
-            Spacer(Modifier.height(24.dp))
-            Image(
-                painter = painterResource(R.drawable.rogo),
-                contentDescription = "로고",
-                modifier = Modifier.size(logoSize),
-                contentScale = ContentScale.Fit
-            )
+
+            Spacer(modifier = Modifier.height(210.dp))
 
             // 2) 안내 문구
             Spacer(Modifier.height(textTopGap))
@@ -96,7 +90,7 @@ fun Patient_Alert(navController: NavController) {
                     }
                     append("을 느끼시나요?")
                 },
-                fontSize = 20.sp
+                fontSize = 25.sp
             )
             Spacer(Modifier.height(4.dp))
             Text(
@@ -106,14 +100,14 @@ fun Patient_Alert(navController: NavController) {
                     }
                     append("에게 연락할게요")
                 },
-                fontSize = 20.sp
+                fontSize = 25.sp
             )
 
             // 3) 타이틀
             Spacer(Modifier.height(titleGap))
             Text(
                 text = "긴급 알림",
-                fontSize = 32.sp,
+                fontSize = 39.sp,
                 color = Color(0xFFE2101A),
                 modifier = Modifier.align(Alignment.CenterHorizontally)
             )

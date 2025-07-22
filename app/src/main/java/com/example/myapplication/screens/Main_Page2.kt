@@ -82,7 +82,7 @@ fun Main_Page2(navController: NavController) {
         }
 
         Button(
-            onClick = { navController.navigate("memoryinfolist") },
+            onClick = { navController.navigate("memorylist") },
             colors = ButtonDefaults.buttonColors(containerColor = buttonColor),
             shape = RoundedCornerShape(12.dp),
             modifier = Modifier

@@ -1,6 +1,5 @@
 package com.example.myapplication.screens
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -9,7 +8,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -21,23 +19,82 @@ import androidx.compose.ui.unit.sp
 import androidx.constraintlayout.compose.ConstraintLayout
 import androidx.constraintlayout.compose.Dimension
 import androidx.navigation.NavController
+import coil.compose.AsyncImage
 import com.example.myapplication.R
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.storage.FirebaseStorage
+import androidx.compose.foundation.Image
+import com.google.firebase.firestore.Query
+import android.util.Log
+import androidx.compose.ui.platform.LocalContext
 
-data class MemoryItem(val id: Int, var description: String, val imageResId: Int)
+data class MemoryItemCloud(
+    val id: String,
+    var description: String,
+    val imageUrl: String,
+    val mediaPath: String
+)
 
 @Composable
 fun MemoryInfoListScreen(navController: NavController) {
-    val memoryList = remember {
-        mutableStateListOf(
-            MemoryItem(1, "1번 사진. 이 사진은 12월 25일 크리스마스...", R.drawable.photo1)
-        )
-    }
-
+    val memoryList = remember { mutableStateListOf<MemoryItemCloud>() }
+    val context = LocalContext.current
     var showDialog by remember { mutableStateOf(false) }
-    var editingItem by remember { mutableStateOf<MemoryItem?>(null) }
+    var editingItem by remember { mutableStateOf<MemoryItemCloud?>(null) }
     var newDescription by remember { mutableStateOf("") }
 
-    ConstraintLayout(
+    var itemToDelete by remember { mutableStateOf<MemoryItemCloud?>(null) }
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+
+    // Firebase에서 데이터 로드
+    LaunchedEffect(Unit) {
+        val db = FirebaseFirestore.getInstance()
+        val storage = FirebaseStorage.getInstance()
+
+        val currentPatientId = getPatientIdFromPrefs(context) // SharedPreferences에서 불러오기
+        db.collection("memoryItems")
+            .whereEqualTo("patientId", currentPatientId)
+            .orderBy("createdAt", Query.Direction.DESCENDING)
+            .get()
+
+            .addOnSuccessListener { snapshot ->
+                if (snapshot.isEmpty) {
+                    Log.d("MemoryList", "🔥 Firestore: No memory items found.")
+                }
+
+                snapshot.documents.forEach { doc ->
+                    val description = doc.getString("description") ?: ""
+                    val mediaPath = doc.getString("mediaPath") ?: ""
+                    val id = doc.id
+
+                    Log.d("MemoryList", "📄 Found doc: id=$id, path=$mediaPath")
+
+                    val storageRef = FirebaseStorage.getInstance().getReference(mediaPath)
+                    storageRef.downloadUrl
+                        .addOnSuccessListener { uri ->
+                            memoryList.add(
+                                MemoryItemCloud(
+                                    id = id,
+                                    description = description,
+                                    imageUrl = uri.toString(),
+                                    mediaPath = mediaPath
+                                )
+                            )
+                        }
+                        .addOnFailureListener { e ->
+                            Log.e(
+                                "MemoryList",
+                                "❌ Failed to get downloadUrl for $mediaPath: ${e.message}"
+                            )
+                        }
+                }
+            }
+            .addOnFailureListener {
+                Log.e("MemoryList", "❌ Firestore query failed: ${it.message}")
+            }
+    }
+
+        ConstraintLayout(
         modifier = Modifier
             .fillMaxSize()
             .padding(24.dp)
@@ -50,7 +107,7 @@ fun MemoryInfoListScreen(navController: NavController) {
             modifier = Modifier
                 .size(100.dp)
                 .constrainAs(logo) {
-                    top.linkTo(parent.top, margin = 80.dp)
+                    top.linkTo(parent.top, margin = 50.dp)
                     start.linkTo(parent.start)
                     end.linkTo(parent.end)
                 }
@@ -58,7 +115,7 @@ fun MemoryInfoListScreen(navController: NavController) {
 
         Text(
             text = "회상 정보 데이터 확인",
-            fontSize = 20.sp,
+            fontSize = 30.sp,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.constrainAs(title) {
                 top.linkTo(logo.bottom, margin = 12.dp)
@@ -70,14 +127,14 @@ fun MemoryInfoListScreen(navController: NavController) {
         Box(
             modifier = Modifier
                 .constrainAs(listBox) {
-                    top.linkTo(title.bottom, margin = 24.dp)
+                    top.linkTo(title.bottom, margin = -14.dp)
                     start.linkTo(parent.start)
                     end.linkTo(parent.end)
                     bottom.linkTo(parent.bottom)
                     height = Dimension.wrapContent
                 }
                 .fillMaxWidth()
-                .heightIn(min = 100.dp, max = 500.dp)
+                .heightIn(min = 100.dp, max = 600.dp)
                 .background(Color(0xFFFDEFF1), RoundedCornerShape(12.dp))
                 .padding(12.dp)
         ) {
@@ -100,8 +157,8 @@ fun MemoryInfoListScreen(navController: NavController) {
 
                         Spacer(modifier = Modifier.height(8.dp))
 
-                        Image(
-                            painter = painterResource(id = item.imageResId),
+                        AsyncImage(
+                            model = item.imageUrl,
                             contentDescription = "기억 사진",
                             contentScale = ContentScale.Crop,
                             modifier = Modifier
@@ -133,7 +190,8 @@ fun MemoryInfoListScreen(navController: NavController) {
                                 fontSize = 12.sp,
                                 color = Color.Red,
                                 modifier = Modifier.clickable {
-                                    memoryList.remove(item)
+                                    itemToDelete = item
+                                    showDeleteConfirm = true
                                 }
                             )
                         }
@@ -142,7 +200,7 @@ fun MemoryInfoListScreen(navController: NavController) {
             }
         }
 
-        // 수정 다이얼로그
+        // 설명 수정 다이얼로그
         if (showDialog && editingItem != null) {
             AlertDialog(
                 onDismissRequest = { showDialog = false },
@@ -160,9 +218,13 @@ fun MemoryInfoListScreen(navController: NavController) {
                     TextButton(
                         onClick = {
                             editingItem?.let { item ->
-                                val index = memoryList.indexOf(item)
+                                val index = memoryList.indexOfFirst { it.id == item.id }
                                 if (index != -1) {
                                     memoryList[index] = item.copy(description = newDescription)
+                                    FirebaseFirestore.getInstance()
+                                        .collection("memoryItems")
+                                        .document(item.id)
+                                        .update("description", newDescription)
                                 }
                             }
                             showDialog = false
@@ -178,8 +240,47 @@ fun MemoryInfoListScreen(navController: NavController) {
                 }
             )
         }
+
+        // 삭제 확인 다이얼로그
+        if (showDeleteConfirm && itemToDelete != null) {
+            AlertDialog(
+                onDismissRequest = {
+                    showDeleteConfirm = false
+                    itemToDelete = null
+                },
+                title = { Text("정말 삭제하시겠습니까?") },
+                text = { Text("이 회상 정보를 영구적으로 삭제합니다.") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        itemToDelete?.let { item ->
+                            FirebaseFirestore.getInstance()
+                                .collection("memoryItems")
+                                .document(item.id)
+                                .delete()
+                            FirebaseStorage.getInstance()
+                                .getReference(item.mediaPath)
+                                .delete()
+                            memoryList.remove(item)
+                        }
+                        showDeleteConfirm = false
+                        itemToDelete = null
+                    }) {
+                        Text("삭제", color = Color.Red)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = {
+                        showDeleteConfirm = false
+                        itemToDelete = null
+                    }) {
+                        Text("취소")
+                    }
+                }
+            )
+        }
     }
 }
+
 
 
 

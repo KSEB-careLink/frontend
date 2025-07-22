@@ -122,7 +122,7 @@ fun PatientSignUpScreen(navController: NavController) {
             OutlinedTextField(
                 value = email,
                 onValueChange = { email = it.trim() },
-                placeholder = { Text("example@mail.com") },
+                placeholder = { Text("example@mail.com 형식으로 입력하세요") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth().height(fieldHeight)
             )
@@ -132,7 +132,7 @@ fun PatientSignUpScreen(navController: NavController) {
             OutlinedTextField(
                 value = password,
                 onValueChange = { password = it.trim() },
-                placeholder = { Text("최소 6자 이상") },
+                placeholder = { Text("6글자 이상 입력하세요") },
                 visualTransformation = PasswordVisualTransformation(),
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth().height(fieldHeight)

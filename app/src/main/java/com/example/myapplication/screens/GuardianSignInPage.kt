@@ -23,10 +23,7 @@ import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
 import com.example.myapplication.BuildConfig
 import com.example.myapplication.R
-import com.google.firebase.auth.ktx.auth
-import com.google.firebase.ktx.Firebase
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.tasks.await
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -112,7 +109,7 @@ fun GuardianSignUpScreen(navController: NavController) {
             OutlinedTextField(
                 value = email,
                 onValueChange = { email = it.trim() },
-                placeholder = { Text("example@mail.com") },
+                placeholder = { Text("example@mail.com 형식으로 입력하세요") },
                 singleLine = true,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -124,7 +121,7 @@ fun GuardianSignUpScreen(navController: NavController) {
             OutlinedTextField(
                 value = password,
                 onValueChange = { password = it.trim() },
-                placeholder = { Text("최소 6자 이상") },
+                placeholder = { Text("6글자 이상 입력하세요") },
                 visualTransformation = PasswordVisualTransformation(),
                 singleLine = true,
                 modifier = Modifier

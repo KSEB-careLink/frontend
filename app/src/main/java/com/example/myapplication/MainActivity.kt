@@ -101,6 +101,14 @@ class MainActivity : ComponentActivity() {
                         Guardian_Alarm2(navController)
                     }
 
+                    composable("guardian_basic_info") {
+                        GuardianBasicInfoScreen()
+                    }
+
+                    composable("memoryinfo") {
+                        MemoryInfoInputScreen(navController)
+                    }
+
                     composable("memorylist") {
                         MemoryInfoListScreen(navController)
                     }

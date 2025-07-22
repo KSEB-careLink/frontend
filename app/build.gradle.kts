@@ -150,6 +150,10 @@ dependencies {
     // datetime 모듈 (timepicker)
     implementation("io.github.vanpra.compose-material-dialogs:datetime:0.9.0")
 
+     // 파이어베이스 db 연동
+    implementation("io.coil-kt:coil-compose:2.2.2")
+    implementation("com.google.firebase:firebase-firestore-ktx")
+    implementation("com.google.firebase:firebase-storage-ktx")
 }
 
 

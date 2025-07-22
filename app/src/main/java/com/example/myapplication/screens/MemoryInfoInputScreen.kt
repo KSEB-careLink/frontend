@@ -2,6 +2,7 @@ package com.example.myapplication.screens
 
 import android.graphics.BitmapFactory
 import android.net.Uri
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
@@ -20,10 +21,18 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.constraintlayout.compose.ConstraintLayout
 import androidx.constraintlayout.compose.Dimension
+import androidx.navigation.NavController
 import com.example.myapplication.R
+import com.example.myapplication.BuildConfig
+import okhttp3.*
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import java.io.IOException
+import android.os.Handler
+import android.os.Looper
+import android.content.Context
 
 @Composable
-fun MemoryInputScreen() {
+fun MemoryInfoInputScreen(navController: NavController) {
     var imageUri by remember { mutableStateOf<Uri?>(null) }
     var description by remember { mutableStateOf("") }
     val context = LocalContext.current
@@ -40,11 +49,10 @@ fun MemoryInputScreen() {
             .padding(24.dp)
     ) {
         val (
-            logo, title1, title2, imageBox, uploadButton,
-            descriptionLabel, descriptionInput
+            logo, title1, title2, imageBox, selectButton,
+            uploadButton, descriptionLabel, descriptionInput
         ) = createRefs()
 
-        // 로고
         Image(
             painter = painterResource(id = R.drawable.rogo),
             contentDescription = "로고",
@@ -57,7 +65,6 @@ fun MemoryInputScreen() {
                 }
         )
 
-        // 제목
         Text(
             "회상정보 ",
             fontSize = 24.sp,
@@ -77,7 +84,6 @@ fun MemoryInputScreen() {
             }
         )
 
-        // 사진 선택 박스
         Box(
             modifier = Modifier
                 .size(250.dp)
@@ -104,20 +110,49 @@ fun MemoryInputScreen() {
             }
         }
 
-        // 업로드 버튼
+        // 사진 선택 버튼
         Button(
             onClick = { launcher.launch("image/*") },
             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF80DEEA)),
-            modifier = Modifier.constrainAs(uploadButton) {
+            modifier = Modifier.constrainAs(selectButton) {
                 top.linkTo(imageBox.bottom, margin = 8.dp)
                 start.linkTo(parent.start)
                 end.linkTo(parent.end)
             }
         ) {
-            Text("사진 업로드", color = Color.White)
+            Text("사진 선택", color = Color.White)
         }
 
-        // 설명 입력 안내 텍스트
+        // 업로드 버튼
+        Button(
+            onClick = {
+                if (imageUri == null || description.isBlank()) {
+                    Toast.makeText(context, "사진과 설명을 모두 입력해주세요", Toast.LENGTH_SHORT).show()
+                } else {
+                    uploadMemory(
+                        context = context,
+                        imageUri = imageUri!!,
+                        description = description,
+                        onSuccess = {
+                            Toast.makeText(context, "업로드 성공!", Toast.LENGTH_SHORT).show()
+                            navController.popBackStack()
+                        },
+                        onFailure = { error ->
+                            Toast.makeText(context, error, Toast.LENGTH_SHORT).show()
+                        }
+                    )
+                }
+            },
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00BFA5)),
+            modifier = Modifier.constrainAs(uploadButton) {
+                top.linkTo(selectButton.bottom, margin = 8.dp)
+                start.linkTo(parent.start)
+                end.linkTo(parent.end)
+            }
+        ) {
+            Text("회상 정보 업로드", color = Color.White)
+        }
+
         Text(
             "해당 미디어에 대한 설명을 해주세요",
             fontSize = 16.sp,
@@ -127,7 +162,6 @@ fun MemoryInputScreen() {
             }
         )
 
-        // 설명 입력 필드
         TextField(
             value = description,
             onValueChange = { description = it },
@@ -147,3 +181,71 @@ fun MemoryInputScreen() {
         )
     }
 }
+
+// 이미지 URI → ByteArray
+fun uriToByteArray(context: android.content.Context, uri: Uri): ByteArray? {
+    return context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+}
+
+// Firebase 업로드 요청
+fun uploadMemory(
+    context: Context,
+    imageUri: Uri,
+    description: String,
+    onSuccess: () -> Unit,
+    onFailure: (String) -> Unit
+) {
+    val prefs = context.getSharedPreferences("MyPrefs", Context.MODE_PRIVATE)
+    val token = prefs.getString("jwt_token", null)
+    val patientId = prefs.getString("patient_id", null)
+
+    if (token == null || patientId == null) {
+        onFailure("로그인이 필요합니다.")
+        return
+    }
+
+    val imageBytes = uriToByteArray(context, imageUri)
+    if (imageBytes == null) {
+        onFailure("이미지를 불러올 수 없습니다.")
+        return
+    }
+
+    val client = OkHttpClient()
+
+    val requestBody = MultipartBody.Builder().setType(MultipartBody.FORM)
+        .addFormDataPart("description", description)
+        .addFormDataPart("patientId", patientId)
+        .addFormDataPart(
+            "media", "image.jpg",
+            RequestBody.create("image/jpeg".toMediaTypeOrNull(), imageBytes)
+        )
+        .build()
+
+    val request = Request.Builder()
+        .url("${BuildConfig.BASE_URL}/memory/upload")
+        .addHeader("Authorization", "Bearer $token")
+        .post(requestBody)
+        .build()
+
+    val mainHandler = Handler(Looper.getMainLooper())
+
+    client.newCall(request).enqueue(object : Callback {
+        override fun onFailure(call: Call, e: IOException) {
+            mainHandler.post {
+                onFailure("업로드 실패: ${e.message}")
+            }
+        }
+
+        override fun onResponse(call: Call, response: Response) {
+            mainHandler.post {
+                if (response.isSuccessful) {
+                    onSuccess()
+                } else {
+                    onFailure("서버 오류: ${response.code}")
+                }
+            }
+        }
+    })
+}
+
+

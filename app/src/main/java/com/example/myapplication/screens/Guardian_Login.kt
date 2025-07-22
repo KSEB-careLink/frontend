@@ -115,7 +115,7 @@ fun Guardian_Login(navController: NavController) {
         OutlinedTextField(
             value = email,
             onValueChange = { email = it },
-            placeholder = { Text("example@mail.com") },
+            placeholder = { Text("example@mail.com 형식으로 입력하세요") },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(56.dp)
@@ -142,7 +142,7 @@ fun Guardian_Login(navController: NavController) {
         OutlinedTextField(
             value = password,
             onValueChange = { password = it },
-            placeholder = { Text("••••••••") },
+            placeholder = { Text("6글자 이상 입력하세요") },
             visualTransformation = PasswordVisualTransformation(),
             modifier = Modifier
                 .fillMaxWidth()
