@@ -251,9 +251,7 @@ fun Recode2(navController: NavController) {
                                 ""
                             }
 
-                            // **수정된 엔드포인트 경로** (/registerVoice 로 변경)
-                            val uploadUrl = BuildConfig.BASE_URL
-                                .replace("localhost", "10.0.2.2") + "/registerVoice"
+                            val uploadUrl = "https://model-terminal-failed-angela.trycloudflare.com/registerVoice"
                             Log.d("VoiceUpload", "Uploading to → $uploadUrl")
 
                             val file = File(path)

@@ -20,7 +20,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.constraintlayout.compose.ConstraintLayout
@@ -49,12 +48,11 @@ fun getPatientIdFromPrefs(context: Context): String? {
 }
 
 // 메모리 아이템 데이터 클래스
-
 data class MemoryItemCloud(
     val id: String,
     var description: String,
-    val imageUrl: String,
-    val mediaPath: String
+    val mediaUrl: String,
+    val mediaType: String
 )
 
 @Composable
@@ -103,10 +101,10 @@ fun MemoryInfoListScreen(navController: NavController) {
                 val obj = arr.getJSONObject(i)
                 memoryList.add(
                     MemoryItemCloud(
-                        id = obj.getString("id"),
+                        id          = obj.getString("id"),
                         description = obj.getString("description"),
-                        imageUrl = obj.getString("imageUrl"),
-                        mediaPath = obj.getString("mediaPath")
+                        mediaUrl    = obj.getString("mediaUrl"),
+                        mediaType   = obj.getString("mediaType")
                     )
                 )
             }
@@ -116,7 +114,6 @@ fun MemoryInfoListScreen(navController: NavController) {
         }
     }
 
-    // UI 레이아웃
     ConstraintLayout(
         modifier = Modifier
             .fillMaxSize()
@@ -139,7 +136,6 @@ fun MemoryInfoListScreen(navController: NavController) {
         Text(
             text = "회상 정보 데이터 확인",
             fontSize = 30.sp,
-            fontWeight = FontWeight.Bold,
             modifier = Modifier.constrainAs(title) {
                 top.linkTo(logo.bottom, margin = 12.dp)
                 start.linkTo(parent.start)
@@ -175,7 +171,7 @@ fun MemoryInfoListScreen(navController: NavController) {
                         Text(item.description, fontSize = 14.sp, color = Color.Black)
                         Spacer(Modifier.height(8.dp))
                         AsyncImage(
-                            model = item.imageUrl,
+                            model = item.mediaUrl,
                             contentDescription = "기억 사진",
                             contentScale = ContentScale.Crop,
                             modifier = Modifier
@@ -215,7 +211,6 @@ fun MemoryInfoListScreen(navController: NavController) {
             }
         }
 
-        // 다이얼로그 등... (수정/삭제 로직은 서버 호출로 변경됨)
         // 수정 다이얼로그
         if (showDialog && editingItem != null) {
             AlertDialog(
@@ -243,7 +238,10 @@ fun MemoryInfoListScreen(navController: NavController) {
                                     val req = Request.Builder()
                                         .url("${BuildConfig.BASE_URL}/memory/$patientId/${item.id}")
                                         .addHeader("Authorization", "Bearer $token")
-                                        .put(json.toString().toRequestBody("application/json".toMediaType()))
+                                        .put(
+                                            json.toString()
+                                                .toRequestBody("application/json".toMediaType())
+                                        )
                                         .build()
                                     withContext(Dispatchers.IO) {
                                         client.newCall(req).execute().close()
@@ -303,6 +301,8 @@ fun MemoryInfoListScreen(navController: NavController) {
         }
     }
 }
+
+
 
 
 
