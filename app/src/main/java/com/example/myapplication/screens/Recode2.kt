@@ -25,6 +25,7 @@ import androidx.navigation.compose.rememberNavController
 import com.example.myapplication.BuildConfig
 import com.example.myapplication.audio.AudioRecorder
 import com.example.myapplication.audio.AutoScrollingText
+<<<<<<< HEAD
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
 import kotlinx.coroutines.Dispatchers
@@ -36,6 +37,9 @@ import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.logging.HttpLoggingInterceptor
 import java.io.File
+=======
+import androidx.compose.foundation.Image
+>>>>>>> parent of cbdce52 (바뀐 로그인 및 회원가입)
 
 @Composable
 fun Recode2(navController: NavController) {

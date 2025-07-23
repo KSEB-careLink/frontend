@@ -1,15 +1,9 @@
 package com.example.myapplication.screens
 
-import android.content.Context
-import android.util.Log
 import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Text
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -22,23 +16,25 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.constraintlayout.compose.ConstraintLayout
-import androidx.constraintlayout.compose.Dimension
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
 import com.example.myapplication.BuildConfig
 import com.example.myapplication.R
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
-import com.example.myapplication.components.refreshAndSaveToken
-import com.example.myapplication.components.savePatientId
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.tasks.await
-import okhttp3.OkHttpClient
-import okhttp3.Request
+import androidx.constraintlayout.compose.ConstraintLayout
+import androidx.constraintlayout.compose.Dimension
+import okhttp3.*
 import org.json.JSONObject
+import java.io.IOException
+import android.content.Context
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
+import kotlinx.coroutines.tasks.await
+import android.util.Log
 
 @Composable
 fun Guardian_Login(navController: NavController) {
@@ -48,6 +44,16 @@ fun Guardian_Login(navController: NavController) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     val client = remember { OkHttpClient() }
+
+    fun savePatientIdToPrefs(context: Context, patientId: String) {
+        val prefs = context.getSharedPreferences("MyPrefs", Context.MODE_PRIVATE)
+        prefs.edit().putString("patient_id", patientId).apply()
+    }
+
+    fun saveTokenToPrefs(context: Context, token: String) {
+        val prefs = context.getSharedPreferences("MyPrefs", Context.MODE_PRIVATE)
+        prefs.edit().putString("jwt_token", token).apply()
+    }
 
     fun showToast(message: String) {
         Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
@@ -161,8 +167,9 @@ fun Guardian_Login(navController: NavController) {
                         val user = auth.currentUser
                             ?: throw Exception("Firebase user is null")
 
-                        // 2) ID 토큰 강제 갱신 + 저장
-                        val idToken = user.refreshAndSaveToken(context)
+                        // 2) ID 토큰 획득 (커스텀 클레임 포함)
+                        val idToken = user.getIdToken(true).await().token
+                            ?: throw Exception("ID 토큰이 null입니다")
 
                         // 3) 서버에서 /auth/me 호출
                         val meRequest = Request.Builder()
@@ -184,7 +191,7 @@ fun Guardian_Login(navController: NavController) {
                         val linkedPatients = meJson.optJSONArray("linkedPatients")
 
                         if (linkedPatients != null && linkedPatients.length() > 0) {
-                            context.savePatientId(linkedPatients.getString(0))
+                            savePatientIdToPrefs(context, linkedPatients.getString(0))
                         }
 
                         if (role == "guardian" && joinCode.isNotBlank()) {
@@ -198,7 +205,7 @@ fun Guardian_Login(navController: NavController) {
 
                     } catch (e: Exception) {
                         Log.e("GuardianLogin", "error", e)
-                        showToast("예외 발생: ${e.message}")
+                        Toast.makeText(context, "예외 발생: ${e.message}", Toast.LENGTH_LONG).show()
                     }
                 }
             },
@@ -215,6 +222,7 @@ fun Guardian_Login(navController: NavController) {
         ) {
             Text("로그인", color = Color.White, fontSize = 16.sp)
         }
+
 
         Button(
             onClick = { navController.navigate("guardianSignup") },
@@ -234,11 +242,11 @@ fun Guardian_Login(navController: NavController) {
     }
 }
 
+
 @Preview(showBackground = true)
 @Composable
 fun PreviewLogin2() {
     Guardian_Login(navController = rememberNavController())
 }
-
 
 

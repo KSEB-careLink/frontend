@@ -1,3 +1,4 @@
+// imports 생략하지 않음
 package com.example.myapplication.screens
 
 import android.util.Log
@@ -7,11 +8,6 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Text
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -29,15 +25,12 @@ import com.example.myapplication.BuildConfig
 import com.example.myapplication.R
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
-import com.example.myapplication.components.refreshAndSaveToken
 import kotlinx.coroutines.*
-import okhttp3.OkHttpClient
-import okhttp3.Request
+import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import kotlinx.coroutines.tasks.await
-
 @Composable
 fun PatientSignUpScreen(navController: NavController) {
     val ctx = LocalContext.current
@@ -92,12 +85,7 @@ fun PatientSignUpScreen(navController: NavController) {
             horizontalAlignment = Alignment.Start
         ) {
             Spacer(Modifier.height(fieldSpacer))
-            Text(
-                "회원 가입",
-                fontSize = 32.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.align(Alignment.CenterHorizontally)
-            )
+            Text("회원 가입", fontSize = 32.sp, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.CenterHorizontally))
             Spacer(Modifier.height(fieldSpacer))
 
             Text("이름", fontSize = 16.sp)
@@ -106,9 +94,7 @@ fun PatientSignUpScreen(navController: NavController) {
                 onValueChange = { name = it.trim() },
                 placeholder = { Text("이름") },
                 singleLine = true,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(fieldHeight)
+                modifier = Modifier.fillMaxWidth().height(fieldHeight)
             )
             Spacer(Modifier.height(fieldSpacer))
 
@@ -118,9 +104,7 @@ fun PatientSignUpScreen(navController: NavController) {
                 onValueChange = { email = it.trim() },
                 placeholder = { Text("example@mail.com 형식으로 입력하세요") },
                 singleLine = true,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(fieldHeight)
+                modifier = Modifier.fillMaxWidth().height(fieldHeight)
             )
             Spacer(Modifier.height(fieldSpacer))
 
@@ -131,9 +115,7 @@ fun PatientSignUpScreen(navController: NavController) {
                 placeholder = { Text("6글자 이상 입력하세요") },
                 visualTransformation = PasswordVisualTransformation(),
                 singleLine = true,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(fieldHeight)
+                modifier = Modifier.fillMaxWidth().height(fieldHeight)
             )
         }
 
@@ -177,11 +159,13 @@ fun PatientSignUpScreen(navController: NavController) {
 
                             // 2) Firebase 이메일/비번 로그인
                             auth.signInWithEmailAndPassword(email, password).await()
-                            val user = auth.currentUser
-                                ?: throw Exception("Firebase user is null")
 
-                            // 3) ID 토큰 강제 갱신 + 저장
-                            val idToken = user.refreshAndSaveToken(ctx)
+                            // 3) ID 토큰 강제 갱신 (Firestore/Storage 규칙 통과용)
+                            auth.currentUser
+                                ?.getIdToken(true)
+                                ?.await()
+                                ?.token
+                                ?: throw Exception("ID 토큰 획득 실패")
 
                             // 4) 화면 전환
                             Toast.makeText(ctx, "회원가입 및 로그인 성공!", Toast.LENGTH_SHORT).show()
@@ -204,6 +188,7 @@ fun PatientSignUpScreen(navController: NavController) {
                 Text("가입하기", color = Color.White, fontSize = 16.sp)
             }
 
+
             Button(
                 onClick = { navController.navigate("p_login") },
                 modifier = Modifier.weight(1f),
@@ -224,7 +209,6 @@ fun PatientSignUpScreen(navController: NavController) {
         }
     }
 }
-
 
 
 

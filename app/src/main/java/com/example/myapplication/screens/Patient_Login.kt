@@ -1,16 +1,10 @@
 package com.example.myapplication.screens
 
-import android.content.Context
 import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Text
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -31,15 +25,15 @@ import com.example.myapplication.BuildConfig
 import com.example.myapplication.R
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
-import com.example.myapplication.components.refreshAndSaveToken
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.tasks.await
-import okhttp3.OkHttpClient
-import okhttp3.Request
+import kotlinx.coroutines.*
+import okhttp3.*
 import org.json.JSONObject
-
+import java.io.IOException
+import android.content.Context
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import kotlinx.coroutines.tasks.await
 @Composable
 fun PatientLoginScreen(navController: NavController) {
     val auth = Firebase.auth
@@ -51,14 +45,18 @@ fun PatientLoginScreen(navController: NavController) {
     var password by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
 
+    fun saveTokenToPrefs(context: Context, token: String) {
+        val prefs = context.getSharedPreferences("MyPrefs", Context.MODE_PRIVATE)
+        prefs.edit().putString("jwt_token", token).apply()
+    }
+
     ConstraintLayout(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 24.dp)
+        modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp)
     ) {
         val (logo, textLogo, title, emailLabel, emailField, passwordLabel, passwordField,
             loginButton, registerButton, loadingBox) = createRefs()
 
+        // 로고
         Image(
             painter = painterResource(id = R.drawable.rogo),
             contentDescription = "로고",
@@ -72,6 +70,7 @@ fun PatientLoginScreen(navController: NavController) {
                 }
         )
 
+        // 텍스트 로고
         Image(
             painter = painterResource(id = R.drawable.ai_text),
             contentDescription = "텍스트 로고",
@@ -85,6 +84,7 @@ fun PatientLoginScreen(navController: NavController) {
                 }
         )
 
+        // 제목
         Text(
             text = "어르신 로그인",
             fontSize = 28.sp,
@@ -95,6 +95,7 @@ fun PatientLoginScreen(navController: NavController) {
             }
         )
 
+        // 이메일 라벨
         Text(
             text = "이메일 주소",
             fontSize = 16.sp,
@@ -104,6 +105,7 @@ fun PatientLoginScreen(navController: NavController) {
             }
         )
 
+        // 이메일 입력
         OutlinedTextField(
             value = email,
             onValueChange = { email = it.trim() },
@@ -120,6 +122,7 @@ fun PatientLoginScreen(navController: NavController) {
                 }
         )
 
+        // 비밀번호 라벨
         Text(
             text = "비밀번호",
             fontSize = 16.sp,
@@ -129,6 +132,7 @@ fun PatientLoginScreen(navController: NavController) {
             }
         )
 
+        // 비밀번호 입력
         OutlinedTextField(
             value = password,
             onValueChange = { password = it.trim() },
@@ -146,18 +150,22 @@ fun PatientLoginScreen(navController: NavController) {
                 }
         )
 
+        // 로그인 버튼
         Button(
             onClick = {
                 coroutineScope.launch {
                     isLoading = true
+                    val emailTrimmed = email.trim()
+                    val passwordTrimmed = password.trim()
                     try {
                         // 1) Firebase 로그인
-                        auth.signInWithEmailAndPassword(email, password).await()
+                        auth.signInWithEmailAndPassword(emailTrimmed, passwordTrimmed).await()
                         val user = auth.currentUser
                             ?: throw Exception("Firebase user is null")
 
-                        // 2) ID 토큰 강제 갱신 + 저장
-                        val idToken = user.refreshAndSaveToken(context)
+                        // 2) ID 토큰 강제 갱신 후 획득 (커스텀 클레임 포함)
+                        val idToken = user.getIdToken(true).await().token
+                            ?: throw Exception("ID 토큰이 null입니다")
 
                         // 3) 서버에서 /auth/me 호출
                         val meRequest = Request.Builder()
@@ -169,9 +177,12 @@ fun PatientLoginScreen(navController: NavController) {
                         val meResponse = withContext(Dispatchers.IO) {
                             client.newCall(meRequest).execute()
                         }
-                        if (!meResponse.isSuccessful) throw Exception("me 실패: ${meResponse.code}")
+                        if (!meResponse.isSuccessful) {
+                            throw Exception("me 실패: ${meResponse.code}")
+                        }
 
-                        val role = JSONObject(meResponse.body?.string() ?: "{}").optString("role")
+                        val meJson = JSONObject(meResponse.body?.string() ?: "{}")
+                        val role = meJson.optString("role")
 
                         isLoading = false
                         if (role == "patient") {
@@ -203,6 +214,8 @@ fun PatientLoginScreen(navController: NavController) {
             Text("로그인", color = Color.White, fontSize = 16.sp)
         }
 
+
+        // 회원가입 버튼
         Button(
             onClick = { navController.navigate("patient") },
             modifier = Modifier
@@ -219,6 +232,7 @@ fun PatientLoginScreen(navController: NavController) {
             Text("회원가입", color = Color.White, fontSize = 16.sp)
         }
 
+        // 로딩 인디케이터
         if (isLoading) {
             Box(
                 modifier = Modifier
@@ -243,7 +257,6 @@ fun PatientLoginScreen(navController: NavController) {
 fun PreviewPatientLogin() {
     PatientLoginScreen(navController = rememberNavController())
 }
-
 
 
 
