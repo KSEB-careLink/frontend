@@ -31,15 +31,22 @@ import com.example.myapplication.R
 import com.example.myapplication.BuildConfig
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
-import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
+
+// SharedPreferences에서 환자 ID 가져오기 헬퍼
+fun getPatientIdFromPrefs(context: Context): String? {
+    return context
+        .getSharedPreferences("MyPrefs", Context.MODE_PRIVATE)
+        .getString("patient_id", null)
+}
 
 // 메모리 아이템 데이터 클래스
 
@@ -49,13 +56,6 @@ data class MemoryItemCloud(
     val imageUrl: String,
     val mediaPath: String
 )
-
-// SharedPreferences에서 환자 ID 가져오기
-fun getPatientIdFromPrefs(context: Context): String? {
-    return context
-        .getSharedPreferences("MyPrefs", Context.MODE_PRIVATE)
-        .getString("patient_id", null)
-}
 
 @Composable
 fun MemoryInfoListScreen(navController: NavController) {
@@ -78,7 +78,6 @@ fun MemoryInfoListScreen(navController: NavController) {
             Log.e("MemoryList", "환자 ID 없음")
             return@LaunchedEffect
         }
-        // Firebase 토큰 획득
         val idToken = Firebase.auth.currentUser
             ?.getIdToken(true)
             ?.await()
@@ -95,22 +94,25 @@ fun MemoryInfoListScreen(navController: NavController) {
                 .build()
             val res = withContext(Dispatchers.IO) { client.newCall(req).execute() }
             if (!res.isSuccessful) {
-                Log.e("MemoryList", "API 호출 실패: ${'$'}{res.code}")
+                Log.e("MemoryList", "API 호출 실패: ${res.code}")
                 return@LaunchedEffect
             }
             val bodyStr = res.body?.string().orEmpty()
             val arr = JSONObject(bodyStr).getJSONArray("memoryItems")
             for (i in 0 until arr.length()) {
                 val obj = arr.getJSONObject(i)
-                val id = obj.getString("id")
-                val desc = obj.getString("description")
-                val mediaPath = obj.getString("mediaPath")
-                val imageUrl = obj.getString("imageUrl")
-                memoryList.add(MemoryItemCloud(id, desc, imageUrl, mediaPath))
+                memoryList.add(
+                    MemoryItemCloud(
+                        id = obj.getString("id"),
+                        description = obj.getString("description"),
+                        imageUrl = obj.getString("imageUrl"),
+                        mediaPath = obj.getString("mediaPath")
+                    )
+                )
             }
         } catch (e: Exception) {
-            Log.e("MemoryList", "데이터 로드 실패: ${'$'}{e.message}")
-            Toast.makeText(context, "불러오기 실패: ${'$'}{e.message}", Toast.LENGTH_LONG).show()
+            Log.e("MemoryList", "데이터 로드 실패: ${e.message}")
+            Toast.makeText(context, "불러오기 실패: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -171,7 +173,7 @@ fun MemoryInfoListScreen(navController: NavController) {
                             .padding(12.dp)
                     ) {
                         Text(item.description, fontSize = 14.sp, color = Color.Black)
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(Modifier.height(8.dp))
                         AsyncImage(
                             model = item.imageUrl,
                             contentDescription = "기억 사진",
@@ -181,7 +183,7 @@ fun MemoryInfoListScreen(navController: NavController) {
                                 .height(150.dp)
                                 .clip(RoundedCornerShape(8.dp))
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(Modifier.height(8.dp))
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.End
@@ -213,6 +215,7 @@ fun MemoryInfoListScreen(navController: NavController) {
             }
         }
 
+        // 다이얼로그 등... (수정/삭제 로직은 서버 호출로 변경됨)
         // 수정 다이얼로그
         if (showDialog && editingItem != null) {
             AlertDialog(
@@ -233,16 +236,17 @@ fun MemoryInfoListScreen(navController: NavController) {
                             if (idx != -1) {
                                 memoryList[idx] = item.copy(description = newDescription)
                                 coroutineScope.launch {
-                                    try {
-                                        FirebaseFirestore.getInstance()
-                                            .collection("patients")
-                                            .document(getPatientIdFromPrefs(context) ?: return@launch)
-                                            .collection("memory")
-                                            .document(item.id)
-                                            .update("description", newDescription)
-                                            .await()
-                                    } catch (e: Exception) {
-                                        Log.e("MemoryList", "설명 업데이트 실패: ${'$'}{e.message}")
+                                    val patientId = getPatientIdFromPrefs(context) ?: return@launch
+                                    val token = Firebase.auth.currentUser
+                                        ?.getIdToken(true)?.await()?.token ?: return@launch
+                                    val json = JSONObject().put("description", newDescription)
+                                    val req = Request.Builder()
+                                        .url("${BuildConfig.BASE_URL}/memory/$patientId/${item.id}")
+                                        .addHeader("Authorization", "Bearer $token")
+                                        .put(json.toString().toRequestBody("application/json".toMediaType()))
+                                        .build()
+                                    withContext(Dispatchers.IO) {
+                                        client.newCall(req).execute().close()
                                     }
                                 }
                             }
@@ -256,7 +260,7 @@ fun MemoryInfoListScreen(navController: NavController) {
             )
         }
 
-        // 삭제 확인 다이얼로그
+        // 삭제 다이얼로그
         if (showDeleteConfirm && itemToDelete != null) {
             AlertDialog(
                 onDismissRequest = {
@@ -269,23 +273,19 @@ fun MemoryInfoListScreen(navController: NavController) {
                     TextButton(onClick = {
                         itemToDelete?.let { item ->
                             coroutineScope.launch {
-                                try {
-                                    FirebaseFirestore.getInstance()
-                                        .collection("patients")
-                                        .document(getPatientIdFromPrefs(context) ?: return@launch)
-                                        .collection("memory")
-                                        .document(item.id)
-                                        .delete()
-                                        .await()
-
-                                    FirebaseStorage.getInstance()
-                                        .getReference(item.mediaPath)
-                                        .delete()
-                                        .await()
-
-                                    memoryList.remove(item)
-                                } catch (e: Exception) {
-                                    Log.e("MemoryList", "삭제 실패: ${'$'}{e.message}")
+                                val patientId = getPatientIdFromPrefs(context) ?: return@launch
+                                val token = Firebase.auth.currentUser
+                                    ?.getIdToken(true)?.await()?.token ?: return@launch
+                                withContext(Dispatchers.IO) {
+                                    client.newCall(
+                                        Request.Builder()
+                                            .url("${BuildConfig.BASE_URL}/memory/$patientId/${item.id}")
+                                            .addHeader("Authorization", "Bearer $token")
+                                            .delete()
+                                            .build()
+                                    ).execute().use { res ->
+                                        if (res.isSuccessful) memoryList.remove(item)
+                                    }
                                 }
                             }
                         }
@@ -303,6 +303,8 @@ fun MemoryInfoListScreen(navController: NavController) {
         }
     }
 }
+
+
 
 
 
