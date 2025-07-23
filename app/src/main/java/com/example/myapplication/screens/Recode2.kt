@@ -1,6 +1,8 @@
 package com.example.myapplication.screens
 
 import android.Manifest
+import android.content.pm.PackageManager
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -12,29 +14,34 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
-import com.example.myapplication.R
+import com.example.myapplication.BuildConfig
 import com.example.myapplication.audio.AudioRecorder
 import com.example.myapplication.audio.AutoScrollingText
-import androidx.compose.foundation.Image
+import com.google.firebase.auth.ktx.auth
+import com.google.firebase.ktx.Firebase
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody.Companion.asRequestBody
+import okhttp3.logging.HttpLoggingInterceptor
 import java.io.File
-import android.os.Handler
-import android.os.Looper
 
 @Composable
 fun Recode2(navController: NavController) {
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+
     var isRecording by remember { mutableStateOf(false) }
     var audioPath by remember { mutableStateOf<String?>(null) }
     var isAutoScrollEnabled by remember { mutableStateOf(true) }
@@ -48,20 +55,29 @@ fun Recode2(navController: NavController) {
             }
         }
     )
-
     LaunchedEffect(Unit) {
         permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
     }
 
     val recorder = remember { AudioRecorder(context) }
 
-    // UI constants
+    // OkHttp 클라이언트 (LoggingInterceptor 포함)
+    val client by remember {
+        mutableStateOf(
+            OkHttpClient.Builder().apply {
+                val logging = HttpLoggingInterceptor { msg -> Log.d("OkHttp", msg) }
+                logging.level = HttpLoggingInterceptor.Level.BODY
+                addInterceptor(logging)
+            }.build()
+        )
+    }
+
+    // UI 상수
     val topPadding = 120.dp
     val betweenTitleAndSub = 8.dp
     val greyBoxTopGap = 16.dp
     val greyBoxHeight = 400.dp
     val greyBoxCorner = 12.dp
-    val bottomButtonOffsetY = 48.dp
 
     Box(
         modifier = Modifier
@@ -72,31 +88,22 @@ fun Recode2(navController: NavController) {
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.fillMaxWidth()
         ) {
-
-            // 타이틀
             Text(
                 text = if (!isRecording) "녹음 전" else "녹음 중",
                 fontSize = 32.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color.Black
             )
-
             Spacer(Modifier.height(betweenTitleAndSub))
-
-            // 안내 텍스트 (가운데 정렬)
             Text(
                 text = if (!isRecording)
                     "버튼을 눌러 녹음을 시작하세요"
                 else
                     "최대한 생동감 있게 텍스트를 읽어주세요",
                 fontSize = 16.sp,
-                color = Color.DarkGray,
-                modifier = Modifier.align(Alignment.CenterHorizontally)
+                color = Color.DarkGray
             )
-
             Spacer(Modifier.height(8.dp))
-
-            // 자동 스크롤 스위치 (오른쪽 정렬)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -104,29 +111,18 @@ fun Recode2(navController: NavController) {
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "자동 스크롤",
-                    fontSize = 14.sp,
-                    color = Color.Gray,
-                    modifier = Modifier.padding(end = 4.dp)
-                )
+                Text("자동 스크롤", fontSize = 14.sp, color = Color.Gray)
                 Switch(
                     checked = isAutoScrollEnabled,
                     onCheckedChange = { isAutoScrollEnabled = it }
                 )
             }
-
             Spacer(Modifier.height(greyBoxTopGap))
-
-            // 텍스트 박스
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(greyBoxHeight)
-                    .background(
-                        color = Color(0xFFCCCCCC),
-                        shape = RoundedCornerShape(greyBoxCorner)
-                    ),
+                    .background(Color(0xFFCCCCCC), RoundedCornerShape(greyBoxCorner)),
                 contentAlignment = Alignment.Center
             ) {
                 AutoScrollingText(
@@ -220,24 +216,77 @@ fun Recode2(navController: NavController) {
             }
         }
 
-        // 녹음 버튼
         Button(
             onClick = {
+                // 1) 권한 체크
+                val hasPermission = ContextCompat.checkSelfPermission(
+                    context, Manifest.permission.RECORD_AUDIO
+                ) == PackageManager.PERMISSION_GRANTED
+                if (!hasPermission) {
+                    permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                    return@Button
+                }
+
+                // 2) 녹음 시작/종료
                 if (!isRecording) {
-                    audioPath = recorder.startRecording()
-                    isRecording = true
+                    try {
+                        audioPath = recorder.startRecording()
+                        isRecording = true
+                    } catch (e: Exception) {
+                        Toast.makeText(context, "녹음 시작 실패: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
                 } else {
+                    // 녹음 중지
                     val savedPath = recorder.stopRecording()
                     isRecording = false
                     Toast.makeText(context, "녹음 저장: $savedPath", Toast.LENGTH_LONG).show()
-                    navController.navigate("recode")
+
+                    // 3) 업로드
+                    audioPath?.let { path ->
+                        coroutineScope.launch {
+                            // Firebase ID 토큰 획득
+                            val idToken = try {
+                                Firebase.auth.currentUser?.getIdToken(true)?.await()?.token ?: ""
+                            } catch (e: Exception) {
+                                ""
+                            }
+
+                            // **수정된 엔드포인트 경로** (/registerVoice 로 변경)
+                            val uploadUrl = BuildConfig.BASE_URL
+                                .replace("localhost", "10.0.2.2") + "/registerVoice"
+                            Log.d("VoiceUpload", "Uploading to → $uploadUrl")
+
+                            val file = File(path)
+                            val mime = "audio/mp4"
+                            val body = MultipartBody.Builder()
+                                .setType(MultipartBody.FORM)
+                                .addFormDataPart("file", file.name, file.asRequestBody(mime.toMediaTypeOrNull()))
+                                .build()
+
+                            val req = Request.Builder()
+                                .url(uploadUrl)
+                                .post(body)
+                                .addHeader("Authorization", "Bearer $idToken")
+                                .build()
+
+                            val resp = withContext(Dispatchers.IO) { client.newCall(req).execute() }
+                            withContext(Dispatchers.Main) {
+                                if (resp.isSuccessful) {
+                                    Toast.makeText(context, "목소리 등록 성공", Toast.LENGTH_LONG).show()
+                                    navController.navigate("recode")
+                                } else {
+                                    Toast.makeText(context, "등록 실패: ${resp.code}", Toast.LENGTH_LONG).show()
+                                }
+                            }
+                        }
+                    }
                 }
             },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(56.dp)
                 .align(Alignment.BottomCenter)
-                .offset(y = -170.dp),
+                .offset(y = (-170).dp),
             shape = RoundedCornerShape(8.dp),
             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C4B4))
         ) {
