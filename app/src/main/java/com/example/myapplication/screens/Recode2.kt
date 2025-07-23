@@ -25,6 +25,12 @@ import com.example.myapplication.R
 import com.example.myapplication.audio.AudioRecorder
 import com.example.myapplication.audio.AutoScrollingText
 import androidx.compose.foundation.Image
+import okhttp3.*
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.RequestBody.Companion.asRequestBody
+import java.io.File
+import android.os.Handler
+import android.os.Looper
 
 @Composable
 fun Recode2(navController: NavController) {

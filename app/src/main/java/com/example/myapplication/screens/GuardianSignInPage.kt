@@ -32,6 +32,8 @@ import android.util.Log
 import com.google.firebase.ktx.Firebase
 import com.google.firebase.auth.ktx.auth
 import kotlinx.coroutines.tasks.await
+import com.example.myapplication.components.refreshAndSaveToken
+import com.example.myapplication.components.savePatientId
 
 @Composable
 fun GuardianSignUpScreen(navController: NavController) {
@@ -191,11 +193,9 @@ fun GuardianSignUpScreen(navController: NavController) {
                                 .await()
 
                             // 3) ID 토큰 강제 갱신 (Firestore/Storage 규칙 통과용)
-                            Firebase.auth.currentUser
-                                ?.getIdToken(true)
-                                ?.await()
-                                ?.token
-                                ?: throw Exception("ID 토큰 획득 실패")
+                            val user = Firebase.auth.currentUser
+                                ?: throw Exception("Firebase user is null")
+                            val idToken = user.refreshAndSaveToken(ctx)
 
                             // 4) 화면 전환
                             Toast.makeText(ctx, "회원가입 및 로그인 성공!", Toast.LENGTH_SHORT).show()
