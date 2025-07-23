@@ -243,10 +243,3 @@ fun Guardian_Login(navController: NavController) {
 }
 
 
-@Preview(showBackground = true)
-@Composable
-fun PreviewLogin2() {
-    Guardian_Login(navController = rememberNavController())
-}
-
-
