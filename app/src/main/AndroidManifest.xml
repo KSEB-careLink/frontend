@@ -7,8 +7,11 @@
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
 
     <!-- 위치 권한 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <!-- 추가: 포그라운드에서 로케이션 업데이트 허용 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION"/>
 
     <!-- 카메라 권한 -->
     <uses-permission android:name="android.permission.CAMERA" />
@@ -41,12 +44,13 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.NoSplash"
+        android:usesCleartextTraffic="true"
         android:networkSecurityConfig="@xml/network_security_config"
         tools:targetApi="31">
 
-
-
-
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="AIzaSyDJKW7nussHZFWpBphPIgnI_F-3nFSHXZ4" />
 
         <activity
             android:name=".MainActivity"
@@ -54,8 +58,8 @@
             android:label="@string/app_name"
             android:theme="@style/Theme.NoSplash">
             <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
 
@@ -84,6 +88,12 @@
         <receiver
             android:name=".receiver.AlarmReceiver"
             android:exported="true"/>
+
+        <!-- Foreground Service: 위치 10초 주기 전송 -->
+        <service
+            android:name=".service.LocationUpdatesService"
+            android:exported="false"
+            android:foregroundServiceType="location" />
 
     </application>
 </manifest>

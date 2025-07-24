@@ -1,5 +1,6 @@
 package com.example.myapplication.screens
 
+import android.content.Intent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -7,12 +8,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -20,18 +21,22 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.constraintlayout.compose.Dimension
 import androidx.navigation.NavController
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.example.myapplication.R
+import com.example.myapplication.service.LocationUpdatesService
 
 @Composable
 fun Patient_Alert(navController: NavController) {
-    // 조절용 값
+    val context = LocalContext.current
 
-    val textTopGap    = 24.dp
-    val circleSize    = 260.dp
-    val titleGap      = 16.dp
+    // 화면에 들어오면 위치 업데이트 서비스 정지
+    LaunchedEffect(Unit) {
+        // TODO: 위치 자동 전송 서비스 멈추기 (필요 없을 때 이 줄을 주석/삭제하세요)
+        context.stopService(Intent(context, LocationUpdatesService::class.java))
+    }
 
     // 현재 route
     val navBackStack by navController.currentBackStackEntryAsState()
@@ -77,11 +82,9 @@ fun Patient_Alert(navController: NavController) {
                 .padding(horizontal = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-
             Spacer(modifier = Modifier.height(210.dp))
 
-            // 2) 안내 문구
-            Spacer(Modifier.height(textTopGap))
+            // 안내 문구
             Text(
                 buildAnnotatedString {
                     append("불편함이나 ")
@@ -103,8 +106,8 @@ fun Patient_Alert(navController: NavController) {
                 fontSize = 25.sp
             )
 
-            // 3) 타이틀
-            Spacer(Modifier.height(titleGap))
+            // 타이틀
+            Spacer(Modifier.height(16.dp))
             Text(
                 text = "긴급 알림",
                 fontSize = 39.sp,
@@ -112,15 +115,16 @@ fun Patient_Alert(navController: NavController) {
                 modifier = Modifier.align(Alignment.CenterHorizontally)
             )
 
-            // 4) HELP 아이콘 원형으로
-            Spacer(Modifier.height(titleGap))
+            // HELP 아이콘 원형으로
+            Spacer(Modifier.height(16.dp))
             Box(
                 modifier = Modifier
-                    .size(circleSize)
+                    .size(260.dp)
                     .background(color = Color(0xFFBF0310), shape = CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                Image(
+
+            Image(
                     painter = painterResource(R.drawable.help_icon),
                     contentDescription = "HELP",
                     modifier = Modifier.size(140.dp),
