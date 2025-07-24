@@ -24,6 +24,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import okhttp3.MediaType.Companion.toMediaType
+import android.util.Log
 
 class LocationUpdatesService : Service() {
     private lateinit var fusedClient: FusedLocationProviderClient
@@ -49,21 +50,29 @@ class LocationUpdatesService : Service() {
 
         callback = object : LocationCallback() {
             override fun onLocationResult(result: LocationResult) {
-                result.lastLocation?.let { sendLocation(it) }
+                result.lastLocation?.let {
+                    Log.d("LocationSvc", "new location: ${it.latitude},${it.longitude}")
+                    sendLocation(it)
+                }
             }
         }
     }
 
     @SuppressLint("MissingPermission")
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // 0) 로그 추가
+        Log.d("LocationSvc", "onStartCommand() called")
+
         // 1) Foreground 서비스로 시작
         startForeground(1, createNotification())
 
         // 2) 권한 체크 후 위치 업데이트 요청
-        val hasFine = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) ==
-                PackageManager.PERMISSION_GRANTED
-        val hasCoarse = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) ==
-                PackageManager.PERMISSION_GRANTED
+        val hasFine =
+            ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) ==
+                    PackageManager.PERMISSION_GRANTED
+        val hasCoarse =
+            ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) ==
+                    PackageManager.PERMISSION_GRANTED
 
         if (hasFine || hasCoarse) {
             val req = LocationRequest.Builder(
@@ -98,22 +107,31 @@ class LocationUpdatesService : Service() {
 
     private fun sendLocation(loc: Location) {
         CoroutineScope(Dispatchers.IO).launch {
-            val token = getSharedPreferences("MyPrefs", MODE_PRIVATE)
-                .getString("jwt_token", null) ?: return@launch
+            val prefs = getSharedPreferences("MyPrefs", MODE_PRIVATE)
+            val token = prefs.getString("jwt_token", null) ?: run {
+                Log.e("LocationSvc", "No JWT token in prefs, skip update")
+                return@launch
+            }
 
             val json = JSONObject().apply {
                 put("latitude", loc.latitude)
                 put("longitude", loc.longitude)
             }.toString()
-
             val body = json.toRequestBody("application/json".toMediaType())
             val req = Request.Builder()
-                .url("${BuildConfig.BASE_URL}/update")
+                .url("${BuildConfig.BASE_URL}/location/update")
                 .addHeader("Authorization", "Bearer $token")
                 .post(body)
                 .build()
 
-            client.newCall(req).execute().close()
+            try {
+                val resp = client.newCall(req).execute()
+                Log.d("LocationSvc", "update HTTP code=${resp.code}")
+                resp.close()
+            } catch (e: Exception) {
+                Log.e("LocationSvc", "update failed", e)
+
+            }
         }
     }
 }
