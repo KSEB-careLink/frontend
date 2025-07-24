@@ -1,5 +1,6 @@
 package com.example.myapplication.screens
 
+import android.content.Context
 import android.Manifest
 import android.content.Intent
 import android.widget.Toast
@@ -148,6 +149,12 @@ fun Code2(navController: NavController) {
                         if (linkResp.isSuccessful) {
                             Toast.makeText(context, "보호자와 연결 완료!", Toast.LENGTH_SHORT).show()
 
+                            // 2-1) 토큰을 prefs 에 저장
+                            context
+                                .getSharedPreferences("MyPrefs", Context.MODE_PRIVATE)
+                                .edit()
+                                .putString("jwt_token", idToken)
+                                .apply()
                             // → 포그라운드 서비스 시작
                             val intent = Intent(context, LocationUpdatesService::class.java)
                             ContextCompat.startForegroundService(context, intent)
