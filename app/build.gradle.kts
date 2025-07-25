@@ -3,7 +3,8 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     id("com.google.gms.google-services")
-
+    // 직렬화 플러그인
+    kotlin("plugin.serialization") version "1.9.10"
 }
 
 android {
@@ -154,6 +155,13 @@ dependencies {
     implementation("io.coil-kt:coil-compose:2.2.2")
     implementation("com.google.firebase:firebase-firestore-ktx")
     implementation("com.google.firebase:firebase-storage-ktx")
+
+    // Firebase Storage
+    implementation("com.google.firebase:firebase-storage-ktx:20.4.2")
+    // Coroutines + Play Services
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.7.3")
+    // Kotlinx Serialization
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.0")
 }
 
 
