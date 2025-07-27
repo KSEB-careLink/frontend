@@ -25,6 +25,32 @@ import com.example.myapplication.viewmodel.QuizViewModel
 import kotlinx.coroutines.delay
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
+// OkHttp
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
+
+// JSON
+import org.json.JSONObject
+
+// Android
+import com.example.myapplication.BuildConfig
+
+// Coroutines
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.launch
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.runtime.rememberCoroutineScope
+
+// 기타
+import android.util.Log
+import android.widget.Toast
+import androidx.compose.ui.platform.LocalContext
+import com.google.firebase.ktx.Firebase
+import com.google.firebase.auth.ktx.auth
+import kotlinx.coroutines.tasks.await
 
 @Composable
 fun Patient_Quiz(
@@ -32,7 +58,8 @@ fun Patient_Quiz(
     viewModel: QuizViewModel = viewModel()
 ) {
     val items by viewModel.items.collectAsState()
-    // ① 현재 문제 번호 상태 추가
+
+    // 현재 보고 있는 문제 인덱스
     var currentIndex by remember { mutableStateOf(0) }
 
     Scaffold(
@@ -53,16 +80,16 @@ fun Patient_Quiz(
                 Spacer(Modifier.height(16.dp))
                 Text("로딩 중… items.size = ${items.size}")
             } else {
-                // ② 현재 인덱스 아이템을 전달, onNext 콜백으로 인덱스 증가
+                // onNext 에서 인덱스 범위 체크
                 QuizContent(
-                    item    = items[currentIndex],
-                    onNext  = {
+                    item   = items[currentIndex],
+                    onNext = {
                         if (currentIndex < items.size - 1) {
                             currentIndex++
                         } else {
-                            // 마지막 문제까지 풀었을 때 동작 (옵션)
-                            // currentIndex = 0    // 다시 처음으로
-                            // 혹은 navController.navigate("결과화면")
+                            // 마지막 문제까지 풀었을 때 동작
+                            // 예: currentIndex = 0   // 처음으로 돌아가기
+                            // 또는 결과 화면으로 네비게이션
                         }
                     }
                 )
@@ -134,7 +161,7 @@ fun QuizContent(
         questionTime = null
     }
 
-    // 타이머: showResult == false 일 때만 동작
+    // ② 타이머: showResult == false 일 때만 동작
     LaunchedEffect(showResult) {
         if (!showResult) {
             elapsedTime = 0L
@@ -145,6 +172,13 @@ fun QuizContent(
             }
         }
     }
+
+    // 네트워크 호출 준비
+    val client = remember { OkHttpClient() }
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    // 서버 라우터에 붙인 경로에 맞춰 quiz-response 로
+    val url = BuildConfig.BASE_URL.trimEnd('/') + "/quiz-response"
 
     Column(
         modifier = Modifier
@@ -195,10 +229,7 @@ fun QuizContent(
                     ) {
                         rowItems.forEachIndexed { indexInRow, text ->
                             val flatIndex = rowIndex * 2 + indexInRow
-                            OptionButton(
-                                text = text,
-                                modifier = Modifier.weight(1f)
-                            ) {
+                            OptionButton(text = text, modifier = Modifier.weight(1f)) {
                                 selected     = flatIndex
                                 questionTime = elapsedTime
                                 showResult   = true
@@ -214,7 +245,7 @@ fun QuizContent(
             val isCorrect = selected == item.answer
 
             Text(
-                text = if (isCorrect) "정답이에요!" else "정답이 아니에요!",
+                text = if (isCorrect) "정답이에요!" else "오답이에요!",
                 fontSize = 32.sp,
                 color = if (isCorrect) Color(0xFF00A651) else Color(0xFFE2101A)
             )
@@ -239,13 +270,72 @@ fun QuizContent(
             )
 
             Spacer(Modifier.height(questionGap))
-
-            // ───────── 재시도/다음 문제 ─────────
             Spacer(Modifier.height(24.dp))
+
             Button(
                 onClick = {
                     if (isCorrect) {
-                        onNext()        // 정답이면 다음 문제로
+                        // 로그: 서버 전송 시작
+                        Log.d("QuizContent", "Sending answer to $url quizId=${item.questionId}, selected=$selected, duration=$questionTime")
+                        scope.launch {
+                            // 1) Firebase Auth ID 토큰 받아오기
+                            val idToken = try {
+                                Firebase.auth.currentUser
+                                    ?.getIdToken(false)
+                                    ?.await()
+                                    ?.token
+                            } catch (e: Exception) {
+                                Log.e("QuizContent", "Failed to fetch ID token", e)
+                                null
+                            }
+                            if (idToken.isNullOrBlank()) {
+                                Log.e("QuizContent", "No ID token available")
+                                Toast.makeText(context, "인증 토큰 없음", Toast.LENGTH_SHORT).show()
+                                return@launch
+                            }
+
+                            // 2) 요청 바디
+                            val bodyJson = JSONObject().apply {
+                                put("quizId", item.questionId.toString())
+                                put("selected_index", selected)
+                                put("duration", questionTime ?: 0)
+                            }.toString()
+                            val reqBody = bodyJson.toRequestBody("application/json".toMediaType())
+
+                            // 3) 헤더에 Authorization 추가
+                            val request = Request.Builder()
+                                .url(url)
+                                .addHeader("Authorization", "Bearer $idToken")
+                                .post(reqBody)
+                                .build()
+
+                            try {
+                                val response = withContext(Dispatchers.IO) {
+                                    client.newCall(request).execute()
+                                }
+                                Log.d("QuizContent", "Response code=${response.code}")
+                                val respBody = response.body?.string()
+                                Log.d("QuizContent", "Response body=$respBody")
+
+                                if (response.isSuccessful && respBody != null) {
+                                    val result = JSONObject(respBody).optString("result", "오류")
+                                    withContext(Dispatchers.Main) {
+                                        Toast.makeText(context, result, Toast.LENGTH_SHORT).show()
+                                        onNext()
+                                    }
+                                } else {
+                                    Log.e("QuizContent", "Server error: code=${response.code}")
+                                    withContext(Dispatchers.Main) {
+                                        Toast.makeText(context, "서버 오류: ${response.code}", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                Log.e("QuizContent", "Network error sending answer", e)
+                                withContext(Dispatchers.Main) {
+                                    Toast.makeText(context, "네트워크 오류", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        }
                     } else {
                         // 오답이면 다시 풀기
                         selected   = null
@@ -263,6 +353,8 @@ fun QuizContent(
         }
     }
 }
+
+
 
 
 @Composable

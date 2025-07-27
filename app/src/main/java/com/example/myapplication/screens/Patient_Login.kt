@@ -45,10 +45,7 @@ fun PatientLoginScreen(navController: NavController) {
     var password by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
 
-    fun saveTokenToPrefs(context: Context, token: String) {
-        val prefs = context.getSharedPreferences("MyPrefs", Context.MODE_PRIVATE)
-        prefs.edit().putString("jwt_token", token).apply()
-    }
+
 
     ConstraintLayout(
         modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp)

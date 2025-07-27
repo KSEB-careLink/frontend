@@ -50,10 +50,6 @@ fun Guardian_Login(navController: NavController) {
         prefs.edit().putString("patient_id", patientId).apply()
     }
 
-    fun saveTokenToPrefs(context: Context, token: String) {
-        val prefs = context.getSharedPreferences("MyPrefs", Context.MODE_PRIVATE)
-        prefs.edit().putString("jwt_token", token).apply()
-    }
 
     fun showToast(message: String) {
         Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
