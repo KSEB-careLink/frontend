@@ -354,9 +354,6 @@ fun QuizContent(
     }
 }
 
-
-
-
 @Composable
 private fun OptionButton(
     text: String,

@@ -165,6 +165,9 @@ dependencies {
 
     implementation("com.squareup.okhttp3:okhttp:4.10.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+
+    //7월 28일 통계 보는데 추가
+    
 }
 
 

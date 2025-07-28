@@ -15,12 +15,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.myapplication.screens.*
 import com.example.myapplication.ui.theme.MyApplicationTheme
 import com.example.myapplication.worker.WorkScheduler
+import com.google.firebase.auth.ktx.auth
+import com.google.firebase.ktx.Firebase
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -31,15 +34,13 @@ class MainActivity : ComponentActivity() {
         WorkScheduler.scheduleHourlyReminder(
             context   = this,
             startHour = 9,   // 오전 9시부터
-            endHour   = 20   // 오후 8시(20시)까지
+            endHour   = 20   // 오후 8시까지
         )
 
         setContent {
-            // Android 13+ 에서 필요: POST_NOTIFICATIONS 권한 런타임 요청
+            // Android 13+ 에서 필요: POST_NOTIFICATIONS 런타임 권한 요청
             val notificationPermissionLauncher =
-                rememberLauncherForActivityResult(
-                    ActivityResultContracts.RequestPermission()
-                ) { granted ->
+                rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
                     Log.d("MainActivity", "알림 권한 granted=$granted")
                 }
 
@@ -53,10 +54,9 @@ class MainActivity : ComponentActivity() {
                 val navController = rememberNavController()
                 val context = LocalContext.current
 
-                // ① 전체 음성 리스트 상태 (초기값은 "기본" 하나)
+                // ① 전체 음성 리스트 상태
                 var voices by remember { mutableStateOf(listOf("기본")) }
-
-                // ② 선택된 음성 상태 (선택 시 이 값이 업데이트됩니다)
+                // ② 선택된 음성 상태
                 var selectedVoice by remember { mutableStateOf<String?>(null) }
 
                 NavHost(navController = navController, startDestination = "splash") {
@@ -82,37 +82,35 @@ class MainActivity : ComponentActivity() {
                         val joinCode = backStackEntry.arguments?.getString("joinCode") ?: ""
                         Code(navController = navController, joinCode = joinCode)
                     }
-
                     composable("code2") {
-                        Code2(navController = navController)
+                        Code2(navController)
                     }
 
+                    // Main_Page: 기기(환자) 선택 화면
                     composable("main") {
                         Main_Page(navController)
                     }
-                    composable("main2") {
-                        Main_Page2(navController)
+
+                    // Main_Page2: 선택한 환자에 대한 보호자 홈
+                    composable("main2/{patientId}") { backStackEntry ->
+                        // 안전하게 patientId 꺼내기
+                        val patientId = backStackEntry.arguments?.getString("patientId")
+                            ?: return@composable
+
+                        Main_Page2(navController = navController, patientId = patientId)
                     }
                     composable("alarm") {
                         Guardian_Alarm(navController)
                     }
-
-//                    composable("alarm2") {
-//                        Guardian_Alarm2(navController)
-//                    }
-
                     composable("guardian_basic_info") {
                         GuardianBasicInfoScreen()
                     }
-
                     composable("memoryinfo") {
                         MemoryInfoInputScreen(navController)
                     }
-
                     composable("memorylist") {
                         MemoryInfoListScreen(navController)
                     }
-
                     composable("recode") {
                         Recode(
                             navController = navController,
@@ -135,6 +133,13 @@ class MainActivity : ComponentActivity() {
                     composable("quiz") {
                         Patient_Quiz(navController)
                     }
+
+                    composable("stats") {
+                        val patientId = Firebase.auth.currentUser?.uid ?: return@composable
+                        QuizStatsScreen(patientId = patientId)
+                    }
+
+
                     composable("alert") {
                         Patient_Alert(navController)
                     }
@@ -146,6 +151,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
+
 
 
 

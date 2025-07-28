@@ -20,7 +20,7 @@ import androidx.navigation.NavController
 import com.example.myapplication.R
 
 @Composable
-fun Main_Page2(navController: NavController) {
+fun Main_Page2(navController: NavController, patientId: String) {
     val buttonColor = Color(0xFF2ECCD1)
 
     ConstraintLayout(
@@ -28,7 +28,7 @@ fun Main_Page2(navController: NavController) {
             .fillMaxSize()
             .padding(horizontal = 24.dp)
     ) {
-        val (logo, btn1, btn2, btn3, btn4, btn5, btn6) = createRefs()
+        val (logo, btn1, btn2, btn3, btn4, btn5, btn6, btn7) = createRefs()
 
         // 로고
         Image(
@@ -130,11 +130,28 @@ fun Main_Page2(navController: NavController) {
         }
 
         Button(
-            onClick = { navController.navigate("location") },
+            onClick = { navController.navigate("stats") },  // 파라미터 없이 stats 로 이동
             colors = ButtonDefaults.buttonColors(containerColor = buttonColor),
             shape = RoundedCornerShape(12.dp),
             modifier = Modifier
                 .constrainAs(btn6) {
+                    top.linkTo(btn4.bottom, margin = 20.dp)
+                    start.linkTo(parent.start)
+                    end.linkTo(parent.end)
+                    width = Dimension.fillToConstraints
+                }
+                .height(56.dp)
+        ) {
+            Text("퀴즈 통계 보기", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White)
+        }
+
+
+        Button(
+            onClick = { navController.navigate("location") },
+            colors = ButtonDefaults.buttonColors(containerColor = buttonColor),
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier
+                .constrainAs(btn7) {
                     top.linkTo(btn5.bottom, margin = 20.dp)
                     start.linkTo(parent.start)
                     end.linkTo(parent.end)
