@@ -239,7 +239,7 @@ fun Recode2(navController: NavController) {
                             val uid = firebaseUser?.uid ?: ""
                             val name = firebaseUser?.displayName ?: "GuardianName"
 
-                            val uploadUrl = "https://imperial-unsubscribe-widespread-m.trycloudflare.com/registerVoice"
+                            val uploadUrl = "https://ai-service-0145.onrender.com/registerVoice"
 
                             val file = File(path)
                             val mime = "audio/mp4"
