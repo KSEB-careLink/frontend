@@ -53,7 +53,7 @@ fun Main_Page2(navController: NavController, patientId: String) {
         )
 
         Button(
-            onClick = { navController.navigate("guardian_basic_info/$patientId") },
+            onClick = { navController.navigate("guardian_basic_info") },
             colors = ButtonDefaults.buttonColors(containerColor = buttonColor),
             shape = RoundedCornerShape(12.dp),
             modifier = Modifier
