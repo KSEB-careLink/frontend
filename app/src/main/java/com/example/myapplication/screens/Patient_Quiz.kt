@@ -242,7 +242,10 @@ fun QuizContent(
         } else {
             // ───────── 결과 화면 ─────────
             Spacer(Modifier.height(100.dp))
-            val isCorrect = selected == item.answer
+            // item.answer 가 1,2,3,4 로 들어온다면 -1 해줘야 맞습니다
+            val correctIndexZeroBased = (item.answer ?: -1) - 1
+            Log.d("QuizContent", "🔍 DEBUG: item.answer=${item.answer}, correctIndexZeroBased=$correctIndexZeroBased, selected=$selected")
+            val isCorrect = (selected == correctIndexZeroBased)
 
             Text(
                 text = if (isCorrect) "정답이에요!" else "오답이에요!",
