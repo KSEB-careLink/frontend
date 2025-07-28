@@ -1,6 +1,5 @@
 package com.example.myapplication.screens
 
-import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -11,31 +10,31 @@ import com.example.myapplication.viewmodel.QuizViewModel
 import org.json.JSONObject
 
 @Composable
-fun  QuizStatsScreen(
+fun QuizStatsScreen(
     patientId: String,
     viewModel: QuizViewModel = viewModel()
 ) {
-    // 1) 네트워크 응답을 담을 상태
     var statsJson by remember { mutableStateOf<JSONObject?>(null) }
     var recommendJson by remember { mutableStateOf<JSONObject?>(null) }
     var errorMsg by remember { mutableStateOf<String?>(null) }
 
-    // 2) patientId가 바뀌거나 화면이 처음 보여질 때 fetch 호출
     LaunchedEffect(patientId) {
-        // 통계 호출
         viewModel.fetchStats(patientId) { json ->
-            if (json?.optString("error") != null) {
-                errorMsg = json.optString("error")
+            if (json?.has("error") == true) {
+                // 진짜 error 키가 있으면
+                errorMsg = json.getString("error")
             } else {
                 statsJson = json
+                errorMsg = null
             }
         }
-        // 추천 호출
         viewModel.fetchRecommend(patientId) { json ->
-            if (json?.optString("error") != null) {
-                errorMsg = json.optString("error")
+            if (json?.has("error") == true) {
+                errorMsg = json.getString("error")
             } else {
                 recommendJson = json
+                // 에러가 아니라면 유지되던 에러 메시지 지우기
+                if (errorMsg == null) errorMsg = null
             }
         }
     }
@@ -47,7 +46,6 @@ fun  QuizStatsScreen(
         if (errorMsg != null) {
             Text("오류: $errorMsg")
         } else {
-            // 통계 표시
             statsJson?.let { stats ->
                 Text("총 시도: ${stats.optInt("total_attempted")}")
                 Text("정답 수: ${stats.optInt("correct_count")}")
@@ -59,14 +57,14 @@ fun  QuizStatsScreen(
 
             Spacer(Modifier.height(16.dp))
 
-            // 추천 표시
             recommendJson?.let { rec ->
                 val arr = rec.optJSONArray("recommended_questions")
                 if (arr != null && arr.length() > 0) {
                     Text("추천 문제:")
                     for (i in 0 until arr.length()) {
                         val obj = arr.getJSONObject(i)
-                        Text("- ${obj.optString("topic", obj.optString("question", "문제 없음"))}")
+                        val title = obj.optString("topic", obj.optString("question", "문제 없음"))
+                        Text("- $title")
                     }
                 } else {
                     Text("추천된 문제가 없습니다.")
@@ -75,5 +73,6 @@ fun  QuizStatsScreen(
         }
     }
 }
+
 
 

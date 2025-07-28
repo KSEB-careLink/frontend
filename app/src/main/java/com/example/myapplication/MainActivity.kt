@@ -22,8 +22,7 @@ import androidx.navigation.compose.rememberNavController
 import com.example.myapplication.screens.*
 import com.example.myapplication.ui.theme.MyApplicationTheme
 import com.example.myapplication.worker.WorkScheduler
-import com.google.firebase.auth.ktx.auth
-import com.google.firebase.ktx.Firebase
+import androidx.navigation.navArgument
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -134,8 +133,13 @@ class MainActivity : ComponentActivity() {
                         Patient_Quiz(navController)
                     }
 
-                    composable("stats") {
-                        val patientId = Firebase.auth.currentUser?.uid ?: return@composable
+                    composable(
+                        route = "stats/{patientId}",
+                        arguments = listOf(navArgument("patientId") {
+                            type = NavType.StringType
+                        })
+                    ) { backStack ->
+                        val patientId = backStack.arguments!!.getString("patientId")!!
                         QuizStatsScreen(patientId = patientId)
                     }
 
