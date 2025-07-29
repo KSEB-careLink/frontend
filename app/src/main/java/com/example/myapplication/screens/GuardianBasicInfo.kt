@@ -1,5 +1,7 @@
 package com.example.myapplication.screens
 
+import android.content.Context
+import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -9,15 +11,25 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.constraintlayout.compose.ConstraintLayout
 import androidx.constraintlayout.compose.Dimension
-import androidx.navigation.compose.rememberNavController
+import com.example.myapplication.BuildConfig
 import com.example.myapplication.R
+import com.google.firebase.auth.ktx.auth
+import com.google.firebase.ktx.Firebase
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
+import okhttp3.*
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONObject
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @Composable
 fun GuardianBasicInfoScreen() {
@@ -25,6 +37,15 @@ fun GuardianBasicInfoScreen() {
     var birthday by remember { mutableStateOf("") }
     var relationship by remember { mutableStateOf("") }
     var tone by remember { mutableStateOf("다정한") }
+
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    val client = remember { OkHttpClient() }
+
+    fun savePatientIdToPrefs(context: Context, patientId: String) {
+        val prefs = context.getSharedPreferences("MyPrefs", Context.MODE_PRIVATE)
+        prefs.edit().putString("patient_id", patientId).apply()
+    }
 
     ConstraintLayout(
         modifier = Modifier
@@ -39,7 +60,6 @@ fun GuardianBasicInfoScreen() {
             question2, subText, toneButtons, submitButton
         ) = createRefs()
 
-        // 상단 로고
         Image(
             painter = painterResource(id = R.drawable.rogo),
             contentDescription = "Logo",
@@ -52,7 +72,6 @@ fun GuardianBasicInfoScreen() {
                 }
         )
 
-        // 제목
         Text(
             "기본 정보 입력",
             fontSize = 24.sp,
@@ -64,7 +83,6 @@ fun GuardianBasicInfoScreen() {
             }
         )
 
-        // 이름 라벨
         Text(
             "이름",
             fontSize = 16.sp,
@@ -75,7 +93,6 @@ fun GuardianBasicInfoScreen() {
             }
         )
 
-        // 이름 입력
         TextField(
             value = name,
             onValueChange = { name = it },
@@ -95,7 +112,6 @@ fun GuardianBasicInfoScreen() {
                 .height(56.dp)
         )
 
-        // 생일 라벨
         Text(
             "생일",
             fontSize = 16.sp,
@@ -106,7 +122,6 @@ fun GuardianBasicInfoScreen() {
             }
         )
 
-        // 생일 입력
         TextField(
             value = birthday,
             onValueChange = { birthday = it },
@@ -126,7 +141,6 @@ fun GuardianBasicInfoScreen() {
                 .height(56.dp)
         )
 
-        // 질문 1: 호칭
         Text(
             "1. 보호 대상을 부르는 호칭을 알려주세요",
             fontSize = 16.sp,
@@ -137,7 +151,6 @@ fun GuardianBasicInfoScreen() {
             }
         )
 
-        // 호칭 입력
         TextField(
             value = relationship,
             onValueChange = { relationship = it },
@@ -157,7 +170,6 @@ fun GuardianBasicInfoScreen() {
                 .height(56.dp)
         )
 
-        // 질문 2: 말투
         Text(
             "2. 원하는 말투",
             fontSize = 16.sp,
@@ -168,7 +180,6 @@ fun GuardianBasicInfoScreen() {
             }
         )
 
-        // 서브텍스트
         Text(
             "(의상 문장 생성, 보호자 음성에 이용)",
             fontSize = 12.sp,
@@ -179,7 +190,6 @@ fun GuardianBasicInfoScreen() {
             }
         )
 
-        // 말투 선택 버튼들
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceEvenly,
@@ -208,10 +218,63 @@ fun GuardianBasicInfoScreen() {
             }
         }
 
-        // 완료 버튼
         Button(
             onClick = {
-                // TODO: name, birthday, relationship, tone 처리 로직 작성
+                coroutineScope.launch {
+                    val user = Firebase.auth.currentUser
+                    if (user == null) {
+                        Toast.makeText(context, "로그인이 필요합니다.", Toast.LENGTH_SHORT).show()
+                        return@launch
+                    }
+
+                    val idToken = user.getIdToken(true).await().token
+                    if (idToken.isNullOrBlank()) {
+                        Toast.makeText(context, "토큰 가져오기 실패", Toast.LENGTH_SHORT).show()
+                        return@launch
+                    }
+
+                    val json = JSONObject().apply {
+                        put("patientUid", targetPatientUid)
+                        put("name", name)
+                        put("birthDate", birthday)
+                        put("relationship", relationship)
+                        put("tone", tone)
+                    }
+
+                    val requestBody = json.toString()
+                        .toRequestBody("application/json".toMediaType())
+
+                    val request = Request.Builder()
+                        .url("${BuildConfig.BASE_URL}/register/register")
+                        .addHeader("Authorization", "Bearer $idToken")
+                        .post(requestBody)
+                        .build()
+
+                    try {
+                        withContext(Dispatchers.IO) {
+                            client.newCall(request).execute().use { response ->
+                                if (response.isSuccessful) {
+                                    val responseBody = response.body?.string()
+                                    val responseJson = JSONObject(responseBody ?: "")
+                                    val patientId = responseJson.getString("patientId")
+                                    savePatientIdToPrefs(context, patientId)
+                                    withContext(Dispatchers.Main) {
+                                        Toast.makeText(context, "등록 완료", Toast.LENGTH_SHORT).show()
+                                        // navController.navigate(...) 가능
+                                    }
+                                } else {
+                                    val error = response.body?.string()
+                                    withContext(Dispatchers.Main) {
+                                        Toast.makeText(context, "실패: $error", Toast.LENGTH_LONG).show()
+                                    }
+                                }
+                            }
+                        }
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                        Toast.makeText(context, "예외 발생: ${e.message}", Toast.LENGTH_LONG).show()
+                    }
+                }
             },
             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4DD0E1)),
             shape = RoundedCornerShape(10.dp),
@@ -226,7 +289,9 @@ fun GuardianBasicInfoScreen() {
         ) {
             Text("완료", color = Color.White, fontSize = 16.sp)
         }
+
     }
 }
+
 
 
