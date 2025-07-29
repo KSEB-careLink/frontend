@@ -23,6 +23,8 @@ import com.example.myapplication.screens.*
 import com.example.myapplication.ui.theme.MyApplicationTheme
 import com.example.myapplication.worker.WorkScheduler
 import androidx.navigation.navArgument
+import com.example.myapplication.viewmodel.QuizStatsViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -53,9 +55,7 @@ class MainActivity : ComponentActivity() {
                 val navController = rememberNavController()
                 val context = LocalContext.current
 
-                // ① 전체 음성 리스트 상태
                 var voices by remember { mutableStateOf(listOf("기본")) }
-                // ② 선택된 음성 상태
                 var selectedVoice by remember { mutableStateOf<String?>(null) }
 
                 NavHost(navController = navController, startDestination = "splash") {
@@ -84,65 +84,93 @@ class MainActivity : ComponentActivity() {
                     composable("code2") {
                         Code2(navController)
                     }
-
-                    // Main_Page: 기기(환자) 선택 화면
                     composable("main") {
                         Main_Page(navController)
                     }
-
-                    // Main_Page2: 선택한 환자에 대한 보호자 홈
-                    composable("main2/{patientId}") { backStackEntry ->
-                        // 안전하게 patientId 꺼내기
-                        val patientId = backStackEntry.arguments?.getString("patientId")
-                            ?: return@composable
-
+                    composable(
+                        "main2/{patientId}",
+                        arguments = listOf(navArgument("patientId") { type = NavType.StringType })
+                    ) { backStackEntry ->
+                        val patientId = backStackEntry.arguments?.getString("patientId") ?: return@composable
                         Main_Page2(navController = navController, patientId = patientId)
                     }
                     composable("alarm") {
                         Guardian_Alarm(navController)
                     }
-                    composable("guardian_basic_info") {
-                        GuardianBasicInfoScreen()
+                    composable(
+                        "guardian_basic_info/{patientId}",
+                        arguments = listOf(navArgument("patientId") { type = NavType.StringType })
+                    ) { backStackEntry ->
+                        val patientId = backStackEntry.arguments?.getString("patientId") ?: return@composable
+                        GuardianBasicInfoScreen(patientId)
                     }
-                    composable("memoryinfo") {
-                        MemoryInfoInputScreen(navController)
+                    composable(
+                        "memoryinfo/{patientId}",
+                        arguments = listOf(navArgument("patientId") { type = NavType.StringType })
+                    ) { backStackEntry ->
+                        val patientId = backStackEntry.arguments?.getString("patientId") ?: return@composable
+                        MemoryInfoInputScreen(navController, patientId)
                     }
-                    composable("memorylist") {
-                        MemoryInfoListScreen(navController)
+                    composable(
+                        "memorylist/{patientId}",
+                        arguments = listOf(navArgument("patientId") { type = NavType.StringType })
+                    ) { backStackEntry ->
+                        val patientId = backStackEntry.arguments?.getString("patientId") ?: return@composable
+                        MemoryInfoListScreen(navController, patientId)
                     }
-                    composable("recode") {
+                    composable(
+                        "recode/{patientId}",
+                        arguments = listOf(navArgument("patientId") { type = NavType.StringType })
+                    ) { backStackEntry ->
+                        val patientId = backStackEntry.arguments?.getString("patientId") ?: return@composable
                         Recode(
                             navController = navController,
+                            patientId = patientId,
                             voices = voices,
-                            onSelectVoice = { voiceName ->
-                                selectedVoice = voiceName
-                                Log.d("Recode", "선택된 음성: $voiceName")
-                            }
+                            onSelectVoice = { selectedVoice = it }
                         )
                     }
-                    composable("recode2") {
-                        Recode2(navController)
+                    composable(
+                        "recode2/{patientId}",
+                        arguments = listOf(navArgument("patientId") { type = NavType.StringType })
+                    ) { backStackEntry ->
+                        val patientId = backStackEntry.arguments?.getString("patientId") ?: return@composable
+                        Recode2(navController, patientId)
                     }
-                    composable("location") {
-                        LocationScreen(navController)
+                    composable(
+                        "location/{patientId}",
+                        arguments = listOf(navArgument("patientId") { type = NavType.StringType })
+                    ) { backStackEntry ->
+                        val patientId = backStackEntry.arguments?.getString("patientId") ?: return@composable
+                        LocationScreen(navController, patientId)
                     }
-                    composable("sentence") {
-                        Patient_Sentence(navController)
+                    composable(
+                        "sentence/{patientId}",
+                        arguments = listOf(navArgument("patientId") { type = NavType.StringType })
+                    ) { backStackEntry ->
+                        val patientId = backStackEntry.arguments?.getString("patientId") ?: return@composable
+                        Patient_Sentence(navController, patientId)
                     }
-                    composable("quiz") {
-                        Patient_Quiz(navController)
+                    composable(
+                        "quiz/{patientId}",
+                        arguments = listOf(navArgument("patientId") { type = NavType.StringType })
+                    ) { backStackEntry ->
+                        val patientId = backStackEntry.arguments?.getString("patientId") ?: return@composable
+                        Patient_Quiz(navController, patientId)
                     }
-
                     composable(
                         route = "stats/{patientId}",
-                        arguments = listOf(navArgument("patientId") {
-                            type = NavType.StringType
-                        })
-                    ) { backStack ->
-                        val patientId = backStack.arguments!!.getString("patientId")!!
-                        QuizStatsScreen(patientId = patientId)
-                    }
+                        arguments = listOf(navArgument("patientId") { type = NavType.StringType })
+                    ) { backStackEntry ->
+                        val patientId = backStackEntry.arguments?.getString("patientId") ?: return@composable
+                        val quizStatsViewModel: QuizStatsViewModel = viewModel()
 
+                        LaunchedEffect(Unit) {
+                            quizStatsViewModel.setPatientId(patientId)
+                        }
+
+                        QuizStatsScreen(quizStatsViewModel = quizStatsViewModel)
+                    }
 
                     composable("alert") {
                         Patient_Alert(navController)

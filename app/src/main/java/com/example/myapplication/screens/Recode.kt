@@ -24,6 +24,7 @@ import com.example.myapplication.R
 @Composable
 fun Recode(
     navController: NavController,
+    patientId: String,
     voices: List<String>,
     onSelectVoice: (String) -> Unit
 ) {
@@ -130,6 +131,7 @@ fun PreviewRecode() {
     val dummy = listOf("기본", "A", "B")
     Recode(
         navController = rememberNavController(),
+        patientId = "dummyId", // ✅ 여기에 추가
         voices = dummy,
         onSelectVoice = { /* TODO */ }
     )

@@ -1,3 +1,4 @@
+// QuizStatsScreen.kt
 package com.example.myapplication.screens
 
 import androidx.compose.foundation.layout.*
@@ -6,41 +7,45 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.myapplication.viewmodel.QuizStatsViewModel
 import com.example.myapplication.viewmodel.QuizViewModel
 import org.json.JSONObject
 
 @Composable
 fun QuizStatsScreen(
-    patientId: String,
-    viewModel: QuizViewModel = viewModel()
+    quizStatsViewModel: QuizStatsViewModel = viewModel(),
+    quizViewModel: QuizViewModel = viewModel()
 ) {
+    val patientId by quizStatsViewModel.patientId.collectAsState()
+
     var statsJson by remember { mutableStateOf<JSONObject?>(null) }
     var recommendJson by remember { mutableStateOf<JSONObject?>(null) }
     var errorMsg by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(patientId) {
-        viewModel.fetchStats(patientId) { json ->
-            if (json?.has("error") == true) {
-                // 진짜 error 키가 있으면
-                errorMsg = json.getString("error")
-            } else {
-                statsJson = json
-                errorMsg = null
+        patientId?.let {
+            quizViewModel.fetchStats(it) { json ->
+                if (json?.has("error") == true) {
+                    errorMsg = json.getString("error")
+                } else {
+                    statsJson = json
+                    errorMsg = null
+                }
             }
-        }
-        viewModel.fetchRecommend(patientId) { json ->
-            if (json?.has("error") == true) {
-                errorMsg = json.getString("error")
-            } else {
-                recommendJson = json
-                // 에러가 아니라면 유지되던 에러 메시지 지우기
-                if (errorMsg == null) errorMsg = null
+
+            quizViewModel.fetchRecommend(it) { json ->
+                if (json?.has("error") == true) {
+                    errorMsg = json.getString("error")
+                } else {
+                    recommendJson = json
+                    if (errorMsg == null) errorMsg = null
+                }
             }
         }
     }
 
     Column(modifier = Modifier.padding(16.dp)) {
-        Text("환자 ID: $patientId")
+        Text("환자 ID: ${patientId ?: "-"}")
         Spacer(Modifier.height(8.dp))
 
         if (errorMsg != null) {
@@ -73,6 +78,8 @@ fun QuizStatsScreen(
         }
     }
 }
+
+
 
 
 

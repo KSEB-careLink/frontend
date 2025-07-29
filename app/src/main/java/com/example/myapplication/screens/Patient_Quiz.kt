@@ -3,6 +3,8 @@ package com.example.myapplication.screens
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Timer
@@ -12,54 +14,36 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import androidx.navigation.compose.currentBackStackEntryAsState
+import com.example.myapplication.BuildConfig
 import com.example.myapplication.R
 import com.example.myapplication.data.DatasetItem
 import com.example.myapplication.viewmodel.QuizViewModel
-import kotlinx.coroutines.delay
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.rememberScrollState
-// OkHttp
+import com.google.firebase.auth.ktx.auth
+import com.google.firebase.ktx.Firebase
+import kotlinx.coroutines.*
+import kotlinx.coroutines.tasks.await
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
-
-// JSON
 import org.json.JSONObject
-
-// Android
-import com.example.myapplication.BuildConfig
-
-// Coroutines
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.launch
-import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.compose.runtime.rememberCoroutineScope
-
-// 기타
 import android.util.Log
 import android.widget.Toast
-import androidx.compose.ui.platform.LocalContext
-import com.google.firebase.ktx.Firebase
-import com.google.firebase.auth.ktx.auth
-import kotlinx.coroutines.tasks.await
 
 @Composable
 fun Patient_Quiz(
     navController: NavController,
-    viewModel: QuizViewModel = viewModel()
+    patientId: String,
+    quizViewModel: QuizViewModel = viewModel()
 ) {
-    val items by viewModel.items.collectAsState()
-
-    // 현재 보고 있는 문제 인덱스
+    val items by quizViewModel.items.collectAsState()
     var currentIndex by remember { mutableStateOf(0) }
 
     Scaffold(
@@ -80,16 +64,11 @@ fun Patient_Quiz(
                 Spacer(Modifier.height(16.dp))
                 Text("로딩 중… items.size = ${items.size}")
             } else {
-                // onNext 에서 인덱스 범위 체크
                 QuizContent(
-                    item   = items[currentIndex],
+                    item = items[currentIndex],
                     onNext = {
                         if (currentIndex < items.size - 1) {
                             currentIndex++
-                        } else {
-                            // 마지막 문제까지 풀었을 때 동작
-                            // 예: currentIndex = 0   // 처음으로 돌아가기
-                            // 또는 결과 화면으로 네비게이션
                         }
                     }
                 )
@@ -98,24 +77,23 @@ fun Patient_Quiz(
     }
 }
 
-
 @Composable
 private fun QuizBottomBar(navController: NavController) {
     val navBackStack by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStack?.destination?.route
     val navColors = NavigationBarItemDefaults.colors(
-        indicatorColor      = Color.Transparent,
-        selectedIconColor   = Color(0xFF00C4B4),
+        indicatorColor = Color.Transparent,
+        selectedIconColor = Color(0xFF00C4B4),
         unselectedIconColor = Color(0xFF888888),
-        selectedTextColor   = Color(0xFF00C4B4),
+        selectedTextColor = Color(0xFF00C4B4),
         unselectedTextColor = Color(0xFF888888)
     )
 
     NavigationBar {
         listOf(
             "sentence" to "회상문장",
-            "quiz"     to "회상퀴즈",
-            "alert"    to "긴급알림"
+            "quiz" to "회상퀴즈",
+            "alert" to "긴급알림"
         ).forEach { (route, label) ->
             NavigationBarItem(
                 icon = { Icon(Icons.Default.Timer, contentDescription = label) },
@@ -138,30 +116,26 @@ private fun QuizBottomBar(navController: NavController) {
 @Composable
 fun QuizContent(
     item: DatasetItem,
-    onNext: () -> Unit    // 다음 문제로 넘어갈 콜백
+    onNext: () -> Unit
 ) {
-    // — 레이아웃 값들 —
-    val speakerGap  = 16.dp
-    val greyGap     = 16.dp
-    val greyHeight  = 450.dp
-    val greyCorner  = 12.dp
+    val speakerGap = 16.dp
+    val greyGap = 16.dp
+    val greyHeight = 450.dp
+    val greyCorner = 12.dp
     val questionGap = 16.dp
-    val optionGap   = 12.dp
+    val optionGap = 12.dp
 
-    // — 상태들 —
-    var selected     by remember { mutableStateOf<Int?>(null) }
-    var showResult   by remember { mutableStateOf(false) }
-    var elapsedTime  by remember { mutableStateOf(0L) }
+    var selected by remember { mutableStateOf<Int?>(null) }
+    var showResult by remember { mutableStateOf(false) }
+    var elapsedTime by remember { mutableStateOf(0L) }
     var questionTime by remember { mutableStateOf<Long?>(null) }
 
-    // ① 새로운 item이 들어올 때마다 상태 초기화
     LaunchedEffect(item.questionId) {
-        selected     = null
-        showResult   = false
+        selected = null
+        showResult = false
         questionTime = null
     }
 
-    // ② 타이머: showResult == false 일 때만 동작
     LaunchedEffect(showResult) {
         if (!showResult) {
             elapsedTime = 0L
@@ -173,11 +147,9 @@ fun QuizContent(
         }
     }
 
-    // 네트워크 호출 준비
     val client = remember { OkHttpClient() }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
-    // 서버 라우터에 붙인 경로에 맞춰 quiz-response 로
     val url = BuildConfig.BASE_URL.trimEnd('/') + "/quiz-response"
 
     Column(
@@ -188,36 +160,25 @@ fun QuizContent(
     ) {
         Spacer(Modifier.height(24.dp))
 
-        // ───────── 타이머 ─────────
         if (!showResult) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.Timer, contentDescription = "타이머", modifier = Modifier.size(24.dp))
                 Spacer(Modifier.width(8.dp))
-                Text(
-                    text = String.format("%02d:%02d", elapsedTime / 60, elapsedTime % 60),
-                    fontSize = 20.sp
-                )
+                Text(text = String.format("%02d:%02d", elapsedTime / 60, elapsedTime % 60), fontSize = 20.sp)
             }
             Spacer(Modifier.height(speakerGap))
-        }
-
-        if (!showResult) {
-            // ───────── 리마인더 + 질문 ─────────
             Text(text = item.reminder, fontSize = 18.sp, lineHeight = 24.sp)
             Spacer(Modifier.height(greyGap))
-
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(greyHeight)
                     .background(Color(0xFFEDE9F5), RoundedCornerShape(greyCorner))
             )
-
             Spacer(Modifier.height(questionGap))
             Text(item.question, fontSize = 28.sp, color = Color(0xFF00C4B4))
             Spacer(Modifier.height(questionGap))
 
-            // ───────── 옵션 버튼 ─────────
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(optionGap)
@@ -230,21 +191,17 @@ fun QuizContent(
                         rowItems.forEachIndexed { indexInRow, text ->
                             val flatIndex = rowIndex * 2 + indexInRow
                             OptionButton(text = text, modifier = Modifier.weight(1f)) {
-                                selected     = flatIndex
+                                selected = flatIndex
                                 questionTime = elapsedTime
-                                showResult   = true
+                                showResult = true
                             }
                         }
                     }
                 }
             }
-
         } else {
-            // ───────── 결과 화면 ─────────
             Spacer(Modifier.height(100.dp))
-            // item.answer 가 1,2,3,4 로 들어온다면 -1 해줘야 맞습니다
             val correctIndexZeroBased = (item.answer ?: -1) - 1
-            Log.d("QuizContent", "🔍 DEBUG: item.answer=${item.answer}, correctIndexZeroBased=$correctIndexZeroBased, selected=$selected")
             val isCorrect = (selected == correctIndexZeroBased)
 
             Text(
@@ -267,37 +224,25 @@ fun QuizContent(
             )
 
             Spacer(Modifier.height(16.dp))
-            Text(
-                text = if (isCorrect) "정말 잘 기억하셨어요😊" else "다시 기억해볼까요?",
-                fontSize = 20.sp
-            )
-
+            Text(text = if (isCorrect) "정말 잘 기억하셨어요😊" else "다시 기억해볼까요?", fontSize = 20.sp)
             Spacer(Modifier.height(questionGap))
             Spacer(Modifier.height(24.dp))
 
             Button(
                 onClick = {
                     if (isCorrect) {
-                        // 로그: 서버 전송 시작
-                        Log.d("QuizContent", "Sending answer to $url quizId=${item.questionId}, selected=$selected, duration=$questionTime")
                         scope.launch {
-                            // 1) Firebase Auth ID 토큰 받아오기
                             val idToken = try {
-                                Firebase.auth.currentUser
-                                    ?.getIdToken(false)
-                                    ?.await()
-                                    ?.token
+                                Firebase.auth.currentUser?.getIdToken(false)?.await()?.token
                             } catch (e: Exception) {
                                 Log.e("QuizContent", "Failed to fetch ID token", e)
                                 null
                             }
                             if (idToken.isNullOrBlank()) {
-                                Log.e("QuizContent", "No ID token available")
                                 Toast.makeText(context, "인증 토큰 없음", Toast.LENGTH_SHORT).show()
                                 return@launch
                             }
 
-                            // 2) 요청 바디
                             val bodyJson = JSONObject().apply {
                                 put("quizId", item.questionId.toString())
                                 put("selected_index", selected)
@@ -305,7 +250,6 @@ fun QuizContent(
                             }.toString()
                             val reqBody = bodyJson.toRequestBody("application/json".toMediaType())
 
-                            // 3) 헤더에 Authorization 추가
                             val request = Request.Builder()
                                 .url(url)
                                 .addHeader("Authorization", "Bearer $idToken")
@@ -316,10 +260,7 @@ fun QuizContent(
                                 val response = withContext(Dispatchers.IO) {
                                     client.newCall(request).execute()
                                 }
-                                Log.d("QuizContent", "Response code=${response.code}")
                                 val respBody = response.body?.string()
-                                Log.d("QuizContent", "Response body=$respBody")
-
                                 if (response.isSuccessful && respBody != null) {
                                     val result = JSONObject(respBody).optString("result", "오류")
                                     withContext(Dispatchers.Main) {
@@ -327,21 +268,18 @@ fun QuizContent(
                                         onNext()
                                     }
                                 } else {
-                                    Log.e("QuizContent", "Server error: code=${response.code}")
                                     withContext(Dispatchers.Main) {
                                         Toast.makeText(context, "서버 오류: ${response.code}", Toast.LENGTH_SHORT).show()
                                     }
                                 }
                             } catch (e: Exception) {
-                                Log.e("QuizContent", "Network error sending answer", e)
                                 withContext(Dispatchers.Main) {
                                     Toast.makeText(context, "네트워크 오류", Toast.LENGTH_SHORT).show()
                                 }
                             }
                         }
                     } else {
-                        // 오답이면 다시 풀기
-                        selected   = null
+                        selected = null
                         showResult = false
                     }
                 },
@@ -372,6 +310,7 @@ private fun OptionButton(
         Text(text, color = Color.White)
     }
 }
+
 
 
 

@@ -38,7 +38,7 @@ import okhttp3.RequestBody
 import android.content.Context
 
 @Composable
-fun MemoryInfoInputScreen(navController: NavController) {
+fun MemoryInfoInputScreen(navController: NavController, patientId: String){
     var imageUri by remember { mutableStateOf<Uri?>(null) }
     var description by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }

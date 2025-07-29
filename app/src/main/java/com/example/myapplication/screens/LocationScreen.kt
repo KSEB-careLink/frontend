@@ -28,8 +28,9 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 
 @OptIn(ExperimentalPermissionsApi::class)
+
 @Composable
-fun LocationScreen(navController: NavController) {
+fun LocationScreen(navController: NavController, patientId: String) {
     val context = LocalContext.current
 
     // 1) 위치 권한 상태

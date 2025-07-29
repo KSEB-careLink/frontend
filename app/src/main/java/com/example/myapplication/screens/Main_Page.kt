@@ -1,25 +1,23 @@
 package com.example.myapplication.screens
 
+import android.content.Context
 import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import androidx.compose.material3.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.example.myapplication.R
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.KeyboardArrowRight
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
@@ -27,6 +25,14 @@ import kotlinx.coroutines.tasks.await
 
 @Composable
 fun Main_Page(navController: NavController) {
+    val context = LocalContext.current
+
+    // 🔹 SharedPreferences 저장 함수
+    fun savePatientIdToPrefs(context: Context, patientId: String) {
+        val prefs = context.getSharedPreferences("MyPrefs", Context.MODE_PRIVATE)
+        prefs.edit().putString("patient_id", patientId).apply()
+    }
+
     // 1) 로그인된 보호자 UID
     val guardianUid = Firebase.auth.currentUser?.uid
 
@@ -42,7 +48,6 @@ fun Main_Page(navController: NavController) {
                     .await()
                 linkedPatients = doc.get("linkedPatients") as? List<String> ?: emptyList()
             } catch (e: Exception) {
-                // 읽기 실패 시 안내
                 linkedPatients = emptyList()
             }
         }
@@ -80,7 +85,7 @@ fun Main_Page(navController: NavController) {
 
         Spacer(modifier = Modifier.height(54.dp))
 
-        // ─── 2) 연결된 환자(장치) 리스트 ─────────────────────
+        // ─── 2) 연결된 환자 리스트 ─────────────────────
         Column(
             modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -91,7 +96,7 @@ fun Main_Page(navController: NavController) {
                 linkedPatients.forEach { patientId ->
                     Button(
                         onClick = {
-                            // patientId 를 param 으로 넘겨서 main2 로 이동
+                            savePatientIdToPrefs(context, patientId)
                             navController.navigate("main2/$patientId")
                         },
                         modifier = Modifier
@@ -119,7 +124,7 @@ fun Main_Page(navController: NavController) {
 
         Spacer(modifier = Modifier.weight(1f))
 
-        // ─── 3) 빈 공간에 스마트폰 이모지 ─────────────────────
+        // ─── 3) 스마트폰 이모지 ─────────────────────
         Box(
             modifier = Modifier.fillMaxWidth(),
             contentAlignment = Alignment.Center
@@ -129,7 +134,7 @@ fun Main_Page(navController: NavController) {
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // ─── 4) 환자의 기기 추가 버튼 ─────────────────────
+        // ─── 4) 환자 추가 버튼 ─────────────────────
         Button(
             onClick = { navController.navigate("addDevice") },
             modifier = Modifier
@@ -143,6 +148,7 @@ fun Main_Page(navController: NavController) {
         }
     }
 }
+
 
 
 

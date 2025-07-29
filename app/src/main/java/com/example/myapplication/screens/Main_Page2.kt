@@ -1,18 +1,18 @@
 package com.example.myapplication.screens
 
+import android.content.Context
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.background
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -23,6 +23,13 @@ import com.example.myapplication.R
 @Composable
 fun Main_Page2(navController: NavController, patientId: String) {
     val buttonColor = Color(0xFF2ECCD1)
+    val context = LocalContext.current
+
+    // SharedPreferences에서 patient_id 가져오기
+    val patientId = remember {
+        val prefs = context.getSharedPreferences("MyPrefs", Context.MODE_PRIVATE)
+        prefs.getString("patient_id", "") ?: ""
+    }
 
     Column(
         modifier = Modifier
@@ -42,18 +49,8 @@ fun Main_Page2(navController: NavController, patientId: String) {
         )
 
         // 버튼 목록
-        val buttons = listOf(
-            "기본 정보 입력" to "guardian_basic_info",
-            "회상 정보 입력" to "memoryinfo",
-            "회상 정보 데이터 확인" to "memorylist",
-            "알림 전달" to "alarm",
-            "보호자 음성 등록" to "Recode",
-            "퀴즈 통계 보기" to "stats",
-            "위치 확인" to "location"
-        )
-
         Button(
-            onClick = { navController.navigate("guardian_basic_info") },
+            onClick = { navController.navigate("guardian_basic_info/$patientId") },
             colors = ButtonDefaults.buttonColors(containerColor = buttonColor),
             shape = RoundedCornerShape(12.dp),
             modifier = Modifier
@@ -69,7 +66,7 @@ fun Main_Page2(navController: NavController, patientId: String) {
         }
 
         Button(
-            onClick = { navController.navigate("memoryinfo") },
+            onClick = { navController.navigate("memoryinfo/$patientId") },
             colors = ButtonDefaults.buttonColors(containerColor = buttonColor),
             shape = RoundedCornerShape(12.dp),
             modifier = Modifier
@@ -85,7 +82,7 @@ fun Main_Page2(navController: NavController, patientId: String) {
         }
 
         Button(
-            onClick = { navController.navigate("memorylist") },
+            onClick = { navController.navigate("memorylist/$patientId") },
             colors = ButtonDefaults.buttonColors(containerColor = buttonColor),
             shape = RoundedCornerShape(12.dp),
             modifier = Modifier
@@ -101,7 +98,7 @@ fun Main_Page2(navController: NavController, patientId: String) {
         }
 
         Button(
-            onClick = { navController.navigate("alarm") },
+            onClick = { navController.navigate("alarm/$patientId") },
             colors = ButtonDefaults.buttonColors(containerColor = buttonColor),
             shape = RoundedCornerShape(12.dp),
             modifier = Modifier
@@ -117,7 +114,7 @@ fun Main_Page2(navController: NavController, patientId: String) {
         }
 
         Button(
-            onClick = { navController.navigate("Recode") },
+            onClick = { navController.navigate("Recode/$patientId") },
             colors = ButtonDefaults.buttonColors(containerColor = buttonColor),
             shape = RoundedCornerShape(12.dp),
             modifier = Modifier
@@ -133,7 +130,7 @@ fun Main_Page2(navController: NavController, patientId: String) {
         }
 
         Button(
-            onClick = { navController.navigate("stats") },
+            onClick = { navController.navigate("stats/$patientId") },
             colors = ButtonDefaults.buttonColors(containerColor = buttonColor),
             shape = RoundedCornerShape(12.dp),
             modifier = Modifier
@@ -149,7 +146,7 @@ fun Main_Page2(navController: NavController, patientId: String) {
         }
 
         Button(
-            onClick = { navController.navigate("location") },
+            onClick = { navController.navigate("location/$patientId") },
             colors = ButtonDefaults.buttonColors(containerColor = buttonColor),
             shape = RoundedCornerShape(12.dp),
             modifier = Modifier
@@ -165,6 +162,7 @@ fun Main_Page2(navController: NavController, patientId: String) {
         }
     }
 }
+
 
 
 

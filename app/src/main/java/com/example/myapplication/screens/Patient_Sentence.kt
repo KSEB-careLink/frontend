@@ -40,7 +40,7 @@ import com.example.myapplication.worker.ReminderWorker
 import java.util.concurrent.TimeUnit
 
 @Composable
-fun Patient_Sentence(navController: NavController) {
+fun Patient_Sentence(navController: NavController, patientId: String) {
     // ✏️ 조절용 값들
     val speakerTopGap   = 16.dp
     val greyBoxTopGap   = 16.dp
@@ -205,10 +205,6 @@ fun Patient_Sentence(navController: NavController) {
     }
 }
 
-@Preview(showBackground = true)
-@Composable
-fun PreviewPatient_Sentence() {
-    Patient_Sentence(navController = rememberNavController())
-}
+
 
 

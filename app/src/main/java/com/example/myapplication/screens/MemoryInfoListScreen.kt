@@ -56,7 +56,7 @@ data class MemoryItemCloud(
 )
 
 @Composable
-fun MemoryInfoListScreen(navController: NavController) {
+fun MemoryInfoListScreen(navController: NavController, patientId: String) {
     val memoryList = remember { mutableStateListOf<MemoryItemCloud>() }
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()

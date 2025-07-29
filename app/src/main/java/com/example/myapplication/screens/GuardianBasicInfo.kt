@@ -32,7 +32,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 @Composable
-fun GuardianBasicInfoScreen() {
+fun GuardianBasicInfoScreen(patientId: String)  {
     var name by remember { mutableStateOf("") }
     var birthday by remember { mutableStateOf("") }
     var relationship by remember { mutableStateOf("") }
@@ -234,7 +234,7 @@ fun GuardianBasicInfoScreen() {
                     }
 
                     val json = JSONObject().apply {
-                        put("patientUid", targetPatientUid)
+
                         put("name", name)
                         put("birthDate", birthday)
                         put("relationship", relationship)
