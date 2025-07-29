@@ -38,7 +38,7 @@ import java.io.File
 import java.util.concurrent.TimeUnit
 
 @Composable
-fun Recode2(navController: NavController, patientId: String){
+fun Recode2(navController: NavController) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
 
@@ -239,10 +239,10 @@ fun Recode2(navController: NavController, patientId: String){
                             val uid = firebaseUser?.uid ?: ""
                             val name = firebaseUser?.displayName ?: "GuardianName"
 
-                            val uploadUrl = "https://ai-service-0145.onrender.com/registerVoice"
+                            val uploadUrl = "https://backend-f61l.onrender.com/registerVoice"
 
                             val file = File(path)
-                            val mime = "audio/mp4"
+                            val mime = "audio/wav"
                             val body = MultipartBody.Builder()
                                 .setType(MultipartBody.FORM)
                                 .addFormDataPart("guardian_uid", uid)
@@ -292,6 +292,14 @@ fun Recode2(navController: NavController, patientId: String){
         }
     }
 }
+
+@Preview(showBackground = true)
+@Composable
+fun PreviewRecordingScreen() {
+    Recode2(navController = rememberNavController())
+}
+
+
 
 
 
