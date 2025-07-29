@@ -293,11 +293,7 @@ fun Recode2(navController: NavController, patientId: String) {
     }
 }
 
-@Preview(showBackground = true)
-@Composable
-fun PreviewRecordingScreen() {
-    Recode2(navController = rememberNavController())
-}
+
 
 
 
