@@ -38,7 +38,7 @@ import java.io.File
 import java.util.concurrent.TimeUnit
 
 @Composable
-fun Recode2(navController: NavController, patientId: String){
+fun Recode2(navController: NavController, patientId: String) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
 
@@ -293,11 +293,8 @@ fun Recode2(navController: NavController, patientId: String){
     }
 }
 
-@Preview(showBackground = true)
-@Composable
-fun PreviewRecordingScreen() {
-    Recode2(navController = rememberNavController(), patientId = "dummy-id")
-}
+
+
 
 
 
