@@ -21,6 +21,8 @@ import com.example.myapplication.R
 
 @Composable
 fun GuardianBasicInfoScreen() {
+    var name by remember { mutableStateOf("") }
+    var birthday by remember { mutableStateOf("") }
     var relationship by remember { mutableStateOf("") }
     var tone by remember { mutableStateOf("다정한") }
 
@@ -31,7 +33,9 @@ fun GuardianBasicInfoScreen() {
             .padding(24.dp)
     ) {
         val (
-            logo, title, question1, relationshipInput,
+            logo, title, nameLabel, nameInput,
+            birthdayLabel, birthdayInput,
+            question1, relationshipInput,
             question2, subText, toneButtons, submitButton
         ) = createRefs()
 
@@ -60,18 +64,80 @@ fun GuardianBasicInfoScreen() {
             }
         )
 
-        // 질문 1
+        // 이름 라벨
         Text(
-            "1. 보호 대상을 부르는 호칭을 알려주세요",
+            "이름",
             fontSize = 16.sp,
             color = Color.Black,
-            modifier = Modifier.constrainAs(question1) {
+            modifier = Modifier.constrainAs(nameLabel) {
                 top.linkTo(title.bottom, margin = 32.dp)
                 start.linkTo(parent.start)
             }
         )
 
-        // 텍스트 필드
+        // 이름 입력
+        TextField(
+            value = name,
+            onValueChange = { name = it },
+            placeholder = { Text("홍길동") },
+            colors = TextFieldDefaults.colors(
+                focusedContainerColor = Color(0xFFFFEBEE),
+                unfocusedContainerColor = Color(0xFFFFEBEE)
+            ),
+            shape = RoundedCornerShape(8.dp),
+            modifier = Modifier
+                .constrainAs(nameInput) {
+                    top.linkTo(nameLabel.bottom, margin = 8.dp)
+                    start.linkTo(parent.start)
+                    end.linkTo(parent.end)
+                    width = Dimension.fillToConstraints
+                }
+                .height(56.dp)
+        )
+
+        // 생일 라벨
+        Text(
+            "생일",
+            fontSize = 16.sp,
+            color = Color.Black,
+            modifier = Modifier.constrainAs(birthdayLabel) {
+                top.linkTo(nameInput.bottom, margin = 24.dp)
+                start.linkTo(parent.start)
+            }
+        )
+
+        // 생일 입력
+        TextField(
+            value = birthday,
+            onValueChange = { birthday = it },
+            placeholder = { Text("예: 1990-01-01") },
+            colors = TextFieldDefaults.colors(
+                focusedContainerColor = Color(0xFFFFEBEE),
+                unfocusedContainerColor = Color(0xFFFFEBEE)
+            ),
+            shape = RoundedCornerShape(8.dp),
+            modifier = Modifier
+                .constrainAs(birthdayInput) {
+                    top.linkTo(birthdayLabel.bottom, margin = 8.dp)
+                    start.linkTo(parent.start)
+                    end.linkTo(parent.end)
+                    width = Dimension.fillToConstraints
+                }
+                .height(56.dp)
+        )
+
+        // 질문 1: 호칭
+        Text(
+            "1. 보호 대상을 부르는 호칭을 알려주세요",
+            fontSize = 16.sp,
+            color = Color.Black,
+            modifier = Modifier.constrainAs(question1) {
+                top.linkTo(birthdayInput.bottom, margin = 24.dp)
+                start.linkTo(parent.start)
+            }
+        )
+
+        // 호칭 입력
         TextField(
             value = relationship,
             onValueChange = { relationship = it },
@@ -91,7 +157,7 @@ fun GuardianBasicInfoScreen() {
                 .height(56.dp)
         )
 
-        // 질문 2
+        // 질문 2: 말투
         Text(
             "2. 원하는 말투",
             fontSize = 16.sp,
@@ -102,7 +168,7 @@ fun GuardianBasicInfoScreen() {
             }
         )
 
-        // 서브 텍스트
+        // 서브텍스트
         Text(
             "(의상 문장 생성, 보호자 음성에 이용)",
             fontSize = 12.sp,
@@ -144,7 +210,9 @@ fun GuardianBasicInfoScreen() {
 
         // 완료 버튼
         Button(
-            onClick = { /* 완료 처리 로직 */ },
+            onClick = {
+                // TODO: name, birthday, relationship, tone 처리 로직 작성
+            },
             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4DD0E1)),
             shape = RoundedCornerShape(10.dp),
             modifier = Modifier
@@ -161,9 +229,4 @@ fun GuardianBasicInfoScreen() {
     }
 }
 
-@Preview(showBackground = true)
-@Composable
-fun PreviewGuardianBasicInfo() {
-   GuardianBasicInfoScreen()
-}
 
