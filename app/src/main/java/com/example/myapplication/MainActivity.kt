@@ -137,6 +137,7 @@ class MainActivity : ComponentActivity() {
                         val patientId = backStackEntry.arguments?.getString("patientId") ?: return@composable
                         Recode2(navController, patientId)
                     }
+
                     composable(
                         "location/{patientId}",
                         arguments = listOf(navArgument("patientId") { type = NavType.StringType })

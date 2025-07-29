@@ -38,7 +38,7 @@ import java.io.File
 import java.util.concurrent.TimeUnit
 
 @Composable
-fun Recode2(navController: NavController) {
+fun Recode2(navController: NavController, patientId: String) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
 
