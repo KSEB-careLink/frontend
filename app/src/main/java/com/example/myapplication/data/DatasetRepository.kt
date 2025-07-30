@@ -1,30 +1,62 @@
 package com.example.myapplication.data
 
+import android.util.Log
+import com.example.myapplication.BuildConfig
+import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
-import com.google.firebase.storage.ktx.storage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
-import android.util.Log
+import okhttp3.OkHttpClient
+import okhttp3.Request
 
 class DatasetRepository {
-    // 절대 URL로 참조 생성
-    private val storageRef = Firebase
-        .storage
-        .getReferenceFromUrl("gs://carelink-a228a.firebasestorage.app/memory/dataset.json")
+    companion object {
+        private const val TAG = "DatasetRepository"
+    }
 
-    suspend fun fetchAll(): List<DatasetItem> = withContext(Dispatchers.IO) {
-        // 내려받기 직전
-        Log.d("DatasetRepo", "fetchAll() 호출 — URL: ${storageRef.path}")
-        val bytes = storageRef.getBytes(5 * 1024 * 1024).await()
-        Log.d("DatasetRepo", "바이트 크기: ${bytes.size}")
-        val json = bytes.toString(Charsets.UTF_8)
-        val list = Json { ignoreUnknownKeys = true }
-            .decodeFromString<List<DatasetItem>>(json)
-        Log.d("DatasetRepo", "파싱된 항목 개수: ${list.size}")
-        return@withContext list
+    private val client = OkHttpClient()
+    private val json   = Json { ignoreUnknownKeys = true }
+
+    @Serializable
+    private data class QuizzesResponse(
+        val quizzes: List<DatasetItem>
+    )
+
+    /**
+     * MySQL 기반 REST API 로부터 patientId 에 해당하는
+     * 전체 퀴즈 목록을 가져옵니다.
+     */
+    suspend fun fetchAll(patientId: String): List<DatasetItem> = withContext(Dispatchers.IO) {
+        // 1) Firebase ID 토큰 획득
+        val idToken = Firebase.auth.currentUser
+            ?.getIdToken(true)?.await()?.token
+            ?: throw Exception("인증 토큰을 가져올 수 없습니다.")
+
+        // 2) API 요청
+        val url = "${BuildConfig.BASE_URL}/quizzes?patient_id=$patientId"
+        Log.d(TAG, "fetchAll() 호출 — URL: $url")
+        val request = Request.Builder()
+            .url(url)
+            .addHeader("Authorization", "Bearer $idToken")
+            .get()
+            .build()
+
+        val response = client.newCall(request).execute()
+        if (!response.isSuccessful) {
+            throw Exception("API 오류: HTTP ${response.code}")
+        }
+
+        // 3) JSON 파싱
+        val body = response.body?.string().orEmpty()
+        val wrapper = json.decodeFromString<QuizzesResponse>(body)
+        Log.d(TAG, "파싱된 퀴즈 개수: ${wrapper.quizzes.size}")
+
+        return@withContext wrapper.quizzes
     }
 }
+
 
