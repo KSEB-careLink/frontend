@@ -12,6 +12,7 @@ data class DatasetItem(
     @SerialName("memory_id")   val memoryId:   Int?    = null,
     @SerialName("photo_id")    val photoId:    Int?    = null,
     @SerialName("category")    val category:   String,
+    @SerialName("sentence")    val sentence:   String,
     @SerialName("created_at")  val createdAt:  String,
     @SerialName("options")     val options:    List<QuizOption>
 )

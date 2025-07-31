@@ -1,84 +1,135 @@
-// QuizStatsScreen.kt
 package com.example.myapplication.screens
 
+import android.content.Context
+import android.widget.Toast
 import androidx.compose.foundation.layout.*
-import androidx.compose.material3.Text
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.myapplication.viewmodel.QuizStatsViewModel
-import com.example.myapplication.viewmodel.QuizViewModel
+import androidx.compose.ui.unit.sp
+import com.example.myapplication.BuildConfig
+import com.google.firebase.auth.ktx.auth
+import com.google.firebase.ktx.Firebase
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.tasks.await
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import org.json.JSONObject
 
 @Composable
-fun QuizStatsScreen(
-    quizStatsViewModel: QuizStatsViewModel = viewModel(),
-    quizViewModel: QuizViewModel = viewModel()
-) {
-    val patientId by quizStatsViewModel.patientId.collectAsState()
+fun QuizStatsScreen() {
+    val context = LocalContext.current
+    val prefs = context.getSharedPreferences("MyPrefs", Context.MODE_PRIVATE)
+    val patientId = prefs.getString("patient_id", null)
 
-    var statsJson by remember { mutableStateOf<JSONObject?>(null) }
-    var recommendJson by remember { mutableStateOf<JSONObject?>(null) }
+    var statsList by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
+    var recList by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
     var errorMsg by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(patientId) {
-        patientId?.let {
-            quizViewModel.fetchStats(it) { json ->
-                if (json?.has("error") == true) {
-                    errorMsg = json.getString("error")
-                } else {
-                    statsJson = json
-                    errorMsg = null
-                }
-            }
+    val client = remember { OkHttpClient() }
 
-            quizViewModel.fetchRecommend(it) { json ->
-                if (json?.has("error") == true) {
-                    errorMsg = json.getString("error")
-                } else {
-                    recommendJson = json
-                    if (errorMsg == null) errorMsg = null
+    LaunchedEffect(patientId) {
+        if (patientId.isNullOrBlank()) {
+            errorMsg = "환자 ID가 없습니다."
+            return@LaunchedEffect
+        }
+        // 1) 인증 토큰
+        val idToken = try {
+            Firebase.auth.currentUser?.getIdToken(true)?.await()?.token
+        } catch (e: Exception) {
+            null
+        }
+        if (idToken.isNullOrBlank()) {
+            errorMsg = "인증 토큰이 없습니다."
+            return@LaunchedEffect
+        }
+
+        // 2) 통계 가져오기
+        launch {
+            try {
+                val res = withContext(Dispatchers.IO) {
+                    client.newCall(
+                        Request.Builder()
+                            .url("${BuildConfig.BASE_URL}/quiz_stats?patient_id=$patientId")
+                            .addHeader("Authorization", "Bearer $idToken")
+                            .get()
+                            .build()
+                    ).execute()
                 }
+                if (!res.isSuccessful) throw Exception("통계 API 오류: ${res.code}")
+                val arr = JSONObject(res.body?.string().orEmpty())
+                    .optJSONArray("quizStats")
+                    ?: return@launch
+                statsList = List(arr.length()) { i -> arr.getJSONObject(i) }
+            } catch (e: Exception) {
+                errorMsg = "통계 로드 실패: ${e.message}"
+            }
+        }
+
+        // 3) 추천 문제 가져오기
+        launch {
+            try {
+                val res = withContext(Dispatchers.IO) {
+                    client.newCall(
+                        Request.Builder()
+                            .url("${BuildConfig.BASE_URL}/quiz/recommend?patient_id=$patientId")
+                            .addHeader("Authorization", "Bearer $idToken")
+                            .get()
+                            .build()
+                    ).execute()
+                }
+                if (!res.isSuccessful) throw Exception("추천 API 오류: ${res.code}")
+                val arr = JSONObject(res.body?.string().orEmpty())
+                    .optJSONArray("recommended_questions")
+                    ?: return@launch
+                recList = List(arr.length()) { i -> arr.getJSONObject(i) }
+            } catch (e: Exception) {
+                errorMsg = "추천 로드 실패: ${e.message}"
             }
         }
     }
 
     Column(modifier = Modifier.padding(16.dp)) {
-        Text("환자 ID: ${patientId ?: "-"}")
+        if (errorMsg != null) {
+            Text("오류: $errorMsg", color = MaterialTheme.colorScheme.error)
+            return@Column
+        }
+        Text("퀴즈 통계", fontSize = 20.sp)
         Spacer(Modifier.height(8.dp))
 
-        if (errorMsg != null) {
-            Text("오류: $errorMsg")
-        } else {
-            statsJson?.let { stats ->
-                Text("총 시도: ${stats.optInt("total_attempted")}")
-                Text("정답 수: ${stats.optInt("correct_count")}")
-                Text("정답률: ${stats.optString("accuracy", "-%")}%")
-                Text("문장퀴즈 정답률: ${stats.optString("sentence_choice_accuracy", "-")}%")
-                Text("사진퀴즈 정답률: ${stats.optString("photo_quiz_accuracy", "-")}%")
-                Text("최근 푼 시각: ${stats.optString("last_answered_at", "-")}")
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(statsList) { stat ->
+                val category      = stat.optString("category")
+                val totalAttempts = stat.optInt("total_attempts")
+                val correctCount  = stat.optInt("correct_count")
+                val avgTime       = stat.optDouble("avg_solve_time", 0.0)
+                val accuracy = if (totalAttempts > 0) {
+                    "${(correctCount * 100 / totalAttempts)}%"
+                } else "-"
+                Text(
+                    "$category: 시도 ${totalAttempts}회, 정답 ${correctCount}회, " +
+                            "정답률 $accuracy, 평균풀이시간 ${"%.1f".format(avgTime)}초"
+                )
             }
-
-            Spacer(Modifier.height(16.dp))
-
-            recommendJson?.let { rec ->
-                val arr = rec.optJSONArray("recommended_questions")
-                if (arr != null && arr.length() > 0) {
-                    Text("추천 문제:")
-                    for (i in 0 until arr.length()) {
-                        val obj = arr.getJSONObject(i)
-                        val title = obj.optString("topic", obj.optString("question", "문제 없음"))
-                        Text("- $title")
-                    }
-                } else {
-                    Text("추천된 문제가 없습니다.")
-                }
+            item {
+                Spacer(Modifier.height(16.dp))
+                Text("추천 문제", fontSize = 20.sp)
+                Spacer(Modifier.height(8.dp))
+            }
+            items(recList) { rec ->
+                val type  = rec.optString("type", "unknown")
+                val title = rec.optString("topic", rec.optString("question", "제목 없음"))
+                Text("- [$type] $title")
             }
         }
     }
 }
-
 
 
 

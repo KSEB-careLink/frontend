@@ -81,9 +81,18 @@ class MainActivity : ComponentActivity() {
                         val joinCode = backStackEntry.arguments?.getString("joinCode") ?: ""
                         Code(navController = navController, joinCode = joinCode)
                     }
-                    composable("code2") {
-                        Code2(navController)
+
+                    composable(
+                        "code2/{patientId}",
+                        arguments = listOf(navArgument("patientId") {
+                            type = NavType.StringType
+                        })
+                    ) { backStackEntry ->
+                        val patientId = backStackEntry.arguments?.getString("patientId")
+                            ?: return@composable
+                        Code2(navController, patientId)
                     }
+
                     composable("main") {
                         Main_Page(navController)
                     }
@@ -170,7 +179,7 @@ class MainActivity : ComponentActivity() {
                             quizStatsViewModel.setPatientId(patientId)
                         }
 
-                        QuizStatsScreen(quizStatsViewModel = quizStatsViewModel)
+//                        QuizStatsScreen(quizStatsViewModel = quizStatsViewModel)
                     }
 
                     composable("alert") {

@@ -28,12 +28,12 @@ import com.example.myapplication.R
 import com.example.myapplication.service.LocationUpdatesService
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
-import com.google.firebase.ktx.Firebase
 import com.google.firebase.auth.ktx.auth
+import com.google.firebase.ktx.Firebase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -42,7 +42,10 @@ import org.json.JSONObject
 
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
-fun Code2(navController: NavController) {
+fun Code2(
+    navController: NavController,
+    patientId: String      // ← 여기에 patientId를 받도록 변경
+) {
     // 1) 런타임 위치 권한 상태
     val perms = rememberMultiplePermissionsState(
         listOf(
@@ -149,19 +152,19 @@ fun Code2(navController: NavController) {
                         if (linkResp.isSuccessful) {
                             Toast.makeText(context, "보호자와 연결 완료!", Toast.LENGTH_SHORT).show()
 
-                            // 2-1) 토큰을 prefs 에 저장
-                            context
-                                .getSharedPreferences("MyPrefs", Context.MODE_PRIVATE)
+                            // JWT 토큰을 prefs 에 저장
+                            context.getSharedPreferences("MyPrefs", Context.MODE_PRIVATE)
                                 .edit()
                                 .putString("jwt_token", idToken)
                                 .apply()
-                            // → 포그라운드 서비스 시작
+
+                            // 포그라운드 서비스 시작
                             val intent = Intent(context, LocationUpdatesService::class.java)
                             ContextCompat.startForegroundService(context, intent)
 
-                            // 다음 화면으로 이동
-                            navController.navigate("sentence") {
-                                popUpTo("Code2") { inclusive = true }
+                            // patientId 포함하여 다음 화면으로 이동
+                            navController.navigate("sentence/$patientId") {
+                                popUpTo("code2/$patientId") { inclusive = true }
                             }
                         } else {
                             val err = JSONObject(linkResp.body?.string().orEmpty())
@@ -191,6 +194,7 @@ fun Code2(navController: NavController) {
         }
     }
 }
+
 
 
 
