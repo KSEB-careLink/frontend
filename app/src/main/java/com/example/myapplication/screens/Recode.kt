@@ -1,15 +1,18 @@
 package com.example.myapplication.screens
 
+import android.media.MediaPlayer
+import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
@@ -20,9 +23,18 @@ import androidx.constraintlayout.compose.Dimension
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
 import com.example.myapplication.R
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import org.json.JSONArray
+import java.util.concurrent.TimeUnit
 
+/**
+ * 원본 Recode UI를 분리하여 재사용 가능하도록 리팩토링
+ */
 @Composable
-fun Recode(
+fun RecodeUI(
     navController: NavController,
     patientId: String,
     voices: List<String>,
@@ -37,7 +49,6 @@ fun Recode(
             logo, title, selectButton, voiceListBox, bottomButton
         ) = createRefs()
 
-        // 1) 로고
         Image(
             painter = painterResource(id = R.drawable.rogo),
             contentDescription = "로고",
@@ -50,7 +61,6 @@ fun Recode(
                 }
         )
 
-        // 2) 타이틀
         Text(
             text = "보호자 음성 등록",
             fontSize = 24.sp,
@@ -62,7 +72,6 @@ fun Recode(
             }
         )
 
-        // 3) 목소리 선택 버튼
         Button(
             onClick = { /* TODO: 파일 선택 로직 */ },
             modifier = Modifier
@@ -79,7 +88,6 @@ fun Recode(
             Text("목소리 선택", color = Color.White, fontSize = 16.sp)
         }
 
-        // 4) 음성 리스트 박스
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -106,9 +114,8 @@ fun Recode(
             }
         }
 
-        // 5) 하단 녹음 버튼
         Button(
-            onClick = { navController.navigate("recode2") },
+            onClick = { navController.navigate("recode2/$patientId") },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(56.dp)
@@ -125,14 +132,60 @@ fun Recode(
     }
 }
 
-@Preview(showBackground = true)
+/**
+ * 실제 화면: 백엔드에서 목소리 리스트를 불러와 RecodeUI에 전달
+ */
 @Composable
-fun PreviewRecode() {
-    val dummy = listOf("기본", "A", "B")
-    Recode(
-        navController = rememberNavController(),
-        patientId = "dummyId", // ✅ 여기에 추가
-        voices = dummy,
-        onSelectVoice = { /* TODO */ }
+fun RecodeScreen(
+    navController: NavController,
+    patientId: String
+) {
+    val context = LocalContext.current
+    var voices by remember { mutableStateOf<List<String>>(emptyList()) }
+
+    // OkHttp 클라이언트 설정
+    val client = remember {
+        OkHttpClient.Builder()
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .writeTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .build()
+    }
+
+    // patientId 변경 시마다 호출
+    LaunchedEffect(patientId) {
+        try {
+            val url = "https://backend-f61l.onrender.com/voice/list/$patientId"
+            val request = Request.Builder().url(url).get().build()
+            val response = withContext(Dispatchers.IO) { client.newCall(request).execute() }
+            if (response.isSuccessful) {
+                response.body?.string()?.let { body ->
+                    val arr = JSONArray(body)
+                    voices = List(arr.length()) { i -> arr.getString(i) }
+                }
+            } else {
+                Toast.makeText(context, "목소리 목록 불러오기 실패: ${response.code}", Toast.LENGTH_SHORT).show()
+            }
+        } catch (e: Exception) {
+            Toast.makeText(context, "목소리 목록 오류: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    RecodeUI(
+        navController = navController,
+        patientId = patientId,
+        voices = voices,
+        onSelectVoice = { name ->
+            // 선택된 음성 재생
+            val streamUrl = "https://backend-f61l.onrender.com/voice/download/$patientId/$name"
+            MediaPlayer().apply {
+                setDataSource(streamUrl)
+                setOnPreparedListener { it.start() }
+                prepareAsync()
+            }
+        }
     )
 }
+
+
+
