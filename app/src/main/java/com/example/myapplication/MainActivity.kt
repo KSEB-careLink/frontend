@@ -9,7 +9,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -35,12 +35,11 @@ class MainActivity : ComponentActivity() {
         )
 
         setContent {
-            // Android 13+ 에서 필요: POST_NOTIFICATIONS 런타임 권한 요청
+            // Android 13+ 알림 권한 요청
             val notificationPermissionLauncher =
                 rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
                     Log.d("MainActivity", "알림 권한 granted=$granted")
                 }
-
             LaunchedEffect(Unit) {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                     notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
@@ -48,15 +47,17 @@ class MainActivity : ComponentActivity() {
             }
 
             MyApplicationTheme {
+                // 네비게이션 컨트롤러
                 val navController = rememberNavController()
 
-                NavHost(
-                    navController = navController,
-                    startDestination = "splash"
-                ) {
+                // ★ 선택된 목소리 상태 (voiceId)
+                var selectedVoice by remember { mutableStateOf<String?>(null) }
+
+                NavHost(navController = navController, startDestination = "splash") {
                     composable("splash") {
                         SplashScreen(navController)
                     }
+
                     composable("guardianSignup") {
                         GuardianSignUpScreen(navController)
                     }
@@ -120,13 +121,23 @@ class MainActivity : ComponentActivity() {
                         val patientId = backStackEntry.arguments?.getString("patientId") ?: return@composable
                         MemoryInfoListScreen(navController, patientId)
                     }
+                    // Recode(목소리 목록 + 선택) 화면
                     composable(
                         route = "recode/{patientId}",
                         arguments = listOf(navArgument("patientId") { type = NavType.StringType })
                     ) { backStackEntry ->
                         val patientId = backStackEntry.arguments?.getString("patientId") ?: return@composable
-                        RecodeScreen(navController = navController, patientId = patientId)
+                        RecodeScreen(
+                            navController = navController,
+                            patientId = patientId,
+                            // 선택 콜백: MainActivity.selectedVoice 업데이트
+                            onSelectVoice = { voiceId ->
+                                selectedVoice = voiceId
+                            }
+                        )
                     }
+
+                    // Recode2(녹음) 화면
                     composable(
                         route = "recode2/{patientId}",
                         arguments = listOf(navArgument("patientId") { type = NavType.StringType })
@@ -134,6 +145,7 @@ class MainActivity : ComponentActivity() {
                         val patientId = backStackEntry.arguments?.getString("patientId") ?: return@composable
                         Recode2(navController, patientId)
                     }
+
                     composable(
                         route = "location/{patientId}",
                         arguments = listOf(navArgument("patientId") { type = NavType.StringType })
@@ -141,19 +153,31 @@ class MainActivity : ComponentActivity() {
                         val patientId = backStackEntry.arguments?.getString("patientId") ?: return@composable
                         LocationScreen(navController, patientId)
                     }
+                    // 회상 문장 화면: 선택된 voiceId 넘겨주기
                     composable(
                         route = "sentence/{patientId}",
                         arguments = listOf(navArgument("patientId") { type = NavType.StringType })
                     ) { backStackEntry ->
                         val patientId = backStackEntry.arguments?.getString("patientId") ?: return@composable
-                        Patient_Sentence(navController, patientId)
+                        // selectedVoice가 null이면 기본값("default")을 사용
+                        Patient_Sentence(
+                            navController = navController,
+                            patientId = patientId,
+                            voiceId = selectedVoice ?: "default"
+                        )
                     }
+
+                    // 회상 퀴즈 화면: 선택된 voiceId 넘겨주기
                     composable(
                         route = "quiz/{patientId}",
                         arguments = listOf(navArgument("patientId") { type = NavType.StringType })
                     ) { backStackEntry ->
                         val patientId = backStackEntry.arguments?.getString("patientId") ?: return@composable
-                        Patient_Quiz(navController, patientId)
+                        Patient_Quiz(
+                            navController = navController,
+                            patientId = patientId,
+                            voiceId = selectedVoice ?: "default"
+                        )
                     }
                     composable(
                         route = "stats/{patientId}",
