@@ -16,8 +16,8 @@ import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
@@ -39,7 +39,7 @@ fun QuizStatsScreen() {
             errorMsg = "환자 ID가 없습니다."
             return@LaunchedEffect
         }
-        // 1) 인증 토큰
+        // 1) Firebase ID 토큰 획득
         val idToken = try {
             Firebase.auth.currentUser?.getIdToken(true)?.await()?.token
         } catch (e: Exception) {
@@ -50,7 +50,7 @@ fun QuizStatsScreen() {
             return@LaunchedEffect
         }
 
-        // 2) 통계 가져오기
+        // 2) 카테고리별 통계 조회
         launch {
             try {
                 val res = withContext(Dispatchers.IO) {
@@ -63,16 +63,17 @@ fun QuizStatsScreen() {
                     ).execute()
                 }
                 if (!res.isSuccessful) throw Exception("통계 API 오류: ${res.code}")
-                val arr = JSONObject(res.body?.string().orEmpty())
-                    .optJSONArray("quizStats")
-                    ?: return@launch
+                val root = JSONObject(res.body?.string().orEmpty())
+                val arr = root.optJSONArray("quizStats")
+                    ?: throw Exception("quizStats 배열이 없습니다.")
                 statsList = List(arr.length()) { i -> arr.getJSONObject(i) }
+                errorMsg = null
             } catch (e: Exception) {
                 errorMsg = "통계 로드 실패: ${e.message}"
             }
         }
 
-        // 3) 추천 문제 가져오기
+        // 3) 추천 문제 조회
         launch {
             try {
                 val res = withContext(Dispatchers.IO) {
@@ -85,10 +86,11 @@ fun QuizStatsScreen() {
                     ).execute()
                 }
                 if (!res.isSuccessful) throw Exception("추천 API 오류: ${res.code}")
-                val arr = JSONObject(res.body?.string().orEmpty())
-                    .optJSONArray("recommended_questions")
-                    ?: return@launch
+                val root = JSONObject(res.body?.string().orEmpty())
+                val arr = root.optJSONArray("recommended_questions")
+                    ?: throw Exception("recommended_questions 배열이 없습니다.")
                 recList = List(arr.length()) { i -> arr.getJSONObject(i) }
+                if (errorMsg == null) errorMsg = null
             } catch (e: Exception) {
                 errorMsg = "추천 로드 실패: ${e.message}"
             }
@@ -100,14 +102,15 @@ fun QuizStatsScreen() {
             Text("오류: $errorMsg", color = MaterialTheme.colorScheme.error)
             return@Column
         }
+
         Text("퀴즈 통계", fontSize = 20.sp)
         Spacer(Modifier.height(8.dp))
 
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(statsList) { stat ->
-                val category      = stat.optString("category")
-                val totalAttempts = stat.optInt("total_attempts")
-                val correctCount  = stat.optInt("correct_count")
+                val category      = stat.optString("category", "-")
+                val totalAttempts = stat.optInt("total_attempts", 0)
+                val correctCount  = stat.optInt("correct_count", 0)
                 val avgTime       = stat.optDouble("avg_solve_time", 0.0)
                 val accuracy = if (totalAttempts > 0) {
                     "${(correctCount * 100 / totalAttempts)}%"
@@ -123,13 +126,14 @@ fun QuizStatsScreen() {
                 Spacer(Modifier.height(8.dp))
             }
             items(recList) { rec ->
-                val type  = rec.optString("type", "unknown")
-                val title = rec.optString("topic", rec.optString("question", "제목 없음"))
-                Text("- [$type] $title")
+                val category   = rec.optString("category", "알수없음")
+                val question   = rec.optString("question_text", "제목 없음")
+                Text("- [$category] $question")
             }
         }
     }
 }
+
 
 
 

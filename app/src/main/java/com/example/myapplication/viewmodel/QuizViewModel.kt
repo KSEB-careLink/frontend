@@ -14,12 +14,17 @@ class QuizViewModel(
 ) : ViewModel() {
     companion object { private const val TAG = "QuizViewModel" }
 
+    // 퀴즈 항목 리스트
     private val _items = MutableStateFlow<List<DatasetItem>>(emptyList())
     val items = _items.asStateFlow()
 
+    // 에러 메시지를 UI에 전달
     private val _error = MutableStateFlow<String?>(null)
     val error = _error.asStateFlow()
 
+    /**
+     * patientId 에 해당하는 퀴즈 목록을 불러옵니다.
+     */
     fun loadQuizzes(patientId: String) {
         viewModelScope.launch {
             try {
@@ -32,5 +37,6 @@ class QuizViewModel(
         }
     }
 }
+
 
 

@@ -53,8 +53,8 @@ fun Patient_Alert(navController: NavController) {
             )
             NavigationBar {
                 listOf(
-                    "sentence" to "회상문장",
-                    "quiz"     to "회상퀴즈",
+                    "sentence/{patientId}" to "회상문장",
+                    "quiz/{patientId}"     to "회상퀴즈",
                     "alert"    to "긴급 알림"
                 ).forEach { (route, label) ->
                     NavigationBarItem(
