@@ -11,11 +11,19 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.draw.clip
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.VolumeUp
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.runtime.*               // ← 여기에 LaunchedEffect, rememberCoroutineScope, etc 포함
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -35,15 +43,14 @@ import com.example.myapplication.R
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.tasks.await
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
-import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
-import kotlinx.coroutines.delay
 
 @Composable
 fun Patient_Sentence(
@@ -51,16 +58,19 @@ fun Patient_Sentence(
     patientId: String,
     voiceId: String
 ) {
-    val speakerTopGap = 16.dp
-    val imageBoxTopGap = 16.dp
-    val imageBoxHeight = 330.dp
-    val imageBoxCorner = 12.dp
-    val recallBtnGap = 12.dp
-    val recallBtnHeight = 56.dp
+    // layout constants
+    val padding        = 24.dp
+    val speakerTopGap  = 16.dp
+    val imageGap       = 16.dp
+    val imageHeight    = 200.dp
+    val imageCorner    = 12.dp
+    val btnGap         = 12.dp
+    val btnHeightRatio = 4
 
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
+    val scope   = rememberCoroutineScope()
 
+    // HTTP client
     val client = remember {
         OkHttpClient.Builder()
             .connectTimeout(30, TimeUnit.SECONDS)
@@ -69,17 +79,26 @@ fun Patient_Sentence(
             .build()
     }
 
-    data class MemoryItem(val id: String, val description: String, val mediaUrl: String)
+    // model
+    data class MemoryItem(
+        val id: Int,
+        val photoUrl: String,
+        val sentence: String,
+        val ttsUrl: String,
+        val createdAt: String
+    )
 
-    val memoryList = remember { mutableStateListOf<MemoryItem>() }
-    var selectedIndex by remember { mutableStateOf(0) }
+    // state
+    val memories = remember { mutableStateListOf<MemoryItem>() }
     var errorMsg by remember { mutableStateOf<String?>(null) }
 
+    // load once
     LaunchedEffect(patientId) {
         try {
-            val token = Firebase.auth.currentUser?.getIdToken(true)?.await()?.token
+            val token = Firebase.auth.currentUser
+                ?.getIdToken(false)?.await()?.token
                 ?: throw Exception("인증 토큰 없음")
-            val url = "${BuildConfig.BASE_URL}/memory/list/$patientId"
+            val url = "${BuildConfig.BASE_URL.trimEnd('/')}/memories?patient_id=$patientId"
             val resp = withContext(Dispatchers.IO) {
                 client.newCall(
                     Request.Builder()
@@ -91,19 +110,22 @@ fun Patient_Sentence(
             }
             if (!resp.isSuccessful) throw Exception("API 오류 ${resp.code}")
             val arr = JSONObject(resp.body?.string().orEmpty())
-                .optJSONArray("memoryItems") ?: throw Exception("memoryItems 없음")
-            memoryList.clear()
+                .optJSONArray("memories")
+                ?: throw Exception("memories 배열이 없습니다.")
+            memories.clear()
             for (i in 0 until arr.length()) {
-                val obj = arr.getJSONObject(i)
-                memoryList += MemoryItem(
-                    id = obj.getString("id"),
-                    description = obj.getString("description"),
-                    mediaUrl = obj.getString("mediaUrl")
+                val o = arr.getJSONObject(i)
+                memories += MemoryItem(
+                    id        = o.getInt("id"),
+                    photoUrl  = o.getString("image_url"),
+                    sentence  = o.getString("sentence"),
+                    ttsUrl    = o.getString("tts_audio_url"),
+                    createdAt = o.getString("created_at")
                 )
             }
             errorMsg = null
         } catch (e: Exception) {
-            errorMsg = "불러오기 실패: ${e.message}"
+            errorMsg = "로드 실패: ${e.message}"
         }
     }
 
@@ -112,22 +134,22 @@ fun Patient_Sentence(
             val navBackStack by navController.currentBackStackEntryAsState()
             val currentRoute = navBackStack?.destination?.route
             val navColors = NavigationBarItemDefaults.colors(
-                indicatorColor = Color.Transparent,
+                indicatorColor    = Color.Transparent,
                 selectedIconColor = Color(0xFF00C4B4),
                 unselectedIconColor = Color(0xFF888888),
-                selectedTextColor = Color(0xFF00C4B4),
+                selectedTextColor   = Color(0xFF00C4B4),
                 unselectedTextColor = Color(0xFF888888)
             )
             NavigationBar {
                 listOf(
-                    "sentence/{patientId}" to "회상문장",
-                    "quiz/{patientId}" to "회상퀴즈",
-                    "alert" to "긴급알림"
+                    "sentence/$patientId" to "회상문장",
+                    "quiz/$patientId"     to "회상퀴즈",
+                    "alert"               to "긴급알림"
                 ).forEach { (route, label) ->
                     NavigationBarItem(
-                        icon = { Icon(Icons.Default.Star, contentDescription = label) },
-                        label = { Text(label) },
-                        selected = currentRoute == route,
+                        icon    = { Icon(Icons.Default.VolumeUp, contentDescription = label) },
+                        label   = { Text(label) },
+                        selected= currentRoute == route,
                         onClick = {
                             if (currentRoute != route) {
                                 navController.navigate(route) {
@@ -143,26 +165,20 @@ fun Patient_Sentence(
         }
     ) { innerPadding ->
         Column(
-            modifier = Modifier
+            Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(horizontal = 24.dp)
+                .padding(padding)
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            errorMsg?.let {
-                Text(it, color = MaterialTheme.colorScheme.error, fontSize = 14.sp)
-                Spacer(Modifier.height(16.dp))
-                return@Column
-            }
-
+            // 헤더
             Image(
                 painter = painterResource(R.drawable.rogo),
                 contentDescription = "Logo",
                 modifier = Modifier.size(200.dp),
                 contentScale = ContentScale.Fit
             )
-
             Spacer(Modifier.height(speakerTopGap))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.VolumeUp, contentDescription = null, modifier = Modifier.size(24.dp))
@@ -170,56 +186,52 @@ fun Patient_Sentence(
                 Text(
                     buildAnnotatedString {
                         append("기억 ")
-                        withStyle(SpanStyle(color = Color(0xFF00C4B4))) {
-                            append("나시나요?")
-                        }
+                        withStyle(SpanStyle(color = Color(0xFF00C4B4))) { append("나시나요?") }
                     },
                     fontSize = 24.sp
                 )
             }
+            Spacer(Modifier.height(imageGap))
 
-            Spacer(Modifier.height(imageBoxTopGap))
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(imageBoxHeight)
-                    .background(Color(0xFFEDE9F5), RoundedCornerShape(imageBoxCorner)),
-                contentAlignment = Alignment.Center
-            ) {
-                if (memoryList.isNotEmpty()) {
-                    AsyncImage(
-                        model = memoryList[selectedIndex].mediaUrl,
-                        contentDescription = "Memory Photo",
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
-                    )
-                }
+            // 에러
+            errorMsg?.let {
+                Text(it, color = MaterialTheme.colorScheme.error, fontSize = 14.sp)
+                Spacer(Modifier.height(btnGap))
+                return@Column
             }
 
-            Spacer(Modifier.height(recallBtnGap))
-            memoryList.forEachIndexed { idx, item ->
-                Button(
-                    onClick = {
-                        selectedIndex = idx
-                        scope.launch { playTTS(context, voiceId, item.description) }
-                    },
+            // 리스트
+            memories.forEach { mem ->
+                AsyncImage(
+                    model = mem.photoUrl,
+                    contentDescription = "Memory Photo",
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(recallBtnHeight),
+                        .height(imageHeight)
+                        .clip(RoundedCornerShape(imageCorner)),
+                    contentScale = ContentScale.Crop
+                )
+                Spacer(Modifier.height(btnGap))
+
+                Button(
+                    onClick = { scope.launch { playTTS(mem.ttsUrl, context) } },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(btnGap * btnHeightRatio),
                     shape = RoundedCornerShape(8.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C4B4))
                 ) {
-                    Text(item.description, color = Color.White, fontSize = 14.sp)
+                    Text(mem.sentence, color = Color.White, fontSize = 16.sp)
                 }
-                Spacer(Modifier.height(recallBtnGap))
+                Spacer(Modifier.height(btnGap * 2))
             }
         }
     }
 }
 
-// ────────────────────────────────
-//  TTS 관련 전역 변수 및 함수 quiz랑 공통
-// ────────────────────────────────
+// ────────────────────────────────────────────────
+// TTS block (공통)
+// ────────────────────────────────────────────────
 
 private val ttsClient = OkHttpClient.Builder()
     .connectTimeout(30, TimeUnit.SECONDS)
@@ -230,36 +242,27 @@ private val ttsClient = OkHttpClient.Builder()
 private var currentTTSPlayer: MediaPlayer? = null
 
 private suspend fun playTTS(
-    context: Context,
-    voiceId: String,
-    text: String
+    ttsUrl: String,
+    context: Context
 ) {
     try {
-        val token = Firebase.auth.currentUser?.getIdToken(true)?.await()?.token
-        val encoded = URLEncoder.encode(text, "UTF-8")
-        val url = "${BuildConfig.BASE_URL.trimEnd('/')}/tts?voice_id=$voiceId&text=$encoded"
-        val rb = Request.Builder().url(url)
-        if (!token.isNullOrBlank()) rb.addHeader("Authorization", "Bearer $token")
-        val resp = withContext(Dispatchers.IO) { ttsClient.newCall(rb.get().build()).execute() }
-        if (!resp.isSuccessful) throw Exception("HTTP ${resp.code}")
-        val mp3Url = resp.body?.string().orEmpty()
+        // 1) 효과음
+        val toneGen = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 100)
+        toneGen.startTone(ToneGenerator.TONE_PROP_ACK, 200)
+        delay(200)
+        toneGen.release()
 
-        withContext(Dispatchers.Main) {
-            val toneGen = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 100)
-            toneGen.startTone(ToneGenerator.TONE_PROP_ACK)
-            delay(200)
-            toneGen.release()
+        // 2) 기존 플레이어 해제
+        currentTTSPlayer?.apply {
+            reset()
+            release()
+        }
 
-            currentTTSPlayer?.apply {
-                reset()
-                release()
-            }
-
-            currentTTSPlayer = MediaPlayer().apply {
-                setDataSource(mp3Url)
-                setOnPreparedListener { it.start() }
-                prepareAsync()
-            }
+        // 3) 새로운 MediaPlayer 생성·재생
+        currentTTSPlayer = MediaPlayer().apply {
+            setDataSource(ttsUrl)
+            setOnPreparedListener { it.start() }
+            prepareAsync()
         }
     } catch (e: Exception) {
         withContext(Dispatchers.Main) {
@@ -267,6 +270,9 @@ private suspend fun playTTS(
         }
     }
 }
+
+
+
 
 
 
