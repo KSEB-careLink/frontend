@@ -372,7 +372,7 @@ fun MemoryInfoInputScreen(navController: NavController, patientId: String) {
                             .addFormDataPart("category", selectedCategory)
                             .addFormDataPart("description", description)
                             .addFormDataPart(
-                                "image_data", fileName,
+                                "image", fileName,
                                 RequestBody.create(mime.toMediaTypeOrNull(), bytes)
                             )
                             .build()

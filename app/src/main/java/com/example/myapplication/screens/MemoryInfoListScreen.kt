@@ -11,6 +11,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -27,89 +28,93 @@ import com.example.myapplication.R
 import com.example.myapplication.BuildConfig
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
+import com.google.firebase.storage.ktx.storage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import org.json.JSONObject
-import androidx.compose.foundation.Image
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONObject
+import androidx.compose.foundation.Image
 
-// SharedPreferences에서 환자 ID 가져오기 헬퍼
-fun getPatientIdFromPrefs(context: Context): String? =
+// SharedPreferences에서 보호자 ID 가져오기
+fun getGuardianIdFromPrefs(context: Context): String? =
     context.getSharedPreferences("MyPrefs", Context.MODE_PRIVATE)
-        .getString("patient_id", null)
+        .getString("guardian_id", null)
 
-// 메모리 아이템 데이터 클래스 (category 추가)
-data class MemoryItemCloud(
+// 사진 아이템 데이터 클래스
+
+data class PhotoItem(
     val id: String,
     var description: String,
-    val mediaUrl: String,
-    val mediaType: String,
-    val category: String
+    val imageUrl: String,
+    val category: String,
+    val createdAt: String
 )
 
 @Composable
 fun MemoryInfoListScreen(navController: NavController, patientId: String) {
-    val memoryList = remember { mutableStateListOf<MemoryItemCloud>() }
+    val photoList = remember { mutableStateListOf<PhotoItem>() }
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val client = remember { OkHttpClient() }
+    val storage = Firebase.storage
 
-    // 카테고리 필터 상태
-    val categoryOptions = listOf("가족", "동네", "학창시절", "여행", "환자가 좋아하는 것\n")
+    // 카테고리 필터
+    val categoryOptions = listOf("전체", "가족", "동네", "학창시절", "여행", "환자가 좋아하는 것")
     var selectedCategory by remember { mutableStateOf("전체") }
     var expanded by remember { mutableStateOf(false) }
 
     // 수정/삭제 다이얼로그 상태
     var showDialog by remember { mutableStateOf(false) }
-    var editingItem by remember { mutableStateOf<MemoryItemCloud?>(null) }
+    var editingItem by remember { mutableStateOf<PhotoItem?>(null) }
     var newDescription by remember { mutableStateOf("") }
     var showDeleteConfirm by remember { mutableStateOf(false) }
-    var itemToDelete by remember { mutableStateOf<MemoryItemCloud?>(null) }
+    var itemToDelete by remember { mutableStateOf<PhotoItem?>(null) }
 
     // 데이터 로드
     LaunchedEffect(Unit) {
-        val pid = getPatientIdFromPrefs(context).orEmpty()
-        if (pid.isBlank()) {
-            Log.e("MemoryList", "환자 ID 없음")
+        val guardianId = getGuardianIdFromPrefs(context).orEmpty()
+        if (guardianId.isBlank()) {
+            Log.e("PhotosList", "보호자 ID 없음")
             return@LaunchedEffect
         }
-        val idToken = Firebase.auth.currentUser?.getIdToken(true)?.await()?.token.orEmpty()
+        val idToken = Firebase.auth.currentUser
+            ?.getIdToken(true)?.await()?.token.orEmpty()
         if (idToken.isBlank()) {
-            Log.e("MemoryList", "토큰 획득 실패")
+            Log.e("PhotosList", "토큰 획득 실패")
             return@LaunchedEffect
         }
         try {
             val req = Request.Builder()
-                .url("${BuildConfig.BASE_URL}/memory/list/$pid")
+                .url("${BuildConfig.BASE_URL}/photos/$guardianId")
                 .addHeader("Authorization", "Bearer $idToken")
                 .get()
                 .build()
             val res = withContext(Dispatchers.IO) { client.newCall(req).execute() }
             if (!res.isSuccessful) {
-                Log.e("MemoryList", "API 호출 실패: ${res.code}")
+                Log.e("PhotosList", "API 호출 실패: ${res.code}")
                 return@LaunchedEffect
             }
             val bodyStr = res.body?.string().orEmpty()
-            val arr = JSONObject(bodyStr).getJSONArray("memoryItems")
+            val arr = JSONObject(bodyStr).getJSONArray("photos")
             for (i in 0 until arr.length()) {
                 val obj = arr.getJSONObject(i)
-                memoryList.add(
-                    MemoryItemCloud(
+                photoList.add(
+                    PhotoItem(
                         id = obj.getString("id"),
                         description = obj.getString("description"),
-                        mediaUrl = obj.getString("mediaUrl"),
-                        mediaType = obj.getString("mediaType"),
-                        category = obj.getString("category")
+                        imageUrl = obj.getString("image_url"),
+                        category = obj.getString("category"),
+                        createdAt = obj.getString("created_at")
                     )
                 )
             }
         } catch (e: Exception) {
-            Log.e("MemoryList", "데이터 로드 실패: ${e.message}")
+            Log.e("PhotosList", "데이터 로드 실패: ${e.message}", e)
             Toast.makeText(context, "불러오기 실패: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
@@ -121,6 +126,7 @@ fun MemoryInfoListScreen(navController: NavController, patientId: String) {
     ) {
         val (logo, title, filterLabel, filterDropdown, listBox) = createRefs()
 
+        // 로고
         Image(
             painter = painterResource(id = R.drawable.rogo),
             contentDescription = "Logo",
@@ -133,6 +139,7 @@ fun MemoryInfoListScreen(navController: NavController, patientId: String) {
                 }
         )
 
+        // 제목
         Text(
             text = "회상 정보 데이터 확인",
             fontSize = 30.sp,
@@ -143,15 +150,14 @@ fun MemoryInfoListScreen(navController: NavController, patientId: String) {
             }
         )
 
+        // 필터 라벨 & 드롭다운
         Text(
-            text = "카테고리 필터:",
-            fontSize = 14.sp,
+            text = "카테고리 필터:", fontSize = 14.sp,
             modifier = Modifier.constrainAs(filterLabel) {
                 top.linkTo(title.bottom, margin = 16.dp)
                 start.linkTo(parent.start)
             }
         )
-
         Box(
             modifier = Modifier
                 .constrainAs(filterDropdown) {
@@ -159,7 +165,7 @@ fun MemoryInfoListScreen(navController: NavController, patientId: String) {
                     start.linkTo(parent.start)
                     width = Dimension.fillToConstraints
                 }
-                .background(Color.White, shape = RoundedCornerShape(8.dp))
+                .background(Color.White, RoundedCornerShape(8.dp))
         ) {
             Column {
                 Text(
@@ -169,23 +175,18 @@ fun MemoryInfoListScreen(navController: NavController, patientId: String) {
                         .clickable { expanded = true }
                         .padding(12.dp)
                 )
-                DropdownMenu(
-                    expanded = expanded,
-                    onDismissRequest = { expanded = false }
-                ) {
-                    categoryOptions.forEach { category ->
-                        DropdownMenuItem(
-                            text = { Text(category) },
-                            onClick = {
-                                selectedCategory = category
-                                expanded = false
-                            }
-                        )
+                DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                    categoryOptions.forEach { cat ->
+                        DropdownMenuItem(text = { Text(cat) }, onClick = {
+                            selectedCategory = cat
+                            expanded = false
+                        })
                     }
                 }
             }
         }
 
+        // 리스트 박스
         Box(
             modifier = Modifier
                 .constrainAs(listBox) {
@@ -193,15 +194,14 @@ fun MemoryInfoListScreen(navController: NavController, patientId: String) {
                     start.linkTo(parent.start)
                     end.linkTo(parent.end)
                     bottom.linkTo(parent.bottom)
-                    height = Dimension.fillToConstraints
                 }
                 .fillMaxWidth()
                 .background(Color(0xFFFDEFF1), RoundedCornerShape(12.dp))
                 .padding(12.dp)
         ) {
-            val filtered = remember(memoryList, selectedCategory) {
-                if (selectedCategory == "전체") memoryList
-                else memoryList.filter { it.category == selectedCategory }
+            val filtered = remember(photoList, selectedCategory) {
+                if (selectedCategory == "전체") photoList
+                else photoList.filter { it.category == selectedCategory }
             }
 
             LazyColumn(
@@ -215,17 +215,45 @@ fun MemoryInfoListScreen(navController: NavController, patientId: String) {
                             .background(Color(0xFFFFC9D8), RoundedCornerShape(12.dp))
                             .padding(12.dp)
                     ) {
-                        Text(item.description, fontSize = 14.sp, color = Color.Black)
+                        Text(item.description, fontSize = 14.sp)
                         Spacer(Modifier.height(8.dp))
-                        AsyncImage(
-                            model = item.mediaUrl,
-                            contentDescription = "기억 사진",
-                            contentScale = ContentScale.Crop,
+
+                        // 이미지 URL 결정: public URL 직접 사용 OR SDK로 다운로드 URL 획득
+                        var imageModel by remember { mutableStateOf<String?>(null) }
+                        LaunchedEffect(item.imageUrl) {
+                            imageModel = try {
+                                if (item.imageUrl.startsWith("https://storage.googleapis.com/")) {
+                                    item.imageUrl
+                                } else {
+                                    storage.getReferenceFromUrl(item.imageUrl)
+                                        .downloadUrl.await().toString()
+                                }
+                            } catch (e: Exception) {
+                                Log.e("PhotosList", "URL 결정 실패", e)
+                                null
+                            }
+                        }
+
+                        Box(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(150.dp)
                                 .clip(RoundedCornerShape(8.dp))
-                        )
+                                .background(Color.LightGray),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (imageModel != null) {
+                                AsyncImage(
+                                    model = imageModel,
+                                    contentDescription = "기억 사진",
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.matchParentSize()
+                                )
+                            } else {
+                                CircularProgressIndicator()
+                            }
+                        }
+
                         Spacer(Modifier.height(8.dp))
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -233,8 +261,6 @@ fun MemoryInfoListScreen(navController: NavController, patientId: String) {
                         ) {
                             Text(
                                 text = "수정",
-                                fontSize = 12.sp,
-                                color = Color.Blue,
                                 modifier = Modifier
                                     .padding(end = 16.dp)
                                     .clickable {
@@ -245,7 +271,6 @@ fun MemoryInfoListScreen(navController: NavController, patientId: String) {
                             )
                             Text(
                                 text = "삭제",
-                                fontSize = 12.sp,
                                 color = Color.Red,
                                 modifier = Modifier.clickable {
                                     itemToDelete = item
@@ -275,25 +300,26 @@ fun MemoryInfoListScreen(navController: NavController, patientId: String) {
             confirmButton = {
                 TextButton(onClick = {
                     editingItem?.let { item ->
-                        val idx = memoryList.indexOfFirst { it.id == item.id }
+                        val idx = photoList.indexOfFirst { it.id == item.id }
                         if (idx != -1) {
-                            memoryList[idx] = item.copy(description = newDescription)
+                            photoList[idx] = item.copy(description = newDescription)
                             coroutineScope.launch {
-                                val pid = getPatientIdFromPrefs(context).orEmpty()
                                 val token = Firebase.auth.currentUser
                                     ?.getIdToken(true)?.await()?.token.orEmpty()
                                 val json = JSONObject().put("description", newDescription)
-                                val req = Request.Builder()
-                                    .url("${BuildConfig.BASE_URL}/memory/$pid/${item.id}")
+                                Request.Builder()
+                                    .url("${BuildConfig.BASE_URL}/photos/${item.id}")
                                     .addHeader("Authorization", "Bearer $token")
                                     .put(
                                         json.toString()
                                             .toRequestBody("application/json".toMediaType())
                                     )
                                     .build()
-                                withContext(Dispatchers.IO) {
-                                    client.newCall(req).execute().close()
-                                }
+                                    .also { req ->
+                                        withContext(Dispatchers.IO) {
+                                            client.newCall(req).execute().close()
+                                        }
+                                    }
                             }
                         }
                     }
@@ -319,20 +345,20 @@ fun MemoryInfoListScreen(navController: NavController, patientId: String) {
                 TextButton(onClick = {
                     itemToDelete?.let { item ->
                         coroutineScope.launch {
-                            val pid = getPatientIdFromPrefs(context).orEmpty()
                             val token = Firebase.auth.currentUser
                                 ?.getIdToken(true)?.await()?.token.orEmpty()
-                            withContext(Dispatchers.IO) {
-                                client.newCall(
-                                    Request.Builder()
-                                        .url("${BuildConfig.BASE_URL}/memory/$pid/${item.id}")
-                                        .addHeader("Authorization", "Bearer $token")
-                                        .delete()
-                                        .build()
-                                ).execute().use { res ->
-                                    if (res.isSuccessful) memoryList.remove(item)
+                            Request.Builder()
+                                .url("${BuildConfig.BASE_URL}/photos/${item.id}")
+                                .addHeader("Authorization", "Bearer $token")
+                                .delete()
+                                .build()
+                                .also { req ->
+                                    withContext(Dispatchers.IO) {
+                                        client.newCall(req).execute().use { res ->
+                                            if (res.isSuccessful) photoList.remove(item)
+                                        }
+                                    }
                                 }
-                            }
                         }
                     }
                     showDeleteConfirm = false
@@ -348,6 +374,9 @@ fun MemoryInfoListScreen(navController: NavController, patientId: String) {
         )
     }
 }
+
+
+
 
 
 
