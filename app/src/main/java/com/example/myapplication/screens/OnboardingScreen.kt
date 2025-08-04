@@ -5,26 +5,28 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.ExperimentalFoundationApi  // <-- 꼭 이걸로
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.pager.HorizontalPager      // foundation-pager
-import androidx.compose.foundation.pager.rememberPagerState // foundation-pager
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
 import androidx.navigation.NavController
 import com.example.myapplication.R
-import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -33,14 +35,18 @@ fun OnboardingScreen(
     patientId: String,
     onFinish: () -> Unit
 ) {
-    // 1) 튜토리얼 페이지 목록
+    // 예시로 지정한 색 (원하시는 색으로 변경)
+    val primaryColor = Color(0xFF6200EE)
+    val dividerColor = Color.Gray.copy(alpha = 0.3f)
+
+    // 1) 페이지 데이터
     val pages = listOf(
         "오렌지!" to R.drawable.ic_1,
         "레몬!"   to R.drawable.ic_3,
         "수박!"   to R.drawable.ic_4
     )
 
-    // 2) PagerState (initialPage + pageCount 람다)
+    // 2) PagerState
     val pagerState = rememberPagerState(
         initialPage = 0,
         pageCount = { pages.size }
@@ -51,7 +57,7 @@ fun OnboardingScreen(
     Column(modifier = Modifier.fillMaxSize()) {
         Spacer(modifier = Modifier.weight(1f))
 
-        // 3) HorizontalPager: 꼭 state만 지정
+        // 3) HorizontalPager
         HorizontalPager(
             state = pagerState,
             modifier = Modifier
@@ -71,33 +77,33 @@ fun OnboardingScreen(
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
                     text = pages[page].first,
-                    style = MaterialTheme.typography.titleMedium
+                    // 기본 텍스트 색도 직접 지정하고 싶다면 여기도 Color.Transparent 같은 식으로!
                 )
             }
         }
 
         Spacer(modifier = Modifier.weight(1f))
 
-//        // 4) 점선 구분선
-//        Canvas(
-//            modifier = Modifier
-//                .fillMaxWidth()
-//                .height(1.dp)
-//                .padding(horizontal = 40.dp)
-//        ) {
-//            val strokePx = with(density) { 2.dp.toPx() }
-//            drawLine(
-//                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
-//                start = Offset.Zero,
-//                end = Offset(size.width, 0f),
-//                strokeWidth = strokePx,
-//                pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f,10f), 0f)
-//            )
-//        }
+        // 4) 점선 구분선 (하드코딩된 색)
+        Canvas(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(1.dp)
+                .padding(horizontal = 40.dp)
+        ) {
+            val strokePx = with(density) { 2.dp.toPx() }
+            drawLine(
+                color = dividerColor,
+                start = Offset.Zero,
+                end = Offset(size.width, 0f),
+                strokeWidth = strokePx,
+                pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f)
+            )
+        }
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // 5) 이전 • ●○ 인디케이터 • 다음/시작하기
+        // 5) 이전 • ●○ • 다음/시작하기
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -115,7 +121,7 @@ fun OnboardingScreen(
                 },
                 enabled = pagerState.currentPage > 0,
                 shape = CircleShape,
-                border = BorderStroke(2.dp, MaterialTheme.colorScheme.primary),
+                border = BorderStroke(2.dp, primaryColor),
                 modifier = Modifier.size(48.dp)
             ) {
                 Text("이전")
@@ -128,10 +134,8 @@ fun OnboardingScreen(
                         modifier = Modifier
                             .size(8.dp)
                             .background(
-                                color = if (idx == pagerState.currentPage)
-                                    MaterialTheme.colorScheme.primary
-                                else
-                                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
+                                color = if (idx == pagerState.currentPage) primaryColor
+                                else dividerColor,
                                 shape = CircleShape
                             )
                     )
@@ -151,7 +155,7 @@ fun OnboardingScreen(
                     }
                 },
                 shape = CircleShape,
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                colors = ButtonDefaults.buttonColors(containerColor = primaryColor),
                 modifier = Modifier.size(48.dp)
             ) {
                 Text(if (pagerState.currentPage < pages.lastIndex) "다음" else "시작하기")
@@ -159,6 +163,11 @@ fun OnboardingScreen(
         }
     }
 }
+
+
+
+
+
 
 
 

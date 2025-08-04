@@ -20,8 +20,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.constraintlayout.compose.ConstraintLayout
-import androidx.constraintlayout.compose.Dimension
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import com.example.myapplication.R
@@ -46,7 +44,6 @@ fun getGuardianIdFromPrefs(context: Context): String? =
         .getString("guardian_id", null)
 
 // 사진 아이템 데이터 클래스
-
 data class PhotoItem(
     val id: String,
     var description: String,
@@ -57,13 +54,14 @@ data class PhotoItem(
 
 @Composable
 fun MemoryInfoListScreen(navController: NavController, patientId: String) {
+    // 상태 및 의존성
     val photoList = remember { mutableStateListOf<PhotoItem>() }
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val client = remember { OkHttpClient() }
     val storage = Firebase.storage
 
-    // 카테고리 필터
+    // 카테고리 필터 상태
     val categoryOptions = listOf("전체", "가족", "동네", "학창시절", "여행", "환자가 좋아하는 것")
     var selectedCategory by remember { mutableStateOf("전체") }
     var expanded by remember { mutableStateOf(false) }
@@ -119,165 +117,131 @@ fun MemoryInfoListScreen(navController: NavController, patientId: String) {
         }
     }
 
-    ConstraintLayout(
+    // 화면 구성
+    Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(24.dp)
+            .background(Color(0xFFFFF0F2))
+            .padding(16.dp)
     ) {
-        val (logo, title, filterLabel, filterDropdown, listBox) = createRefs()
-
-        // 로고
+        // 로고 및 제목
         Image(
             painter = painterResource(id = R.drawable.rogo),
             contentDescription = "Logo",
             modifier = Modifier
-                .size(100.dp)
-                .constrainAs(logo) {
-                    top.linkTo(parent.top, margin = 50.dp)
-                    start.linkTo(parent.start)
-                    end.linkTo(parent.end)
-                }
+                .size(80.dp)
+                .align(Alignment.CenterHorizontally)
         )
-
-        // 제목
+        Spacer(Modifier.height(8.dp))
         Text(
             text = "회상 정보 데이터 확인",
-            fontSize = 30.sp,
-            modifier = Modifier.constrainAs(title) {
-                top.linkTo(logo.bottom, margin = 12.dp)
-                start.linkTo(parent.start)
-                end.linkTo(parent.end)
-            }
+            fontSize = 24.sp,
+            modifier = Modifier.align(Alignment.CenterHorizontally)
         )
+        Spacer(Modifier.height(16.dp))
 
-        // 필터 라벨 & 드롭다운
-        Text(
-            text = "카테고리 필터:", fontSize = 14.sp,
-            modifier = Modifier.constrainAs(filterLabel) {
-                top.linkTo(title.bottom, margin = 16.dp)
-                start.linkTo(parent.start)
-            }
-        )
+        // 카테고리 필터
         Box(
             modifier = Modifier
-                .constrainAs(filterDropdown) {
-                    top.linkTo(filterLabel.bottom, margin = 4.dp)
-                    start.linkTo(parent.start)
-                    width = Dimension.fillToConstraints
-                }
+                .fillMaxWidth()
                 .background(Color.White, RoundedCornerShape(8.dp))
         ) {
-            Column {
-                Text(
-                    text = selectedCategory,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { expanded = true }
-                        .padding(12.dp)
-                )
-                DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                    categoryOptions.forEach { cat ->
-                        DropdownMenuItem(text = { Text(cat) }, onClick = {
+            Text(
+                text = selectedCategory,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { expanded = true }
+                    .padding(12.dp)
+            )
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false }
+            ) {
+                categoryOptions.forEach { cat ->
+                    DropdownMenuItem(
+                        text = { Text(cat) },
+                        onClick = {
                             selectedCategory = cat
                             expanded = false
-                        })
-                    }
+                        }
+                    )
                 }
             }
         }
+        Spacer(Modifier.height(16.dp))
 
-        // 리스트 박스
-        Box(
+        // 필터 적용된 리스트 + 스크롤
+        val filtered = remember(photoList, selectedCategory) {
+            if (selectedCategory == "전체") photoList
+            else photoList.filter { it.category == selectedCategory }
+        }
+        LazyColumn(
             modifier = Modifier
-                .constrainAs(listBox) {
-                    top.linkTo(filterDropdown.bottom, margin = 16.dp)
-                    start.linkTo(parent.start)
-                    end.linkTo(parent.end)
-                    bottom.linkTo(parent.bottom)
-                }
                 .fillMaxWidth()
-                .background(Color(0xFFFDEFF1), RoundedCornerShape(12.dp))
-                .padding(12.dp)
+                .weight(1f),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            val filtered = remember(photoList, selectedCategory) {
-                if (selectedCategory == "전체") photoList
-                else photoList.filter { it.category == selectedCategory }
-            }
+            items(filtered, key = { it.id }) { item ->
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFFFFC9D8), RoundedCornerShape(12.dp))
+                        .padding(12.dp)
+                ) {
+                    Text(item.description, fontSize = 14.sp)
+                    Spacer(Modifier.height(8.dp))
 
-            LazyColumn(
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.fillMaxSize()
-            ) {
-                items(filtered, key = { it.id }) { item ->
-                    Column(
+                    var imageModel by remember { mutableStateOf<String?>(null) }
+                    LaunchedEffect(item.imageUrl) {
+                        imageModel = try {
+                            if (item.imageUrl.startsWith("https://storage.googleapis.com/")) item.imageUrl
+                            else storage.getReferenceFromUrl(item.imageUrl)
+                                .downloadUrl.await().toString()
+                        } catch (e: Exception) {
+                            Log.e("PhotosList", "URL 결정 실패", e)
+                            null
+                        }
+                    }
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(Color(0xFFFFC9D8), RoundedCornerShape(12.dp))
-                            .padding(12.dp)
+                            .height(150.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color.LightGray),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Text(item.description, fontSize = 14.sp)
-                        Spacer(Modifier.height(8.dp))
-
-                        // 이미지 URL 결정: public URL 직접 사용 OR SDK로 다운로드 URL 획득
-                        var imageModel by remember { mutableStateOf<String?>(null) }
-                        LaunchedEffect(item.imageUrl) {
-                            imageModel = try {
-                                if (item.imageUrl.startsWith("https://storage.googleapis.com/")) {
-                                    item.imageUrl
-                                } else {
-                                    storage.getReferenceFromUrl(item.imageUrl)
-                                        .downloadUrl.await().toString()
-                                }
-                            } catch (e: Exception) {
-                                Log.e("PhotosList", "URL 결정 실패", e)
-                                null
-                            }
-                        }
-
-                        Box(
+                        if (imageModel != null) {
+                            AsyncImage(
+                                model = imageModel,
+                                contentDescription = "기억 사진",
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.matchParentSize()
+                            )
+                        } else CircularProgressIndicator()
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        Text(
+                            text = "수정",
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .height(150.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(Color.LightGray),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            if (imageModel != null) {
-                                AsyncImage(
-                                    model = imageModel,
-                                    contentDescription = "기억 사진",
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier.matchParentSize()
-                                )
-                            } else {
-                                CircularProgressIndicator()
-                            }
-                        }
-
-                        Spacer(Modifier.height(8.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.End
-                        ) {
-                            Text(
-                                text = "수정",
-                                modifier = Modifier
-                                    .padding(end = 16.dp)
-                                    .clickable {
-                                        editingItem = item
-                                        newDescription = item.description
-                                        showDialog = true
-                                    }
-                            )
-                            Text(
-                                text = "삭제",
-                                color = Color.Red,
-                                modifier = Modifier.clickable {
-                                    itemToDelete = item
-                                    showDeleteConfirm = true
+                                .padding(end = 16.dp)
+                                .clickable {
+                                    editingItem = item
+                                    newDescription = item.description
+                                    showDialog = true
                                 }
-                            )
-                        }
+                        )
+                        Text(
+                            text = "삭제",
+                            color = Color.Red,
+                            modifier = Modifier.clickable {
+                                itemToDelete = item
+                                showDeleteConfirm = true
+                            }
+                        )
                     }
                 }
             }
@@ -310,10 +274,7 @@ fun MemoryInfoListScreen(navController: NavController, patientId: String) {
                                 Request.Builder()
                                     .url("${BuildConfig.BASE_URL}/photos/${item.id}")
                                     .addHeader("Authorization", "Bearer $token")
-                                    .put(
-                                        json.toString()
-                                            .toRequestBody("application/json".toMediaType())
-                                    )
+                                    .put(json.toString().toRequestBody("application/json".toMediaType()))
                                     .build()
                                     .also { req ->
                                         withContext(Dispatchers.IO) {
@@ -374,6 +335,7 @@ fun MemoryInfoListScreen(navController: NavController, patientId: String) {
         )
     }
 }
+
 
 
 
