@@ -412,7 +412,7 @@ fun MemoryInfoInputScreen(navController: NavController, patientId: String) {
                                         "회상정보 9개 입력 완료! 앱을 이용할 수 있습니다.",
                                         Toast.LENGTH_SHORT
                                     ).show()
-                                    navController.navigate("home") {
+                                    navController.navigate("main2/{patientId}") {
                                         popUpTo("MemoryInfoInput/$patientId") { inclusive = true }
                                     }
                                 }
