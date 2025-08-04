@@ -378,7 +378,7 @@ fun MemoryInfoInputScreen(navController: NavController, patientId: String) {
                             .build()
 
                         val request = Request.Builder()
-                            .url("${BuildConfig.BASE_URL}/photos/upload")
+                            .url("${BuildConfig.BASE_URL}/photos")
                             .addHeader("Authorization", "Bearer $idToken")
                             .post(multipart)
                             .build()

@@ -98,7 +98,7 @@ fun Patient_Sentence(
             val token = Firebase.auth.currentUser
                 ?.getIdToken(false)?.await()?.token
                 ?: throw Exception("인증 토큰 없음")
-            val url = "${BuildConfig.BASE_URL.trimEnd('/')}/memories?patient_id=$patientId"
+            val url = "${BuildConfig.BASE_URL.trimEnd('/')}/memories/list/$patientId"
             val resp = withContext(Dispatchers.IO) {
                 client.newCall(
                     Request.Builder()
@@ -142,8 +142,8 @@ fun Patient_Sentence(
             )
             NavigationBar {
                 listOf(
-                    "sentence/$patientId" to "회상문장",
-                    "quiz/$patientId"     to "회상퀴즈",
+                    "sentence/{patientId}" to "회상문장",
+                    "quiz/{patientId}"     to "회상퀴즈",
                     "alert"               to "긴급알림"
                 ).forEach { (route, label) ->
                     NavigationBarItem(

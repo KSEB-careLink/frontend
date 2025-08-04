@@ -45,11 +45,13 @@ fun Guardian_Login(navController: NavController) {
     var password by remember { mutableStateOf("") }
     val client = remember { OkHttpClient() }
 
-    fun savePatientIdToPrefs(context: Context, patientId: String) {
+    fun saveUserInfoToPrefs(context: Context, patientId: String, guardianId: String) {
         val prefs = context.getSharedPreferences("MyPrefs", Context.MODE_PRIVATE)
-        prefs.edit().putString("patient_id", patientId).apply()
+        prefs.edit()
+            .putString("patient_id", patientId)
+            .putString("guardian_id", guardianId)
+            .apply()
     }
-
 
     fun showToast(message: String) {
         Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
@@ -162,12 +164,13 @@ fun Guardian_Login(navController: NavController) {
                         auth.signInWithEmailAndPassword(emailTrimmed, passwordTrimmed).await()
                         val user = auth.currentUser
                             ?: throw Exception("Firebase user is null")
+                        val guardianId = user.uid
 
-                        // 2) ID 토큰 획득 (커스텀 클레임 포함)
+                        // 2) ID 토큰 획득
                         val idToken = user.getIdToken(true).await().token
                             ?: throw Exception("ID 토큰이 null입니다")
 
-                        // 3) 서버에서 /auth/me 호출
+                        // 3) 서버 /auth/me 요청
                         val meRequest = Request.Builder()
                             .url("${BuildConfig.BASE_URL}/auth/me")
                             .addHeader("Authorization", "Bearer $idToken")
@@ -186,14 +189,17 @@ fun Guardian_Login(navController: NavController) {
                         val joinCode = meJson.optString("joinCode")
                         val linkedPatients = meJson.optJSONArray("linkedPatients")
 
-                        if (linkedPatients != null && linkedPatients.length() > 0) {
-                            savePatientIdToPrefs(context, linkedPatients.getString(0))
-                        }
-
                         if (role == "guardian" && joinCode.isNotBlank()) {
-                            showToast("로그인 성공!")
-                            navController.navigate("code/$joinCode") {
-                                popUpTo("G_login") { inclusive = true }
+                            if (linkedPatients != null && linkedPatients.length() > 0) {
+                                val patientId = linkedPatients.getString(0)
+                                saveUserInfoToPrefs(context, patientId, guardianId)
+
+                                showToast("로그인 성공!")
+                                navController.navigate("code/$joinCode") {
+                                    popUpTo("G_login") { inclusive = true }
+                                }
+                            } else {
+                                showToast("연결된 환자가 없습니다. 먼저 연결을 진행해주세요.")
                             }
                         } else {
                             showToast("역할 또는 코드 오류")
@@ -219,7 +225,6 @@ fun Guardian_Login(navController: NavController) {
             Text("로그인", color = Color.White, fontSize = 16.sp)
         }
 
-
         Button(
             onClick = { navController.navigate("guardianSignup") },
             modifier = Modifier
@@ -237,5 +242,6 @@ fun Guardian_Login(navController: NavController) {
         }
     }
 }
+
 
 
