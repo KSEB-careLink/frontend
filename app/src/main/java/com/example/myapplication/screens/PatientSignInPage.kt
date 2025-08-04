@@ -1,4 +1,3 @@
-// imports 생략하지 않음
 package com.example.myapplication.screens
 
 import android.util.Log
@@ -26,11 +25,12 @@ import com.example.myapplication.R
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
 import kotlinx.coroutines.*
+import kotlinx.coroutines.tasks.await
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
-import kotlinx.coroutines.tasks.await
+
 @Composable
 fun PatientSignUpScreen(navController: NavController) {
     val ctx = LocalContext.current
@@ -94,7 +94,9 @@ fun PatientSignUpScreen(navController: NavController) {
                 onValueChange = { name = it.trim() },
                 placeholder = { Text("이름") },
                 singleLine = true,
-                modifier = Modifier.fillMaxWidth().height(fieldHeight)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(fieldHeight)
             )
             Spacer(Modifier.height(fieldSpacer))
 
@@ -104,7 +106,9 @@ fun PatientSignUpScreen(navController: NavController) {
                 onValueChange = { email = it.trim() },
                 placeholder = { Text("example@mail.com 형식으로 입력하세요") },
                 singleLine = true,
-                modifier = Modifier.fillMaxWidth().height(fieldHeight)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(fieldHeight)
             )
             Spacer(Modifier.height(fieldSpacer))
 
@@ -115,7 +119,9 @@ fun PatientSignUpScreen(navController: NavController) {
                 placeholder = { Text("6글자 이상 입력하세요") },
                 visualTransformation = PasswordVisualTransformation(),
                 singleLine = true,
-                modifier = Modifier.fillMaxWidth().height(fieldHeight)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(fieldHeight)
             )
         }
 
@@ -143,6 +149,9 @@ fun PatientSignUpScreen(navController: NavController) {
                                 put("name", name)
                                 put("role", "patient")
                             }
+
+                            Log.d("PatientSignUp", "보내는 JSON: $signupJson") // ✅ 로그 추가
+
                             val signupReq = Request.Builder()
                                 .url("${BuildConfig.BASE_URL}/auth/signup")
                                 .post(
@@ -153,6 +162,10 @@ fun PatientSignUpScreen(navController: NavController) {
                             val signupRes = withContext(Dispatchers.IO) {
                                 client.newCall(signupReq).execute()
                             }
+
+                            val responseBody = signupRes.body?.string()
+                            Log.d("PatientSignUp", "응답 코드: ${signupRes.code}, 바디: $responseBody") // ✅ 응답 로그 추가
+
                             if (!signupRes.isSuccessful) {
                                 throw Exception("signup 실패: ${signupRes.code}")
                             }
@@ -160,7 +173,7 @@ fun PatientSignUpScreen(navController: NavController) {
                             // 2) Firebase 이메일/비번 로그인
                             auth.signInWithEmailAndPassword(email, password).await()
 
-                            // 3) ID 토큰 강제 갱신 (Firestore/Storage 규칙 통과용)
+                            // 3) ID 토큰 강제 갱신
                             auth.currentUser
                                 ?.getIdToken(true)
                                 ?.await()
@@ -188,7 +201,6 @@ fun PatientSignUpScreen(navController: NavController) {
                 Text("가입하기", color = Color.White, fontSize = 16.sp)
             }
 
-
             Button(
                 onClick = { navController.navigate("p_login") },
                 modifier = Modifier.weight(1f),
@@ -201,7 +213,9 @@ fun PatientSignUpScreen(navController: NavController) {
 
         if (isLoading) {
             Box(
-                Modifier.fillMaxSize().background(Color(0x88000000)),
+                Modifier
+                    .fillMaxSize()
+                    .background(Color(0x88000000)),
                 contentAlignment = Alignment.Center
             ) {
                 CircularProgressIndicator(color = Color.White)
@@ -209,6 +223,7 @@ fun PatientSignUpScreen(navController: NavController) {
         }
     }
 }
+
 
 
 
