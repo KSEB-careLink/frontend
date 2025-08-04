@@ -11,8 +11,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -43,7 +43,6 @@ fun MemoryInfoInputScreen(navController: NavController, patientId: String) {
     var imageUri by remember { mutableStateOf<Uri?>(null) }
     var isLoading by remember { mutableStateOf(false) }
 
-    // UI fields updated: 시간, 장소, 등장인물, 가장 기억에 남는 것
     var timeText by remember { mutableStateOf("") }
     var placeText by remember { mutableStateOf("") }
     var charactersText by remember { mutableStateOf("") }
@@ -60,7 +59,9 @@ fun MemoryInfoInputScreen(navController: NavController, patientId: String) {
 
     val launcher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? -> imageUri = uri }
+    ) { uri: Uri? ->
+        imageUri = uri
+    }
 
     ConstraintLayout(
         modifier = Modifier
@@ -89,22 +90,30 @@ fun MemoryInfoInputScreen(navController: NavController, patientId: String) {
         val uploadButton = createRef()
 
         // 제목
-        Row(modifier = Modifier.constrainAs(title) {
-            top.linkTo(parent.top, margin = 16.dp)
-            start.linkTo(parent.start); end.linkTo(parent.end)
-        }, verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            modifier = Modifier.constrainAs(title) {
+                top.linkTo(parent.top, margin = 16.dp)
+                start.linkTo(parent.start); end.linkTo(parent.end)
+            },
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Text("회상정보 ", fontSize = 34.sp, color = Color.Black)
             Text("입력", fontSize = 34.sp, color = Color(0xFF00BFA5))
         }
 
         // 이미지 박스
-        Box(modifier = Modifier
-            .size(150.dp)
-            .then(if (imageUri == null) Modifier.background(Color.LightGray, RoundedCornerShape(8.dp)) else Modifier)
-            .constrainAs(imageBox) {
-                top.linkTo(title.bottom, margin = 24.dp)
-                start.linkTo(parent.start); end.linkTo(parent.end)
-            },
+        Box(
+            modifier = Modifier
+                .size(150.dp)
+                .then(
+                    if (imageUri == null)
+                        Modifier.background(Color.LightGray, RoundedCornerShape(8.dp))
+                    else Modifier
+                )
+                .constrainAs(imageBox) {
+                    top.linkTo(title.bottom, margin = 24.dp)
+                    start.linkTo(parent.start); end.linkTo(parent.end)
+                },
             contentAlignment = Alignment.Center
         ) {
             if (imageUri != null) {
@@ -126,30 +135,37 @@ fun MemoryInfoInputScreen(navController: NavController, patientId: String) {
         }
 
         // 사진 선택 버튼
-        Button(onClick = { launcher.launch("image/*") },
+        Button(
+            onClick = { launcher.launch("image/*") },
             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF80DEEA)),
             modifier = Modifier.constrainAs(selectButton) {
                 top.linkTo(imageBox.bottom, margin = 8.dp)
                 start.linkTo(parent.start); end.linkTo(parent.end)
-            }) {
+            }
+        ) {
             Text("사진 선택", color = Color.White)
         }
 
         // 카테고리
-        Text("카테고리:", modifier = Modifier.constrainAs(categoryLabel) {
-            top.linkTo(selectButton.bottom, margin = 24.dp)
-            start.linkTo(parent.start)
-        })
-        Box(modifier = Modifier
-            .constrainAs(categoryDropdown) {
-                top.linkTo(categoryLabel.bottom, margin = 4.dp)
-                start.linkTo(parent.start); end.linkTo(parent.end)
-                width = Dimension.fillToConstraints
+        Text(
+            "카테고리:",
+            modifier = Modifier.constrainAs(categoryLabel) {
+                top.linkTo(selectButton.bottom, margin = 24.dp)
+                start.linkTo(parent.start)
             }
-            .background(Color.White, RoundedCornerShape(8.dp))
+        )
+        Box(
+            modifier = Modifier
+                .constrainAs(categoryDropdown) {
+                    top.linkTo(categoryLabel.bottom, margin = 4.dp)
+                    start.linkTo(parent.start); end.linkTo(parent.end)
+                    width = Dimension.fillToConstraints
+                }
+                .background(Color.White, RoundedCornerShape(8.dp))
         ) {
             Column {
-                Text(selectedCategory,
+                Text(
+                    selectedCategory,
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable { expanded = true }
@@ -158,7 +174,8 @@ fun MemoryInfoInputScreen(navController: NavController, patientId: String) {
                 DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
                     categoryOptions.forEach { cat ->
                         DropdownMenuItem(text = { Text(cat) }, onClick = {
-                            selectedCategory = cat; expanded = false
+                            selectedCategory = cat
+                            expanded = false
                         })
                     }
                 }
@@ -166,24 +183,38 @@ fun MemoryInfoInputScreen(navController: NavController, patientId: String) {
         }
 
         // 안내 라벨
-        Text("아래 질문에 답해주세요:", fontSize = 14.sp, color = Color.Gray,
+        Text(
+            "아래 질문에 답해주세요:",
+            fontSize = 14.sp,
+            color = Color.Gray,
             modifier = Modifier.constrainAs(guideLabel) {
                 top.linkTo(categoryDropdown.bottom, margin = 24.dp)
                 start.linkTo(parent.start)
-            })
+            }
+        )
 
         // 🕒 시간
-        Text("🕒 시간", fontSize = 16.sp, color = Color.Black,
+        Text(
+            "🕒 시간",
+            fontSize = 16.sp,
+            color = Color.Black,
             modifier = Modifier.constrainAs(timeLabel) {
                 top.linkTo(guideLabel.bottom, margin = 16.dp)
                 start.linkTo(parent.start)
-            })
-        Text("Q: 언제의 기억인가요?", fontSize = 12.sp, color = Color.DarkGray,
+            }
+        )
+        Text(
+            "Q: 언제의 기억인가요?",
+            fontSize = 12.sp,
+            color = Color.DarkGray,
             modifier = Modifier.constrainAs(timeQ) {
                 top.linkTo(timeLabel.bottom, margin = 4.dp)
                 start.linkTo(parent.start)
-            })
-        TextField(value = timeText, onValueChange = { timeText = it },
+            }
+        )
+        TextField(
+            value = timeText,
+            onValueChange = { timeText = it },
             placeholder = { Text("ex) 2017년 여름, 작년 설날") },
             modifier = Modifier.constrainAs(timeInput) {
                 top.linkTo(timeQ.bottom, margin = 4.dp)
@@ -197,17 +228,27 @@ fun MemoryInfoInputScreen(navController: NavController, patientId: String) {
         )
 
         // 📍 장소
-        Text("📍 장소", fontSize = 16.sp, color = Color.Black,
+        Text(
+            "📍 장소",
+            fontSize = 16.sp,
+            color = Color.Black,
             modifier = Modifier.constrainAs(placeLabel) {
                 top.linkTo(timeInput.bottom, margin = 16.dp)
                 start.linkTo(parent.start)
-            })
-        Text("Q: 어디에서 있었던 일인가요?", fontSize = 12.sp, color = Color.DarkGray,
+            }
+        )
+        Text(
+            "Q: 어디에서 있었던 일인가요?",
+            fontSize = 12.sp,
+            color = Color.DarkGray,
             modifier = Modifier.constrainAs(placeQ) {
                 top.linkTo(placeLabel.bottom, margin = 4.dp)
                 start.linkTo(parent.start)
-            })
-        TextField(value = placeText, onValueChange = { placeText = it },
+            }
+        )
+        TextField(
+            value = placeText,
+            onValueChange = { placeText = it },
             placeholder = { Text("ex) 제주도 땡땡계곡, 을왕리 바닷가") },
             modifier = Modifier.constrainAs(placeInput) {
                 top.linkTo(placeQ.bottom, margin = 4.dp)
@@ -221,17 +262,27 @@ fun MemoryInfoInputScreen(navController: NavController, patientId: String) {
         )
 
         // 👥 등장인물
-        Text("👥 등장인물", fontSize = 16.sp, color = Color.Black,
+        Text(
+            "👥 등장인물",
+            fontSize = 16.sp,
+            color = Color.Black,
             modifier = Modifier.constrainAs(charLabel) {
                 top.linkTo(placeInput.bottom, margin = 16.dp)
                 start.linkTo(parent.start)
-            })
-        Text("Q: 누구와 함께 있었나요?", fontSize = 12.sp, color = Color.DarkGray,
+            }
+        )
+        Text(
+            "Q: 누구와 함께 있었나요?",
+            fontSize = 12.sp,
+            color = Color.DarkGray,
             modifier = Modifier.constrainAs(charQ) {
                 top.linkTo(charLabel.bottom, margin = 4.dp)
                 start.linkTo(parent.start)
-            })
-        TextField(value = charactersText, onValueChange = { charactersText = it },
+            }
+        )
+        TextField(
+            value = charactersText,
+            onValueChange = { charactersText = it },
             placeholder = { Text("ex) 형이랑 친구랑 나, 아버지") },
             modifier = Modifier.constrainAs(charInput) {
                 top.linkTo(charQ.bottom, margin = 4.dp)
@@ -245,17 +296,27 @@ fun MemoryInfoInputScreen(navController: NavController, patientId: String) {
         )
 
         // 🌟 가장 기억에 남는 것
-        Text("🌟 가장 기억에 남는 것", fontSize = 16.sp, color = Color.Black,
+        Text(
+            "🌟 가장 기억에 남는 것",
+            fontSize = 16.sp,
+            color = Color.Black,
             modifier = Modifier.constrainAs(memorableLabel) {
                 top.linkTo(charInput.bottom, margin = 16.dp)
                 start.linkTo(parent.start)
-            })
-        Text("Q: 그날 가장 기억에 남는 장면이나 일이 있다면요?", fontSize = 12.sp, color = Color.DarkGray,
+            }
+        )
+        Text(
+            "Q: 그날 가장 기억에 남는 장면이나 일이 있다면요?",
+            fontSize = 12.sp,
+            color = Color.DarkGray,
             modifier = Modifier.constrainAs(memorableQ) {
                 top.linkTo(memorableLabel.bottom, margin = 4.dp)
                 start.linkTo(parent.start)
-            })
-        TextField(value = memorableText, onValueChange = { memorableText = it },
+            }
+        )
+        TextField(
+            value = memorableText,
+            onValueChange = { memorableText = it },
             placeholder = { Text("ex) 형이 물에 빠져서 허우적댐") },
             modifier = Modifier.constrainAs(memorableInput) {
                 top.linkTo(memorableQ.bottom, margin = 4.dp)
@@ -271,14 +332,11 @@ fun MemoryInfoInputScreen(navController: NavController, patientId: String) {
         // 업로드 버튼
         Button(
             onClick = {
-                // 필수 입력 체크
-                if (imageUri == null || listOf(timeText, placeText, charactersText, memorableText)
-                        .any { it.isBlank() }
-                ) {
+                // 입력 검증
+                if (imageUri == null || listOf(timeText, placeText, charactersText, memorableText).any { it.isBlank() }) {
                     Toast.makeText(context, "모든 항목을 입력하고 사진을 선택해주세요", Toast.LENGTH_SHORT).show()
                     return@Button
                 }
-
                 val description = """
                     시간: $timeText
                     장소: $placeText
@@ -330,10 +388,33 @@ fun MemoryInfoInputScreen(navController: NavController, patientId: String) {
                         }
 
                         if (response.isSuccessful) {
+                            // 업로드 카운트 갱신
+                            val prevCount = prefs.getInt("upload_count", 0)
+                            val newCount = prevCount + 1
+                            prefs.edit().putInt("upload_count", newCount).apply()
+
                             withContext(Dispatchers.Main) {
-                                Toast.makeText(context, "업로드 성공!", Toast.LENGTH_SHORT).show()
-                                navController.navigate("MemoryInfoList/$patientId") {
-                                    popUpTo("MemoryInfoInput") { inclusive = true }
+                                if (newCount < 9) {
+                                    Toast.makeText(
+                                        context,
+                                        "회상정보 ${newCount}개 저장되었습니다. ${9 - newCount}개 더 입력해주세요.",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                    // 필드 초기화
+                                    imageUri = null
+                                    timeText = ""
+                                    placeText = ""
+                                    charactersText = ""
+                                    memorableText = ""
+                                } else {
+                                    Toast.makeText(
+                                        context,
+                                        "회상정보 9개 입력 완료! 앱을 이용할 수 있습니다.",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                    navController.navigate("home") {
+                                        popUpTo("MemoryInfoInput/$patientId") { inclusive = true }
+                                    }
                                 }
                             }
                         } else {
@@ -379,6 +460,7 @@ fun MemoryInfoInputScreen(navController: NavController, patientId: String) {
         }
     }
 }
+
 
 
 
