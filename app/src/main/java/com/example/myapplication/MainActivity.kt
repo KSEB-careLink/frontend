@@ -237,9 +237,6 @@ class MainActivity : ComponentActivity() {
                     composable("alert") {
                         Patient_Alert(navController)
                     }
-                    composable("result") {
-                        ResultScreen(navController)
-                    }
                 }
             }
         }

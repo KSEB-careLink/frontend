@@ -28,9 +28,9 @@ fun OnboardingScreen(
 ) {
     // 튜토리얼 페이지 리스트
     val pages = listOf(
-        OnboardPage("오렌지!", R.drawable.ic_orange),
-        OnboardPage("레몬!",   R.drawable.ic_lemon),
-        OnboardPage("수박!",   R.drawable.ic_watermelon)
+        OnboardPage("오렌지!", R.drawable.ic_1),
+        OnboardPage("레몬!",   R.drawable.ic_3),
+        OnboardPage("수박!",   R.drawable.ic_4)
     )
 
     // 페이저 상태
