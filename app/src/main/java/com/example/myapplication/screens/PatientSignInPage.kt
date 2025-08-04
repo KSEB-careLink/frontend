@@ -169,7 +169,7 @@ fun PatientSignUpScreen(navController: NavController) {
 
                             // 4) 화면 전환
                             Toast.makeText(ctx, "회원가입 및 로그인 성공!", Toast.LENGTH_SHORT).show()
-                            navController.navigate("code2") {
+                            navController.navigate("code2/{patientId}") {
                                 popUpTo("patient") { inclusive = true }
                             }
                         } catch (e: Exception) {
