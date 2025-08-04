@@ -1,4 +1,4 @@
-// app/src/main/java/com/example/myapplication/screens/OnboardingScreen.kt
+// OnboardingScreen.kt
 package com.example.myapplication.screens
 
 import androidx.compose.foundation.Canvas
@@ -35,7 +35,6 @@ fun OnboardingScreen(
     patientId: String,
     onFinish: () -> Unit
 ) {
-    // 예시로 지정한 색 (원하시는 색으로 변경)
     val primaryColor = Color(0xFF6200EE)
     val dividerColor = Color.Gray.copy(alpha = 0.3f)
 
@@ -75,16 +74,13 @@ fun OnboardingScreen(
                     modifier = Modifier.size(240.dp)
                 )
                 Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    text = pages[page].first,
-                    // 기본 텍스트 색도 직접 지정하고 싶다면 여기도 Color.Transparent 같은 식으로!
-                )
+                Text(text = pages[page].first)
             }
         }
 
         Spacer(modifier = Modifier.weight(1f))
 
-        // 4) 점선 구분선 (하드코딩된 색)
+        // 4) 점선 구분선
         Canvas(
             modifier = Modifier
                 .fillMaxWidth()
@@ -111,7 +107,7 @@ fun OnboardingScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // 이전 버튼
+            // 이전 버튼: 높이만 고정
             OutlinedButton(
                 onClick = {
                     scope.launch {
@@ -122,9 +118,9 @@ fun OnboardingScreen(
                 enabled = pagerState.currentPage > 0,
                 shape = CircleShape,
                 border = BorderStroke(2.dp, primaryColor),
-                modifier = Modifier.size(48.dp)
+                modifier = Modifier.height(48.dp)
             ) {
-                Text("이전")
+                Text("이전", color = primaryColor)
             }
 
             // ●○ 인디케이터
@@ -142,7 +138,7 @@ fun OnboardingScreen(
                 }
             }
 
-            // 다음 / 시작하기 버튼
+            // 다음/시작하기 버튼: 높이만 고정
             Button(
                 onClick = {
                     scope.launch {
@@ -156,13 +152,17 @@ fun OnboardingScreen(
                 },
                 shape = CircleShape,
                 colors = ButtonDefaults.buttonColors(containerColor = primaryColor),
-                modifier = Modifier.size(48.dp)
+                modifier = Modifier.height(48.dp)
             ) {
-                Text(if (pagerState.currentPage < pages.lastIndex) "다음" else "시작하기")
+                Text(
+                    text = if (pagerState.currentPage < pages.lastIndex) "다음" else "시작하기",
+                    color = Color.White
+                )
             }
         }
     }
 }
+
 
 
 
