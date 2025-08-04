@@ -1,6 +1,7 @@
 package com.example.myapplication
 
 import android.Manifest
+import android.content.Context
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
@@ -11,7 +12,9 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
+import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -20,7 +23,6 @@ import com.example.myapplication.screens.*
 import com.example.myapplication.ui.theme.MyApplicationTheme
 import com.example.myapplication.worker.WorkScheduler
 import com.example.myapplication.viewmodel.QuizStatsViewModel
-import androidx.lifecycle.viewmodel.compose.viewModel
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -47,13 +49,64 @@ class MainActivity : ComponentActivity() {
             }
 
             MyApplicationTheme {
+                // 온보딩 완료 여부 플래그
+                val context = LocalContext.current
+                val prefs = context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+                var onboardingDone by remember {
+                    // 테스트 중엔 항상 false로 시작
+                    mutableStateOf(false)
+                }
+
                 // 네비게이션 컨트롤러
                 val navController = rememberNavController()
 
-                // ★ 선택된 목소리 상태 (voiceId)
+                // 선택된 목소리 상태 (voiceId)
                 var selectedVoice by remember { mutableStateOf<String?>(null) }
 
-                NavHost(navController = navController, startDestination = "splash") {
+                // main2 경로 진입 시 온보딩이 안 되어 있으면 튜토리얼로 리다이렉트
+                DisposableEffect(navController, onboardingDone) {
+                    val listener = NavController.OnDestinationChangedListener { controller, destination, args ->
+                        val route = destination.route
+                        if (route != null && route.startsWith("main2/") && !onboardingDone) {
+                            val patientId = args?.getString("patientId")
+                            if (!patientId.isNullOrEmpty()) {
+                                controller.navigate("onboarding/$patientId") {
+                                    popUpTo(route) { inclusive = true }
+                                }
+                            }
+                        }
+                    }
+                    navController.addOnDestinationChangedListener(listener)
+                    onDispose {
+                        navController.removeOnDestinationChangedListener(listener)
+                    }
+                }
+
+                NavHost(
+                    navController = navController,
+                    startDestination = "splash"
+                ) {
+                    // 1회성 튜토리얼 (patientId를 받아서 Main_Page2로 복귀)
+                    composable(
+                        route = "onboarding/{patientId}",
+                        arguments = listOf(navArgument("patientId") { type = NavType.StringType })
+                    ) { backStackEntry ->
+                        val patientId = backStackEntry.arguments?.getString("patientId") ?: return@composable
+                        OnboardingScreen(
+                            navController = navController,
+                            patientId = patientId,
+                            onFinish = {
+                                // 완료 플래그 저장
+                                prefs.edit().putBoolean("onboarding_completed", true).apply()
+                                onboardingDone = true
+                                // Main_Page2로 이동
+                                navController.navigate("main2/$patientId") {
+                                    popUpTo("onboarding/$patientId") { inclusive = true }
+                                }
+                            }
+                        )
+                    }
+
                     composable("splash") {
                         SplashScreen(navController)
                     }
@@ -121,7 +174,6 @@ class MainActivity : ComponentActivity() {
                         val patientId = backStackEntry.arguments?.getString("patientId") ?: return@composable
                         MemoryInfoListScreen(navController, patientId)
                     }
-                    // Recode(목소리 목록 + 선택) 화면
                     composable(
                         route = "recode/{patientId}",
                         arguments = listOf(navArgument("patientId") { type = NavType.StringType })
@@ -130,14 +182,11 @@ class MainActivity : ComponentActivity() {
                         RecodeScreen(
                             navController = navController,
                             patientId = patientId,
-                            // 선택 콜백: MainActivity.selectedVoice 업데이트
                             onSelectVoice = { voiceId ->
                                 selectedVoice = voiceId
                             }
                         )
                     }
-
-                    // Recode2(녹음) 화면
                     composable(
                         route = "recode2/{patientId}",
                         arguments = listOf(navArgument("patientId") { type = NavType.StringType })
@@ -145,7 +194,6 @@ class MainActivity : ComponentActivity() {
                         val patientId = backStackEntry.arguments?.getString("patientId") ?: return@composable
                         Recode2(navController, patientId)
                     }
-
                     composable(
                         route = "location/{patientId}",
                         arguments = listOf(navArgument("patientId") { type = NavType.StringType })
@@ -153,21 +201,17 @@ class MainActivity : ComponentActivity() {
                         val patientId = backStackEntry.arguments?.getString("patientId") ?: return@composable
                         LocationScreen(navController, patientId)
                     }
-                    // 회상 문장 화면: 선택된 voiceId 넘겨주기
                     composable(
                         route = "sentence/{patientId}",
                         arguments = listOf(navArgument("patientId") { type = NavType.StringType })
                     ) { backStackEntry ->
                         val patientId = backStackEntry.arguments?.getString("patientId") ?: return@composable
-                        // selectedVoice가 null이면 기본값("default")을 사용
                         Patient_Sentence(
                             navController = navController,
                             patientId = patientId,
                             voiceId = selectedVoice ?: "default"
                         )
                     }
-
-                    // 회상 퀴즈 화면: 선택된 voiceId 넘겨주기
                     composable(
                         route = "quiz/{patientId}",
                         arguments = listOf(navArgument("patientId") { type = NavType.StringType })
@@ -201,6 +245,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
+
 
 
 
