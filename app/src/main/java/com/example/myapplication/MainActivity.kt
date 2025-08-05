@@ -220,7 +220,7 @@ class MainActivity : ComponentActivity() {
                         Patient_Quiz(
                             navController = navController,
                             patientId = patientId,
-                            voiceId = selectedVoice ?: "default"
+
                         )
                     }
                     composable(

@@ -239,7 +239,7 @@ private fun QuizContent(
                                 put("response_time_sec", elapsedTime)
                             }.toString()
                             val req = Request.Builder()
-                                .url("${BuildConfig.BASE_URL}/quiz_logs")
+                                .url("${BuildConfig.BASE_URL}/quiz-responses")
                                 .addHeader("Authorization", "Bearer $token")
                                 .post(body.toRequestBody("application/json".toMediaType()))
                                 .build()
