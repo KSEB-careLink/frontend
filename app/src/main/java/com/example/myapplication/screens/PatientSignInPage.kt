@@ -41,6 +41,8 @@ fun PatientSignUpScreen(navController: NavController) {
     var name by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    var agreePhoto by remember { mutableStateOf(false) }
+    var agreeProfile by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(false) }
 
     BoxWithConstraints(
@@ -52,12 +54,13 @@ fun PatientSignUpScreen(navController: NavController) {
         val screenH = maxHeight
         val logoSize = screenW * 0.5f
         val textLogoSize = screenW * 0.3f
-        val logoY = screenH * 0.10f
-        val textY = screenH * 0.25f
-        val formY = screenH * 0.35f
+        val logoY = screenH * 0.04f   // 상단 로고 약간 위로
+        val textY = screenH * 0.18f   // 텍스트 로고 위로
+        val formY = screenH * 0.25f   // 입력 폼 더 위로 이동
         val fieldHeight = screenH * 0.07f
         val fieldSpacer = screenH * 0.02f
 
+        // 로고
         Image(
             painter = painterResource(R.drawable.rogo),
             contentDescription = "로고",
@@ -77,6 +80,7 @@ fun PatientSignUpScreen(navController: NavController) {
                 .offset(y = textY)
         )
 
+        // 입력 폼 및 체크박스
         Column(
             Modifier
                 .align(Alignment.TopCenter)
@@ -85,7 +89,12 @@ fun PatientSignUpScreen(navController: NavController) {
             horizontalAlignment = Alignment.Start
         ) {
             Spacer(Modifier.height(fieldSpacer))
-            Text("회원 가입", fontSize = 32.sp, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.CenterHorizontally))
+            Text(
+                "어르신 회원 가입",
+                fontSize = 32.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.align(Alignment.CenterHorizontally)
+            )
             Spacer(Modifier.height(fieldSpacer))
 
             Text("이름", fontSize = 16.sp)
@@ -123,91 +132,115 @@ fun PatientSignUpScreen(navController: NavController) {
                     .fillMaxWidth()
                     .height(fieldHeight)
             )
-        }
+            Spacer(Modifier.height(fieldSpacer))
 
-        Row(
-            Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 140.dp)
-                .fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Button(
-                onClick = {
-                    if (name.isBlank() || email.isBlank() || password.length < 6) {
-                        Toast.makeText(ctx, "모든 필드를 올바르게 입력해주세요.", Toast.LENGTH_SHORT).show()
-                        return@Button
-                    }
-
-                    scope.launch {
-                        isLoading = true
-                        try {
-                            // 1) 백엔드에 회원가입 요청
-                            val signupJson = JSONObject().apply {
-                                put("email", email)
-                                put("password", password)
-                                put("name", name)
-                                put("role", "patient")
-                            }
-
-                            Log.d("PatientSignUp", "보내는 JSON: $signupJson") // ✅ 로그 추가
-
-                            val signupReq = Request.Builder()
-                                .url("${BuildConfig.BASE_URL}/auth/signup")
-                                .post(
-                                    signupJson.toString()
-                                        .toRequestBody("application/json".toMediaType())
-                                )
-                                .build()
-                            val signupRes = withContext(Dispatchers.IO) {
-                                client.newCall(signupReq).execute()
-                            }
-
-                            val responseBody = signupRes.body?.string()
-                            Log.d("PatientSignUp", "응답 코드: ${signupRes.code}, 바디: $responseBody") // ✅ 응답 로그 추가
-
-                            if (!signupRes.isSuccessful) {
-                                throw Exception("signup 실패: ${signupRes.code}")
-                            }
-
-                            // 2) Firebase 이메일/비번 로그인
-                            auth.signInWithEmailAndPassword(email, password).await()
-
-                            // 3) ID 토큰 강제 갱신
-                            auth.currentUser
-                                ?.getIdToken(true)
-                                ?.await()
-                                ?.token
-                                ?: throw Exception("ID 토큰 획득 실패")
-
-                            // 4) 화면 전환
-                            Toast.makeText(ctx, "회원가입 및 로그인 성공!", Toast.LENGTH_SHORT).show()
-                            navController.navigate("code2/{patientId}") {
-                                popUpTo("patient") { inclusive = true }
-                            }
-                        } catch (e: Exception) {
-                            Log.e("PatientSignUp", "오류", e)
-                            Toast.makeText(ctx, "오류: ${e.message}", Toast.LENGTH_LONG).show()
-                        } finally {
-                            isLoading = false
-                        }
-                    }
-                },
-                modifier = Modifier.weight(1f),
-                enabled = name.isNotBlank() && Patterns.EMAIL_ADDRESS.matcher(email).matches() && password.length >= 6,
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C4B4))
+            // 동의 문구 및 체크박스
+            Text(
+                "본 앱에서는 다음 정보를 수집·이용합니다",
+                fontSize = 14.sp,
+                modifier = Modifier.padding(start = 4.dp)
+            )
+            Spacer(Modifier.height(fieldSpacer / 2))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("가입하기", color = Color.White, fontSize = 16.sp)
+                Text("사진 및 메모리 정보", fontSize = 16.sp)
+                Checkbox(
+                    checked = agreePhoto,
+                    onCheckedChange = { agreePhoto = it }
+                )
+            }
+            Spacer(Modifier.height(fieldSpacer / 2))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("환자 프로필 정보", fontSize = 16.sp)
+                Checkbox(
+                    checked = agreeProfile,
+                    onCheckedChange = { agreeProfile = it }
+                )
             }
 
-            Button(
-                onClick = { navController.navigate("p_login") },
-                modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C4B4))
+            Spacer(Modifier.height(fieldSpacer))
+            // 버튼 위치를 체크박스 밑으로 이동
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = fieldSpacer)
+                    .padding(bottom = 60.dp),  // 버튼이 화면 아래에 닿지 않도록 여유
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text("로그인", color = Color.White, fontSize = 16.sp)
+                Button(
+                    onClick = {
+                        if (name.isBlank() || email.isBlank() || password.length < 6 || !agreePhoto || !agreeProfile) {
+                            Toast.makeText(
+                                ctx,
+                                "모든 필드를 올바르게 입력하고 동의가 필요합니다.",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                            return@Button
+                        }
+                        scope.launch {
+                            isLoading = true
+                            try {
+                                val signupJson = JSONObject().apply {
+                                    put("email", email)
+                                    put("password", password)
+                                    put("name", name)
+                                    put("role", "patient")
+                                }
+                                Log.d("PatientSignUp", "보내는 JSON: $signupJson")
+                                val signupReq = Request.Builder()
+                                    .url("${BuildConfig.BASE_URL}/auth/signup")
+                                    .post(
+                                        signupJson.toString()
+                                            .toRequestBody("application/json".toMediaType())
+                                    )
+                                    .build()
+                                val signupRes = withContext(Dispatchers.IO) {
+                                    client.newCall(signupReq).execute()
+                                }
+                                val responseBody = signupRes.body?.string()
+                                Log.d("PatientSignUp", "응답 코드: ${signupRes.code}, 바디: $responseBody")
+                                if (!signupRes.isSuccessful) throw Exception("signup 실패: ${signupRes.code}")
+                                auth.signInWithEmailAndPassword(email, password).await()
+                                auth.currentUser?.getIdToken(true)?.await()?.token
+                                    ?: throw Exception("ID 토큰 획득 실패")
+                                Toast.makeText(ctx, "회원가입 및 로그인 성공!", Toast.LENGTH_SHORT).show()
+                                navController.navigate("code2/{patientId}") {
+                                    popUpTo("patient") { inclusive = true }
+                                }
+                            } catch (e: Exception) {
+                                Log.e("PatientSignUp", "오류", e)
+                                Toast.makeText(ctx, "오류: ${e.message}", Toast.LENGTH_LONG).show()
+                            } finally {
+                                isLoading = false
+                            }
+                        }
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(fieldHeight),
+                    enabled = name.isNotBlank() && Patterns.EMAIL_ADDRESS.matcher(email).matches() && password.length >= 6 && agreePhoto && agreeProfile,
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C4B4))
+                ) {
+                    Text("가입하기", color = Color.White, fontSize = 16.sp)
+                }
+                Button(
+                    onClick = { navController.navigate("p_login") },
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(fieldHeight),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C4B4))
+                ) {
+                    Text("로그인", color = Color.White, fontSize = 16.sp)
+                }
             }
         }
 
@@ -223,6 +256,12 @@ fun PatientSignUpScreen(navController: NavController) {
         }
     }
 }
+
+
+
+
+
+
 
 
 
