@@ -35,7 +35,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.ui.text.style.TextAlign
 
 /**
- * 1번 페이지: 개인정보 이용 동의 화면 (리팩토링)
+ * 1번 페이지: 개인정보 이용 동의 화면
  */
 @Composable
 fun ConsentScreen(modifier: Modifier = Modifier) {
@@ -85,7 +85,7 @@ fun ConsentScreen(modifier: Modifier = Modifier) {
             ) {
                 Column(modifier = Modifier.padding(20.dp)) {
                     Text(
-                        text = "본 앱에서는 다음 정보를 수집·이용합니다.",
+                        text = "본 앱에서는 다음 정보를 수집·이용합니다",
                         style = MaterialTheme.typography.bodyLarge
                     )
                     Spacer(Modifier.height(12.dp))

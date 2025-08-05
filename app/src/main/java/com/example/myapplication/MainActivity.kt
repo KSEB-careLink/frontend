@@ -99,8 +99,8 @@ class MainActivity : ComponentActivity() {
                                 // 완료 플래그 저장
                                 prefs.edit().putBoolean("onboarding_completed", true).apply()
                                 onboardingDone = true
-                                // Main_Page2로 이동
-                                navController.navigate("main2/$patientId") {
+                                // memoryinfo로 이동
+                                navController.navigate("memoryinfo/{patientId}") {
                                     popUpTo("onboarding/$patientId") { inclusive = true }
                                 }
                             }
