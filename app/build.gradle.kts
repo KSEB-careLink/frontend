@@ -18,7 +18,7 @@ android {
         versionCode = 1
         versionName = "1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        buildConfigField("String", "BASE_URL", "\"https://pleasing-really-cow.ngrok-free.app\"")
+        buildConfigField("String", "BASE_URL", "\"https://backend-f61l.onrender.com\"")
     }
     
     buildFeatures {
