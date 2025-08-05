@@ -1,3 +1,4 @@
+// app/src/main/java/com/example/myapplication/screens/PatientQuiz.kt
 package com.example.myapplication.screens
 
 import android.content.Context
@@ -17,16 +18,12 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import androidx.navigation.compose.currentBackStackEntryAsState
-import coil.compose.AsyncImage
 import com.example.myapplication.BuildConfig
 import com.example.myapplication.R
 import com.example.myapplication.data.DatasetItem
@@ -42,20 +39,28 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.MediaType.Companion.toMediaType
-import java.net.URLEncoder
-import java.util.concurrent.TimeUnit
 import org.json.JSONObject
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 
 @Composable
 fun Patient_Quiz(
     navController: NavController,
     patientId: String,
-    voiceId: String,
     quizViewModel: QuizViewModel = viewModel()
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val client = remember {
+        OkHttpClient.Builder()
+            .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+            .writeTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+            .build()
+    }
 
+    // 퀴즈 데이터 로드
     LaunchedEffect(patientId) {
         quizViewModel.loadQuizzes(patientId)
     }
@@ -69,9 +74,12 @@ fun Patient_Quiz(
 
     var currentIndex by remember { mutableStateOf(0) }
 
-    LaunchedEffect(items, currentIndex, voiceId) {
+    // 서버에서 받은 ttsAudioUrl을 사용해 바로 재생
+    LaunchedEffect(items, currentIndex) {
         if (items.isNotEmpty()) {
-            scope.launch { playTTS(context, voiceId, items[currentIndex].questionText) }
+            scope.launch {
+                playTTS(items[currentIndex].ttsAudioUrl, context)
+            }
         }
     }
 
@@ -91,9 +99,11 @@ fun Patient_Quiz(
                 Spacer(Modifier.height(16.dp))
                 Text("로딩 중…", fontSize = 16.sp)
             } else {
-                QuizContent(item = items[currentIndex]) {
-                    if (currentIndex < items.size - 1) currentIndex++
-                }
+                QuizContent(
+                    item = items[currentIndex],
+                    client = client,
+                    onNext = { if (currentIndex < items.size - 1) currentIndex++ }
+                )
             }
         }
     }
@@ -111,7 +121,11 @@ private fun QuizBottomBar(navController: NavController) {
         unselectedTextColor = Color(0xFF888888)
     )
     NavigationBar {
-        listOf("sentence/{patientId}" to "회상문장", "quiz/{patientId}" to "회상퀴즈", "alert" to "긴급알림").forEach { (route, label) ->
+        listOf(
+            "sentence/{patientId}" to "회상문장",
+            "quiz/{patientId}" to "회상퀴즈",
+            "alert" to "긴급알림"
+        ).forEach { (route, label) ->
             NavigationBarItem(
                 icon = { Icon(Icons.Default.Timer, contentDescription = label) },
                 label = { Text(label) },
@@ -131,16 +145,17 @@ private fun QuizBottomBar(navController: NavController) {
 }
 
 @Composable
-private fun QuizContent(item: DatasetItem, onNext: () -> Unit) {
+private fun QuizContent(
+    item: DatasetItem,
+    client: OkHttpClient,
+    onNext: () -> Unit
+) {
     var selected by remember { mutableStateOf<Int?>(null) }
     var showResult by remember { mutableStateOf(false) }
     var elapsedTime by remember { mutableStateOf(0L) }
-    var questionTime by remember { mutableStateOf<Long?>(null) }
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val client = remember { OkHttpClient() }
-    val url = "${BuildConfig.BASE_URL}/quiz_logs"
 
     LaunchedEffect(item.id) {
         selected = null
@@ -182,7 +197,6 @@ private fun QuizContent(item: DatasetItem, onNext: () -> Unit) {
                             val idx = row * 2 + col
                             OptionButton(text = opt, modifier = Modifier.weight(1f)) {
                                 selected = idx
-                                questionTime = elapsedTime
                                 showResult = true
                             }
                         }
@@ -200,11 +214,8 @@ private fun QuizContent(item: DatasetItem, onNext: () -> Unit) {
                 color = if (isCorrect) Color(0xFF00A651) else Color(0xFFE2101A)
             )
             Spacer(Modifier.height(16.dp))
-
-            questionTime?.let {
-                Text("풀이 시간: ${it}초", fontSize = 18.sp)
-                Spacer(Modifier.height(16.dp))
-            }
+            Text("풀이 시간: ${elapsedTime}초", fontSize = 18.sp)
+            Spacer(Modifier.height(16.dp))
 
             Image(
                 painter = painterResource(if (isCorrect) R.drawable.ch else R.drawable.wr),
@@ -213,12 +224,6 @@ private fun QuizContent(item: DatasetItem, onNext: () -> Unit) {
                 contentScale = ContentScale.Fit
             )
             Spacer(Modifier.height(16.dp))
-            Text(
-                if (isCorrect) "정말 잘 기억하셨어요😊" else "다시 기억해볼까요?",
-                fontSize = 20.sp
-            )
-            Spacer(Modifier.height(16.dp))
-
             Button(
                 onClick = {
                     if (isCorrect) {
@@ -231,10 +236,10 @@ private fun QuizContent(item: DatasetItem, onNext: () -> Unit) {
                             val body = JSONObject().apply {
                                 put("quiz_id", item.id)
                                 put("selected_index", selected)
-                                put("response_time_sec", questionTime)
+                                put("response_time_sec", elapsedTime)
                             }.toString()
                             val req = Request.Builder()
-                                .url(url)
+                                .url("${BuildConfig.BASE_URL}/quiz_logs")
                                 .addHeader("Authorization", "Bearer $token")
                                 .post(body.toRequestBody("application/json".toMediaType()))
                                 .build()
@@ -242,7 +247,6 @@ private fun QuizContent(item: DatasetItem, onNext: () -> Unit) {
                             onNext()
                         }
                     } else {
-                        selected = null
                         showResult = false
                     }
                 },
@@ -265,48 +269,34 @@ private fun OptionButton(text: String, modifier: Modifier = Modifier, onClick: (
     }
 }
 
-// ─────────────────────────────────────────────
-// TTS 관련 전역 변수 및 함수 sentence랑 공통
-// ─────────────────────────────────────────────
-
-private val ttsClient = OkHttpClient.Builder()
-    .connectTimeout(30, TimeUnit.SECONDS)
-    .writeTimeout(30, TimeUnit.SECONDS)
-    .readTimeout(30, TimeUnit.SECONDS)
-    .build()
+// ────────────────────────────────────────────────
+// 공통 TTS 재생 함수
+// ────────────────────────────────────────────────
 
 private var currentTTSPlayer: MediaPlayer? = null
 
-private suspend fun playTTS(context: Context, voiceId: String, text: String) {
+private suspend fun playTTS(
+    ttsUrl: String,
+    context: Context
+) {
     try {
-        val token = Firebase.auth.currentUser?.getIdToken(true)?.await()?.token
-        val encoded = URLEncoder.encode(text, "UTF-8")
-        val url = "${BuildConfig.BASE_URL.trimEnd('/')}/tts?voice_id=$voiceId&text=$encoded"
-        val rb = Request.Builder().url(url)
-        if (!token.isNullOrBlank()) rb.addHeader("Authorization", "Bearer $token")
-        val resp = withContext(Dispatchers.IO) { ttsClient.newCall(rb.get().build()).execute() }
-        if (!resp.isSuccessful) throw Exception("HTTP ${resp.code}")
-        val mp3Url = resp.body?.string().orEmpty()
+        // 1) 효과음
+        val toneGen = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 100)
+        toneGen.startTone(ToneGenerator.TONE_PROP_ACK, 200)
+        delay(200)
+        toneGen.release()
 
-        withContext(Dispatchers.Main) {
-            // 알림 소리 삽입 (약 200ms)
-            val toneGen = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 100)
-            toneGen.startTone(ToneGenerator.TONE_PROP_ACK)
-            delay(200)
-            toneGen.release()
+        // 2) 기존 플레이어 해제
+        currentTTSPlayer?.apply {
+            reset()
+            release()
+        }
 
-            // 기존 MediaPlayer 해제
-            currentTTSPlayer?.apply {
-                reset()
-                release()
-            }
-
-            // 새로운 MediaPlayer 생성
-            currentTTSPlayer = MediaPlayer().apply {
-                setDataSource(mp3Url)
-                setOnPreparedListener { it.start() }
-                prepareAsync()
-            }
+        // 3) 새로운 MediaPlayer 생성·재생
+        currentTTSPlayer = MediaPlayer().apply {
+            setDataSource(ttsUrl)
+            setOnPreparedListener { it.start() }
+            prepareAsync()
         }
     } catch (e: Exception) {
         withContext(Dispatchers.Main) {
@@ -314,6 +304,7 @@ private suspend fun playTTS(context: Context, voiceId: String, text: String) {
         }
     }
 }
+
 
 
 
