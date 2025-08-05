@@ -1,3 +1,4 @@
+// app/src/main/java/com/example/myapplication/screens/RecodeScreen.kt
 package com.example.myapplication.screens
 
 import android.media.MediaPlayer
@@ -23,6 +24,7 @@ import androidx.constraintlayout.compose.Dimension
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
 import com.example.myapplication.R
+import com.example.myapplication.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -144,7 +146,7 @@ fun RecodeScreen(
     val context = LocalContext.current
     var voices by remember { mutableStateOf<List<String>>(emptyList()) }
 
-    // OkHttp 클라이언트 설정…
+    // OkHttp 클라이언트 설정
     val client = remember {
         OkHttpClient.Builder()
             .connectTimeout(30, TimeUnit.SECONDS)
@@ -155,8 +157,13 @@ fun RecodeScreen(
 
     LaunchedEffect(patientId) {
         try {
-            val url = "https://backend-f61l.onrender.com/voice/list/$patientId"
-            val request = Request.Builder().url(url).get().build()
+            // BuildConfig.BASE_URL을 이용해 동적 경로 생성
+            val listUrl = "${BuildConfig.BASE_URL}/voice/list/$patientId"
+            val request = Request.Builder()
+                .url(listUrl)
+                .get()
+                .build()
+
             val response = withContext(Dispatchers.IO) { client.newCall(request).execute() }
             if (response.isSuccessful) {
                 response.body?.string()?.let { body ->
@@ -166,6 +173,7 @@ fun RecodeScreen(
             } else {
                 Toast.makeText(context, "목소리 목록 불러오기 실패: ${response.code}", Toast.LENGTH_SHORT).show()
             }
+            response.close()
         } catch (e: Exception) {
             Toast.makeText(context, "목소리 목록 오류: ${e.message}", Toast.LENGTH_SHORT).show()
         }
@@ -176,10 +184,10 @@ fun RecodeScreen(
         patientId = patientId,
         voices = voices,
         onSelectVoice = { voiceId ->
-            // 1) MainActivity에 선택값 전달
+            // MainActivity에 선택값 전달
             onSelectVoice(voiceId)
-            // 2) 즉시 미리 듣기용 재생 (선택 사항)
-            val streamUrl = "https://backend-f61l.onrender.com/voice/download/$patientId/$voiceId"
+            // 즉시 미리 듣기용 재생 (동적 URL)
+            val streamUrl = "${BuildConfig.BASE_URL}/voice/download/$patientId/$voiceId"
             MediaPlayer().apply {
                 setDataSource(streamUrl)
                 setOnPreparedListener { it.start() }
@@ -188,6 +196,18 @@ fun RecodeScreen(
         }
     )
 }
+
+@Preview(showBackground = true)
+@Composable
+fun PreviewRecodeUI() {
+    RecodeUI(
+        navController = rememberNavController(),
+        patientId = "testId",
+        voices = listOf("voice1", "voice2"),
+        onSelectVoice = {}
+    )
+}
+
 
 
 

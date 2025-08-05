@@ -1,3 +1,4 @@
+// app/src/main/java/com/example/myapplication/screens/Recode2.kt
 package com.example.myapplication.screens
 
 import android.Manifest
@@ -9,7 +10,10 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -22,6 +26,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
+import com.example.myapplication.BuildConfig
 import com.example.myapplication.audio.AudioRecorder
 import com.example.myapplication.audio.AutoScrollingText
 import com.google.firebase.auth.ktx.auth
@@ -30,15 +35,21 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
-import okhttp3.*
-import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import okhttp3.RequestBody.Companion.asRequestBody
+import okhttp3.MultipartBody
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.logging.HttpLoggingInterceptor
 import java.io.File
 import java.util.concurrent.TimeUnit
 
 @Composable
-fun Recode2(navController: NavController, patientId: String) {
+fun Recode2(
+    navController: NavController,
+    patientId: String
+) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
 
@@ -61,15 +72,12 @@ fun Recode2(navController: NavController, patientId: String) {
 
     val recorder = remember { AudioRecorder(context) }
 
-    // OkHttp 클라이언트 (로깅 + 타임아웃 설정)
+    // OkHttp 클라이언트 (로깅 + 타임아웃)
     val client = remember {
         OkHttpClient.Builder().apply {
-            // 로깅
             val logging = HttpLoggingInterceptor { msg -> Log.d("OkHttp", msg) }
             logging.level = HttpLoggingInterceptor.Level.BODY
             addInterceptor(logging)
-
-            // 타임아웃: 연결, 쓰기, 읽기 모두 120초
             connectTimeout(120, TimeUnit.SECONDS)
             writeTimeout(120, TimeUnit.SECONDS)
             readTimeout(120, TimeUnit.SECONDS)
@@ -108,6 +116,8 @@ fun Recode2(navController: NavController, patientId: String) {
                 color = Color.DarkGray
             )
             Spacer(Modifier.height(8.dp))
+
+            // 자동 스크롤 토글
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -116,12 +126,15 @@ fun Recode2(navController: NavController, patientId: String) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text("자동 스크롤", fontSize = 14.sp, color = Color.Gray)
+                Spacer(Modifier.width(8.dp))
                 Switch(
                     checked = isAutoScrollEnabled,
                     onCheckedChange = { isAutoScrollEnabled = it }
                 )
             }
             Spacer(Modifier.height(greyBoxTopGap))
+
+            // 텍스트 영역
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -199,9 +212,10 @@ fun Recode2(navController: NavController, patientId: String) {
             }
         }
 
+        // 녹음 시작/완료 버튼
         Button(
             onClick = {
-                // 권한 체크
+                // 권한 확인
                 val hasPermission = ContextCompat.checkSelfPermission(
                     context, Manifest.permission.RECORD_AUDIO
                 ) == PackageManager.PERMISSION_GRANTED
@@ -219,7 +233,7 @@ fun Recode2(navController: NavController, patientId: String) {
                         Toast.makeText(context, "녹음 시작 실패: ${e.message}", Toast.LENGTH_SHORT).show()
                     }
                 } else {
-                    // 녹음 종료
+                    // 녹음 종료 후
                     val savedPath = recorder.stopRecording()
                     isRecording = false
                     Toast.makeText(context, "녹음 저장: $savedPath", Toast.LENGTH_LONG).show()
@@ -227,20 +241,16 @@ fun Recode2(navController: NavController, patientId: String) {
                     // 업로드
                     audioPath?.let { path ->
                         coroutineScope.launch {
-                            // Firebase ID 토큰
                             val firebaseUser = Firebase.auth.currentUser
                             val idToken = try {
-                                firebaseUser?.getIdToken(true)?.await()?.token ?: ""
-                            } catch (e: Exception) {
+                                firebaseUser?.getIdToken(true)?.await()?.token.orEmpty()
+                            } catch (_: Exception) {
                                 ""
                             }
-
-                            // B 방식: uid, name 필드
-                            val uid = firebaseUser?.uid ?: ""
+                            val uid = firebaseUser?.uid.orEmpty()
                             val name = firebaseUser?.displayName ?: "GuardianName"
 
-                            val uploadUrl = "https://backend-f61l.onrender.com/registerVoice"
-
+                            val uploadUrl = "${BuildConfig.BASE_URL}/registerVoice"
                             val file = File(path)
                             val mime = "audio/wav"
                             val body = MultipartBody.Builder()
@@ -259,15 +269,13 @@ fun Recode2(navController: NavController, patientId: String) {
                             if (idToken.isNotEmpty()) {
                                 requestBuilder.addHeader("Authorization", "Bearer $idToken")
                             }
-                            val request = requestBuilder.build()
-
                             val resp = withContext(Dispatchers.IO) {
-                                client.newCall(request).execute()
+                                client.newCall(requestBuilder.build()).execute()
                             }
                             withContext(Dispatchers.Main) {
                                 if (resp.isSuccessful) {
                                     Toast.makeText(context, "목소리 등록 성공", Toast.LENGTH_LONG).show()
-                                    navController.navigate("recode")
+                                    navController.navigate("recode/$patientId")
                                 } else {
                                     Toast.makeText(context, "등록 실패: ${resp.code}", Toast.LENGTH_LONG).show()
                                 }
@@ -292,6 +300,7 @@ fun Recode2(navController: NavController, patientId: String) {
         }
     }
 }
+
 
 
 
