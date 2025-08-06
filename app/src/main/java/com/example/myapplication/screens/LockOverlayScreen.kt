@@ -5,7 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -13,10 +13,18 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.platform.LocalContext
 import com.example.myapplication.R
 
 @Composable
 fun LockOverlayScreen(onButtonClick: () -> Unit) {
+    val context = LocalContext.current
+
+    // ① 앱 실행 중 최초 한번, 채널 생성
+    LaunchedEffect(Unit) {
+        LockOverlayNotificationHelper.createChannel(context)
+    }
+
     Box(
         Modifier
             .fillMaxSize()
@@ -55,7 +63,10 @@ fun LockOverlayScreen(onButtonClick: () -> Unit) {
                     )
                 }
                 Button(
-                    onClick = onButtonClick,
+                    onClick = {
+                        // ② 버튼 클릭 시 Notification → 풀스크린 인텐트로 오버레이 띄우기
+                        LockOverlayNotificationHelper.showOverlayNotification(context)
+                    },
                     shape = RoundedCornerShape(24.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFCEBB6)),
                     modifier = Modifier
@@ -73,3 +84,5 @@ fun LockOverlayScreen(onButtonClick: () -> Unit) {
         }
     }
 }
+
+

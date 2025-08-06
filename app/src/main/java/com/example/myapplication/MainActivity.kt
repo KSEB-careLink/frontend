@@ -23,11 +23,23 @@ import com.example.myapplication.screens.*
 import com.example.myapplication.ui.theme.MyApplicationTheme
 import com.example.myapplication.worker.WorkScheduler
 import com.example.myapplication.viewmodel.QuizStatsViewModel
+import android.content.IntentFilter
+import android.content.Intent
+import com.example.myapplication.screens.LockOverlayReceiver
+
 
 class MainActivity : ComponentActivity() {
+    private lateinit var receiver: LockOverlayReceiver
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        // 잠금화면에 뜨게하는 채널 생성
+        LockOverlayNotificationHelper.createChannel(this)
+
+        receiver = LockOverlayReceiver()
+        // SCREEN_OFF 하나만 등록!
+        registerReceiver(receiver, IntentFilter(Intent.ACTION_SCREEN_OFF))
 
         // WorkManager 로 매일 9시~20시 1시간 간격 알림 스케줄링
         WorkScheduler.scheduleHourlyReminder(
@@ -237,9 +249,15 @@ class MainActivity : ComponentActivity() {
                     composable("alert") {
                         Patient_Alert(navController)
                     }
+
                 }
             }
         }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        unregisterReceiver(receiver)
     }
 }
 
