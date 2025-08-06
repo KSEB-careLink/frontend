@@ -52,6 +52,7 @@
             android:name="com.google.android.geo.API_KEY"
             android:value="AIzaSyDJKW7nussHZFWpBphPIgnI_F-3nFSHXZ4" />
 
+        <!-- 기존 런처 액티비티는 그대로 두세요 -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -63,7 +64,17 @@
             </intent-filter>
         </activity>
 
-        <!-- FCM 메시지를 받을 서비스 -->
+        <!-- 잠금 화면 위 반투명 오버레이를 띄울 액티비티 -->
+        <activity
+            android:name=".screens.LockOverlayActivity"
+            android:exported="true"
+            android:theme="@style/Theme.TransparentOverlay"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:showForAllUsers="true"/>
+
+
+    <!-- FCM 메시지를 받을 서비스 -->
         <service
             android:name=".fcm.MyFirebaseMessagingService"
             android:exported="false">
@@ -94,6 +105,7 @@
             android:name=".service.LocationUpdatesService"
             android:exported="false"
             android:foregroundServiceType="location" />
+
 
     </application>
 </manifest>

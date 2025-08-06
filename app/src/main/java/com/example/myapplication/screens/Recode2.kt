@@ -44,6 +44,12 @@ import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.logging.HttpLoggingInterceptor
 import java.io.File
 import java.util.concurrent.TimeUnit
+import android.content.ContentValues
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
+import java.text.SimpleDateFormat
+import java.util.Locale
 
 @Composable
 fun Recode2(
@@ -212,7 +218,6 @@ fun Recode2(
             }
         }
 
-        // 녹음 시작/완료 버튼
         Button(
             onClick = {
                 // 권한 확인
@@ -233,52 +238,90 @@ fun Recode2(
                         Toast.makeText(context, "녹음 시작 실패: ${e.message}", Toast.LENGTH_SHORT).show()
                     }
                 } else {
-                    // 녹음 종료 후
-                    val savedPath = recorder.stopRecording()
+                    // 녹음 종료
+                    val cachePath = recorder.stopRecording()
                     isRecording = false
-                    Toast.makeText(context, "녹음 저장: $savedPath", Toast.LENGTH_LONG).show()
+                    Toast.makeText(context, "녹음 저장(캐시): $cachePath", Toast.LENGTH_LONG).show()
 
-                    // 업로드
-                    audioPath?.let { path ->
-                        coroutineScope.launch {
-                            val firebaseUser = Firebase.auth.currentUser
-                            val idToken = try {
-                                firebaseUser?.getIdToken(true)?.await()?.token.orEmpty()
-                            } catch (_: Exception) {
-                                ""
-                            }
-                            val uid = firebaseUser?.uid.orEmpty()
-                            val name = firebaseUser?.displayName ?: "GuardianName"
+                    // 1) Public Music 디렉토리에 복사
+                    val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
+                        .format(System.currentTimeMillis())
+                    // 공용 음악 폴더 경로
+                    val publicMusicDir =
+                        Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC)
+                    if (!publicMusicDir.exists()) publicMusicDir.mkdirs()
+                    val destFile = File(publicMusicDir, "record_$timestamp.wav")
+                    File(cachePath).copyTo(destFile, overwrite = true)
 
-                            val uploadUrl = "${BuildConfig.BASE_URL}/registerVoice"
-                            val file = File(path)
-                            val mime = "audio/wav"
-                            val body = MultipartBody.Builder()
-                                .setType(MultipartBody.FORM)
-                                .addFormDataPart("guardian_uid", uid)
-                                .addFormDataPart("name", name)
-                                .addFormDataPart(
-                                    "file", file.name,
-                                    file.asRequestBody(mime.toMediaTypeOrNull())
-                                )
-                                .build()
+                    // 2) MediaStore에 등록
+                    val values = ContentValues().apply {
+                        put(MediaStore.Audio.Media.DISPLAY_NAME, destFile.name)
+                        put(MediaStore.Audio.Media.MIME_TYPE, "audio/wav")
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                            put(MediaStore.Audio.Media.RELATIVE_PATH, Environment.DIRECTORY_MUSIC)
+                            put(MediaStore.Audio.Media.IS_PENDING, 1)
+                        } else {
+                            put(MediaStore.Audio.Media.DATA, destFile.absolutePath)
+                        }
+                    }
+                    val collection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+                    } else {
+                        MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+                    }
+                    val uri = context.contentResolver.insert(collection, values)
+                    uri?.let { outUri ->
+                        context.contentResolver.openOutputStream(outUri)?.use { out ->
+                            destFile.inputStream().use { input -> input.copyTo(out) }
+                        }
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                            values.clear()
+                            values.put(MediaStore.Audio.Media.IS_PENDING, 0)
+                            context.contentResolver.update(outUri, values, null, null)
+                        }
+                    }
 
-                            val requestBuilder = Request.Builder()
-                                .url(uploadUrl)
-                                .post(body)
-                            if (idToken.isNotEmpty()) {
-                                requestBuilder.addHeader("Authorization", "Bearer $idToken")
-                            }
-                            val resp = withContext(Dispatchers.IO) {
-                                client.newCall(requestBuilder.build()).execute()
-                            }
-                            withContext(Dispatchers.Main) {
-                                if (resp.isSuccessful) {
-                                    Toast.makeText(context, "목소리 등록 성공", Toast.LENGTH_LONG).show()
-                                    navController.navigate("recode/$patientId")
-                                } else {
-                                    Toast.makeText(context, "등록 실패: ${resp.code}", Toast.LENGTH_LONG).show()
-                                }
+                    Toast.makeText(context, "로컬에 저장됨: ${destFile.absolutePath}", Toast.LENGTH_LONG)
+                        .show()
+
+                    // 3) 서버 업로드
+                    coroutineScope.launch {
+                        val firebaseUser = Firebase.auth.currentUser
+                        val idToken = try {
+                            firebaseUser?.getIdToken(true)?.await()?.token.orEmpty()
+                        } catch (_: Exception) {
+                            ""
+                        }
+                        val uid = firebaseUser?.uid.orEmpty()
+                        val name = firebaseUser?.displayName ?: "GuardianName"
+
+                        val uploadUrl = "${BuildConfig.BASE_URL}/registerVoice"
+                        val body = MultipartBody.Builder()
+                            .setType(MultipartBody.FORM)
+                            .addFormDataPart("guardian_uid", uid)
+                            .addFormDataPart("name", name)
+                            .addFormDataPart(
+                                "file", destFile.name,
+                                destFile.asRequestBody("audio/wav".toMediaTypeOrNull())
+                            )
+                            .build()
+
+                        val requestBuilder = Request.Builder()
+                            .url(uploadUrl)
+                            .post(body)
+                        if (idToken.isNotEmpty()) {
+                            requestBuilder.addHeader("Authorization", "Bearer $idToken")
+                        }
+                        val resp = withContext(Dispatchers.IO) {
+                            client.newCall(requestBuilder.build()).execute()
+                        }
+                        withContext(Dispatchers.Main) {
+                            if (resp.isSuccessful) {
+                                Toast.makeText(context, "목소리 등록 성공", Toast.LENGTH_LONG).show()
+                                navController.navigate("recode/$patientId")
+                            } else {
+                                Toast.makeText(context, "등록 실패: ${resp.code}", Toast.LENGTH_LONG)
+                                    .show()
                             }
                         }
                     }

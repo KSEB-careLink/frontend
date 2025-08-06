@@ -165,6 +165,9 @@ dependencies {
 
     implementation("com.squareup.okhttp3:okhttp:4.10.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+
+    // 잠금화면 오버레이용 투명 테마
+    implementation ("com.google.android.material:material:1.9.0")
 }
 
 
