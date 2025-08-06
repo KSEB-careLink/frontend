@@ -9,7 +9,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Divider
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -23,32 +26,36 @@ import androidx.constraintlayout.compose.ConstraintLayout
 import androidx.constraintlayout.compose.Dimension
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.LifecycleOwner
-import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavController
 import com.example.myapplication.R
 import com.example.myapplication.BuildConfig
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import org.json.JSONArray
+import org.json.JSONObject
 import java.util.concurrent.TimeUnit
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.Dispatchers
+import com.google.firebase.auth.ktx.auth
+import com.google.firebase.ktx.Firebase
+import kotlinx.coroutines.tasks.await
 
 @Composable
 fun RecodeUI(
     navController: NavController,
     patientId: String,
-    voices: List<String>,
-    onSelectVoice: (String) -> Unit
+    samples: List<String>,
+    error: String?,
+    onPlaySample: (String) -> Unit,
+    onRecordClick: () -> Unit
 ) {
     ConstraintLayout(
         modifier = Modifier
             .fillMaxSize()
             .padding(24.dp)
     ) {
-        val (logo, title, selectButton, voiceListBox, bottomButton) = createRefs()
+        val (logo, title, selectBtn, sampleBox, errText, bottomBtn) = createRefs()
 
         Image(
             painter = painterResource(id = R.drawable.rogo),
@@ -76,7 +83,7 @@ fun RecodeUI(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(56.dp)
-                .constrainAs(selectButton) {
+                .constrainAs(selectBtn) {
                     top.linkTo(title.bottom, margin = 32.dp)
                     start.linkTo(parent.start); end.linkTo(parent.end)
                 },
@@ -91,36 +98,50 @@ fun RecodeUI(
                 .fillMaxWidth()
                 .background(Color(0xFFF5F5F5), RoundedCornerShape(8.dp))
                 .padding(8.dp)
-                .constrainAs(voiceListBox) {
-                    top.linkTo(selectButton.bottom, margin = 24.dp)
+                .constrainAs(sampleBox) {
+                    top.linkTo(selectBtn.bottom, margin = 24.dp)
                     start.linkTo(parent.start); end.linkTo(parent.end)
-                    bottom.linkTo(bottomButton.top, margin = 32.dp)
+                    bottom.linkTo(errText.top, margin = 8.dp)
                     height = Dimension.preferredWrapContent
                 }
         ) {
-            if (voices.isEmpty()) {
+            if (samples.isEmpty()) {
                 Text("등록된 목소리가 없습니다", color = Color.Gray, modifier = Modifier.padding(16.dp))
             } else {
-                voices.forEachIndexed { index, name ->
+                samples.forEachIndexed { idx, url ->
                     Text(
-                        text = "${index + 1}. $name",
+                        text = "${idx + 1}. 샘플 듣기",
                         fontSize = 16.sp,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { onSelectVoice(name) }
+                            .clickable { onPlaySample(url) }
                             .padding(vertical = 8.dp)
                     )
-                    if (index < voices.lastIndex) Divider()
+                    if (idx < samples.lastIndex) Divider()
                 }
             }
         }
 
+        // 에러가 있을 때만 보여줌
+        error?.let {
+            Text(
+                text = "목소리 목록 오류: $it",
+                color = Color.Red,
+                modifier = Modifier
+                    .constrainAs(errText) {
+                        bottom.linkTo(bottomBtn.top, margin = 16.dp)
+                        start.linkTo(parent.start)
+                    }
+                    .padding(4.dp)
+            )
+        }
+
         Button(
-            onClick = { navController.navigate("recode2/$patientId") },
+            onClick = onRecordClick,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(56.dp)
-                .constrainAs(bottomButton) {
+                .constrainAs(bottomBtn) {
                     bottom.linkTo(parent.bottom, margin = 40.dp)
                     start.linkTo(parent.start); end.linkTo(parent.end)
                 },
@@ -139,10 +160,13 @@ fun RecodeScreen(
     onSelectVoice: (String) -> Unit
 ) {
     val context = LocalContext.current
-    var voices by remember { mutableStateOf<List<String>>(emptyList()) }
-    val coroutineScope = rememberCoroutineScope()
 
-    // OkHttp 클라이언트
+    // 샘플 URL 리스트와 에러 메시지 상태
+    var samples by remember { mutableStateOf<List<String>>(emptyList()) }
+    var error by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+
+    // OkHttp 클라이언트 설정
     val client = remember {
         OkHttpClient.Builder()
             .connectTimeout(30, TimeUnit.SECONDS)
@@ -151,64 +175,96 @@ fun RecodeScreen(
             .build()
     }
 
-    // 실제 데이터 로드 함수
-    suspend fun loadVoices() {
+    suspend fun loadSamples() {
+        error = null
         try {
-            val listUrl = "${BuildConfig.BASE_URL}/voice/list/$patientId"
-            val request = Request.Builder().url(listUrl).get().build()
-            val resp = client.newCall(request).execute()
-            resp.use {
-                if (it.isSuccessful) {
-                    val body = it.body?.string().orEmpty()
-                    Log.d("RecodeScreen", "voice/list response: $body")
-                    // 만약 [{"voice_id":"..."}] 형태라면 아래처럼 변경:
-                    val arr = JSONArray(body)
-                    voices = List(arr.length()) { i ->
-                        // arr.getString(i)  // ▶ 문자열 배열일 때
-                        arr.getJSONObject(i).getString("voice_id") // ▶ 객체 배열일 때
+            // 1) Firebase ID 토큰
+            val idToken = Firebase.auth.currentUser
+                ?.getIdToken(true)
+                ?.await()
+                ?.token
+                .orEmpty()
+
+            val url = "${BuildConfig.BASE_URL}/voice-sample/list/$patientId"
+            Log.d("RecodeScreen", "샘플 호출 URL: $url")
+
+            withContext(Dispatchers.IO) {
+                val req = Request.Builder()
+                    .url(url)
+                    .get()
+                    .apply { if (idToken.isNotBlank()) addHeader("Authorization", "Bearer $idToken") }
+                    .build()
+
+                client.newCall(req).execute().use { resp ->
+                    if (!resp.isSuccessful) {
+                        error = "HTTP ${resp.code}"
+                        Log.e("RecodeScreen", "비정상 HTTP 코드: ${resp.code}")
+                        return@use
                     }
-                } else {
-                    withContext(Dispatchers.Main) {
-                        Toast.makeText(context, "목소리 목록 불러오기 실패: ${it.code}", Toast.LENGTH_SHORT).show()
+                    val body = resp.body?.string().orEmpty()
+                    Log.d("RecodeScreen", "샘플 응답 JSON: $body")
+                    val arr = JSONObject(body).optJSONArray("voiceSamples")
+                    if (arr != null) {
+                        withContext(Dispatchers.Main) {
+                            samples = List(arr.length()) { i -> arr.getString(i) }
+                        }
+                    } else {
+                        error = "파싱 오류: voiceSamples 배열 없음"
+                        Log.e("RecodeScreen", "파싱 오류: voiceSamples 배열 없음")
                     }
                 }
             }
         } catch (e: Exception) {
+            error = e.message
+            Log.e("RecodeScreen", "loadSamples 예외", e)
             withContext(Dispatchers.Main) {
-                Toast.makeText(context, "목소리 목록 오류: ${e.message}", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "샘플 로드 실패: ${e.message}", Toast.LENGTH_SHORT).show()
             }
         }
     }
 
-    // **1) 화면 최초 진입 & 뒤 돌아올 때(onResume) 재호출**
-    // Lifecycle observer를 달아 onResume 때마다 loadVoices()
-    val lifecycleOwner = LocalViewModelStoreOwner.current as LifecycleOwner
+    // 1) 최초 진입 시 한 번
+    LaunchedEffect(patientId) {
+        scope.launch { loadSamples() }
+    }
+
+    // 2) 뒤로 돌아오면(onResume) 다시 부르기
+    val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
-        val obs = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                coroutineScope.launch { loadVoices() }
+        val obs = LifecycleEventObserver { _, ev ->
+            if (ev == Lifecycle.Event.ON_RESUME) {
+                scope.launch { loadSamples() }
             }
         }
         lifecycleOwner.lifecycle.addObserver(obs)
         onDispose { lifecycleOwner.lifecycle.removeObserver(obs) }
     }
 
-    // UI 렌더링
     RecodeUI(
-        navController = navController,
-        patientId = patientId,
-        voices = voices,
-        onSelectVoice = { voiceId ->
-            onSelectVoice(voiceId)
-            val streamUrl = "${BuildConfig.BASE_URL}/voice/download/$patientId/$voiceId"
+        navController  = navController,
+        patientId      = patientId,
+        samples        = samples,
+        error          = error,
+        onPlaySample   = { url ->
+            onSelectVoice(url)
             MediaPlayer().apply {
-                setDataSource(streamUrl)
+                setDataSource(url)
                 setOnPreparedListener { it.start() }
                 prepareAsync()
             }
+        },
+        onRecordClick  = {
+            navController.navigate("recode2/$patientId")
         }
     )
 }
+
+
+
+
+
+
+
 
 
 
