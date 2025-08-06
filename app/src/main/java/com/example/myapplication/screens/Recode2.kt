@@ -318,7 +318,8 @@ fun Recode2(
                         withContext(Dispatchers.Main) {
                             if (resp.isSuccessful) {
                                 Toast.makeText(context, "목소리 등록 성공", Toast.LENGTH_LONG).show()
-                                navController.navigate("recode/$patientId")
+                                // 뒤로 가기만 하면 RecodeScreen의 onResume이 동작
+                                navController.popBackStack()
                             } else {
                                 Toast.makeText(context, "등록 실패: ${resp.code}", Toast.LENGTH_LONG)
                                     .show()
