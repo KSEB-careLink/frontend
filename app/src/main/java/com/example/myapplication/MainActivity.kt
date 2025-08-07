@@ -37,9 +37,6 @@ class MainActivity : ComponentActivity() {
         // 잠금화면에 뜨게하는 채널 생성
         LockOverlayNotificationHelper.createChannel(this)
 
-        receiver = LockOverlayReceiver()
-        // SCREEN_OFF 하나만 등록!
-        registerReceiver(receiver, IntentFilter(Intent.ACTION_SCREEN_OFF))
 
         // WorkManager 로 매일 9시~20시 1시간 간격 알림 스케줄링
         WorkScheduler.scheduleHourlyReminder(
