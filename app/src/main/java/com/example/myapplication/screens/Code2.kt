@@ -1,11 +1,8 @@
 package com.example.myapplication.screens
 
 import android.content.Context
-import android.Manifest
-import android.content.Intent
 import android.widget.Toast
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
@@ -21,13 +18,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.content.ContextCompat
 import androidx.navigation.NavController
 import com.example.myapplication.BuildConfig
 import com.example.myapplication.R
-import com.example.myapplication.service.LocationUpdatesService
-import com.google.accompanist.permissions.ExperimentalPermissionsApi
-import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
 import kotlinx.coroutines.Dispatchers
@@ -39,22 +32,13 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
+import androidx.compose.foundation.background
 
-@OptIn(ExperimentalPermissionsApi::class)
 @Composable
 fun Code2(
     navController: NavController,
-    patientId: String      // ← 여기에 patientId를 받도록 변경
+    patientId: String
 ) {
-    // 1) 런타임 위치 권한 상태
-    val perms = rememberMultiplePermissionsState(
-        listOf(
-            Manifest.permission.ACCESS_COARSE_LOCATION,
-            Manifest.permission.ACCESS_FINE_LOCATION
-        )
-    )
-
-    // 2) UI 상태
     var code by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
 
@@ -89,7 +73,7 @@ fun Code2(
         Spacer(modifier = Modifier.height(24.dp))
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            for (i in 0 until 6) {
+            repeat(6) { i ->
                 Box(
                     modifier = Modifier
                         .size(48.dp)
@@ -120,11 +104,6 @@ fun Code2(
         Button(
             onClick = {
                 scope.launch {
-                    // 3) 위치 권한이 없으면 요청
-                    if (!perms.allPermissionsGranted) {
-                        perms.launchMultiplePermissionRequest()
-                        return@launch
-                    }
                     if (code.length != 6) {
                         Toast.makeText(context, "6자리를 모두 입력해주세요", Toast.LENGTH_SHORT).show()
                         return@launch
@@ -152,17 +131,13 @@ fun Code2(
                         if (linkResp.isSuccessful) {
                             Toast.makeText(context, "보호자와 연결 완료!", Toast.LENGTH_SHORT).show()
 
-                            // JWT 토큰을 prefs 에 저장
+                            // JWT 토큰 저장
                             context.getSharedPreferences("MyPrefs", Context.MODE_PRIVATE)
                                 .edit()
                                 .putString("jwt_token", idToken)
                                 .apply()
 
-                            // 포그라운드 서비스 시작
-                            val intent = Intent(context, LocationUpdatesService::class.java)
-                            ContextCompat.startForegroundService(context, intent)
-
-                            // patientId 포함하여 다음 화면으로 이동
+                            // 다음 화면으로 이동
                             navController.navigate("sentence/$patientId") {
                                 popUpTo("code2/$patientId") { inclusive = true }
                             }
@@ -194,6 +169,7 @@ fun Code2(
         }
     }
 }
+
 
 
 

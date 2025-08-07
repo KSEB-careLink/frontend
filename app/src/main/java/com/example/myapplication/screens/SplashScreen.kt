@@ -1,48 +1,79 @@
+// SplashScreen.kt
 package com.example.myapplication.screens
 
+import android.content.Context
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.updateTransition
+import androidx.compose.foundation.background
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.layout.*
-import androidx.compose.runtime.*
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.size
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
 import com.example.myapplication.R
 import kotlinx.coroutines.delay
-import androidx.compose.animation.core.*
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 
 @Composable
 fun SplashScreen(navController: NavController) {
-    // 3초 뒤 메인 화면으로 이동
+    val context = LocalContext.current
+
     LaunchedEffect(Unit) {
         delay(3000)
-        navController.navigate("choose") {
-            popUpTo("splash") { inclusive = true }
+        val prefs = context.getSharedPreferences("MyPrefs", Context.MODE_PRIVATE)
+        val patientId = prefs.getString("patientId", null)
+
+        if (patientId != null) {
+            navController.navigate("sentence/$patientId") {
+                popUpTo("splash") { inclusive = true }
+            }
+        } else {
+            navController.navigate("p_login") {
+                popUpTo("splash") { inclusive = true }
+            }
         }
     }
 
-    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+    BoxWithConstraints(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFF00C4B4))
+    ) {
         val screenW = maxWidth
         val screenH = maxHeight
-        val rogoSize = screenW * 0.5f
+        val logoSize = screenW * 0.5f
         val textSize = screenW * 0.3f
-        val rogoY = screenH * 0.35f
+        val logoY = screenH * 0.35f
         val textY = screenH * 0.50f
 
         Box(modifier = Modifier.fillMaxSize()) {
-            // 로고: 페이드 + 스케일
             FadeScaleLogo(
                 modifier = Modifier
-                    .size(rogoSize)
+                    .size(logoSize)
                     .align(Alignment.TopCenter)
-                    .offset(y = rogoY)
+                    .offset(y = logoY)
             )
-            // AI 텍스트: 500ms 딜레이 후 페이드-인
             FadeInAiText(
                 modifier = Modifier
                     .size(textSize)
@@ -113,9 +144,9 @@ fun FadeInAiText(
 @Preview(showBackground = true)
 @Composable
 fun SplashScreenPreview() {
-    val dummyNavController = rememberNavController()
-    SplashScreen(navController = dummyNavController)
+    SplashScreen(navController = rememberNavController())
 }
+
 
 
 
