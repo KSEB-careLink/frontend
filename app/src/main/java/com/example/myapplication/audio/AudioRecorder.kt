@@ -5,6 +5,7 @@ import android.content.pm.PackageManager
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
+import android.util.Log
 import androidx.core.content.ContextCompat
 import java.io.*
 
@@ -48,6 +49,8 @@ class AudioRecorder(private val context: Context) {
             val buffer = ByteArray(bufferSize)
             while (isRecording) {
                 val read = audioRecord?.read(buffer, 0, buffer.size) ?: 0
+                // 진단용 로그: 읽은 바이트 수와 첫 샘플 값
+                Log.d("AudioDebug", "bytesRead=$read, firstSample=${if (read > 0) buffer[0] else "N/A"}")
                 if (read > 0) {
                     pcmBuffer.write(buffer, 0, read)
                 }
@@ -61,6 +64,7 @@ class AudioRecorder(private val context: Context) {
             }
 
             pcmBuffer.close()
+            Log.d("AudioDebug", "WAV 파일 저장 완료: ${wavFile.absolutePath}")
         }
         recordingThread?.start()
 
@@ -82,6 +86,7 @@ class AudioRecorder(private val context: Context) {
         recordingThread?.join()
         recordingThread = null
 
+        Log.d("AudioDebug", "녹음 스레드 종료, 파일 경로: ${wavFile.absolutePath}")
         return wavFile.absolutePath
     }
 
@@ -144,4 +149,5 @@ class AudioRecorder(private val context: Context) {
         out.write(header, 0, 44)
     }
 }
+
 
