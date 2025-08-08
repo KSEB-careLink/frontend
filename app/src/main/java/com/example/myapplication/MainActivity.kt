@@ -150,9 +150,19 @@ class MainActivity : ComponentActivity() {
                         val patientId = backStackEntry.arguments?.getString("patientId") ?: return@composable
                         Main_Page2(navController = navController, patientId = patientId)
                     }
-                    composable("alarm") {
-                        Guardian_Alarm(navController)
+//                    composable("alarm") {
+//                        Guardian_Alarm(navController)
+//                    }
+
+                    composable(
+                        route = "alarm/{patientId}",
+                        arguments = listOf(navArgument("patientId") { type = NavType.StringType })
+                    ) { backStackEntry ->
+                        val patientId = backStackEntry.arguments?.getString("patientId") ?: return@composable
+                        Guardian_Alarm(navController = navController, patientId = patientId)
                     }
+
+
                     composable(
                         route = "guardian_basic_info/{patientId}",
                         arguments = listOf(navArgument("patientId") { type = NavType.StringType })

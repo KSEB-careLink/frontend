@@ -1,5 +1,6 @@
 package com.example.myapplication.screens
 
+import android.util.Log
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
@@ -16,10 +17,28 @@ import com.example.myapplication.R
 import kotlinx.coroutines.delay
 import androidx.compose.animation.core.*
 
+import androidx.compose.ui.platform.LocalContext
+import com.example.myapplication.service.NotificationService
+import com.google.firebase.messaging.FirebaseMessaging
+
 @Composable
 fun SplashScreen(navController: NavController) {
+    val context = LocalContext.current // ✅ context 가져오기
     // 3초 뒤 메인 화면으로 이동
     LaunchedEffect(Unit) {
+
+        //  FCM 토큰 요청 및 서버 전송
+        FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+            if (task.isSuccessful) {
+                val token = task.result
+                Log.d("FCM", "토큰: $token")
+                NotificationService.sendFcmTokenToServer(context, token)
+            } else {
+                Log.e("FCM", "토큰 획득 실패", task.exception)
+            }
+        }
+
+
         delay(3000)
         navController.navigate("choose") {
             popUpTo("splash") { inclusive = true }
