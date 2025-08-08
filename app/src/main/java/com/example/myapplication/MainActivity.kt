@@ -213,7 +213,7 @@ class MainActivity : ComponentActivity() {
                         Patient_Sentence(
                             navController = navController,
                             patientId = patientId,
-                            voiceId = selectedVoice ?: "default"
+
                         )
                     }
 

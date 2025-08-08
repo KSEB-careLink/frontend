@@ -53,6 +53,7 @@ import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.logging.HttpLoggingInterceptor
+import org.json.JSONArray
 import org.json.JSONObject
 import android.util.Log
 import java.util.concurrent.TimeUnit
@@ -61,8 +62,7 @@ import java.util.concurrent.TimeUnit
 @Composable
 fun Patient_Sentence(
     navController: NavController,
-    patientId: String, // 네비로 넘어온 원본(비어있거나 "{patientId}"일 수 있음)
-    voiceId: String // 현재 화면에선 미사용(백엔드에서 관리)
+    patientId: String,
 ) {
     // ─── 0) patientId 복구 ─────────────────────────────────────────────────────
     val context = LocalContext.current
@@ -104,7 +104,7 @@ fun Patient_Sentence(
     // ─── 3) 데이터 모델 ────────────────────────────────────────────────────────
     data class MemoryOne(
         val sentence: String,
-        val imageUrl: String?, // ★ 옵션으로 변경 (없을 수 있음)
+        val imageUrl: String?, // 옵션 (없을 수 있음)
         val mp3Url: String
     )
 
@@ -115,7 +115,70 @@ fun Patient_Sentence(
     var isLoading by remember { mutableStateOf(false) }
     var errorMsg by remember { mutableStateOf<String?>(null) }
 
-    // ─── 4) 후보 경로 자동 탐색기 ─────────────────────────────────────────────
+    // ─── 4) gs:// → https 변환 ────────────────────────────────────────────────
+    fun normalizeImageUrl(url: String?): String? {
+        if (url.isNullOrBlank()) return null
+        if (url.startsWith("gs://")) {
+            // gs://bucket/path/to/file.jpg -> https://storage.googleapis.com/bucket/path/to/file.jpg
+            val noScheme = url.removePrefix("gs://")
+            val slash = noScheme.indexOf('/')
+            if (slash > 0) {
+                val bucket = noScheme.substring(0, slash)
+                val path = noScheme.substring(slash + 1)
+                return "https://storage.googleapis.com/$bucket/$path"
+            }
+        }
+        return url
+    }
+
+    // ─── 5) 환자 최신 사진 Fallback 조회 ──────────────────────────────────────
+    suspend fun fetchFallbackImageUrl(
+        baseUrl: String,
+        patientId: String,
+        idToken: String,
+        client: OkHttpClient
+    ): String? {
+        val base = baseUrl.trimEnd('/')
+        val pidEnc = Uri.encode(patientId)
+        val candidates = listOf(
+            "$base/photos/patient/$pidEnc/latest",                   // { image_url: "..." }
+            "$base/photos/patient/$pidEnc?limit=1&order=desc",       // [ { image_url: "..." } ]
+            "$base/photos?patient_id=$pidEnc&limit=1&order=desc"     // [ { image_url: "..." } ]
+        )
+
+        for (url in candidates) {
+            val req = Request.Builder()
+                .url(url)
+                .addHeader("Authorization", "Bearer $idToken")
+                .get()
+                .build()
+            val resp = withContext(Dispatchers.IO) { client.newCall(req).execute() }
+            val code = resp.code
+            Log.d("PhotosAPI", "probe $url -> $code")
+            if (!resp.isSuccessful) continue
+            val body = resp.body?.string().orEmpty()
+            if (body.isBlank()) continue
+
+            // object 형
+            runCatching {
+                val o = JSONObject(body)
+                val img = normalizeImageUrl(o.optString("image_url"))
+                if (!img.isNullOrBlank()) return img
+            }
+
+            // array 형
+            runCatching {
+                val arr = JSONArray(body)
+                if (arr.length() > 0) {
+                    val img = normalizeImageUrl(arr.getJSONObject(0).optString("image_url"))
+                    if (!img.isNullOrBlank()) return img
+                }
+            }
+        }
+        return null
+    }
+
+    // ─── 6) /memories tts 경로 자동 탐색 ─────────────────────────────────────
     suspend fun resolveMemoriesTtsUrl(
         baseUrl: String,
         patientId: String,
@@ -125,10 +188,10 @@ fun Patient_Sentence(
         val base = baseUrl.trimEnd('/')
         val pidEnc = Uri.encode(patientId)
         val candidates = listOf(
-            "$base/memories/$pidEnc/tts",         // 문서 스펙
-            "$base/memories/tts/$pidEnc",         // 반대 패턴
-            "$base/memory/$pidEnc/tts",           // 단수
-            "$base/memories/tts?patientId=$pidEnc"// 쿼리 파라미터
+            "$base/memories/$pidEnc/tts",          // 문서 스펙
+            "$base/memories/tts/$pidEnc",          // 반대 패턴
+            "$base/memory/$pidEnc/tts",            // 단수
+            "$base/memories/tts?patientId=$pidEnc" // 쿼리 파라미터
         )
         val tried = mutableListOf<String>()
 
@@ -151,7 +214,7 @@ fun Patient_Sentence(
         throw Exception("모든 후보 경로가 실패했습니다. 시도 URL: ${tried.joinToString()}")
     }
 
-    // ─── 5) 랜덤 1개 호출 ────────────────────────────────────────────────────
+    // ─── 7) 랜덤 1개 호출 ────────────────────────────────────────────────────
     suspend fun fetchOneRandom(ctx: Context): MemoryOne {
         val idToken = Firebase.auth.currentUser
             ?.getIdToken(false)?.await()?.token
@@ -186,15 +249,25 @@ fun Patient_Sentence(
         val obj = JSONObject(bodyStr)
 
         val sentence = obj.optString("sentence", obj.optString("reminder_text"))
-        // 서버가 image_url을 아직 안 줄 수도 있으므로 옵션 처리
-        val imageOpt = obj.optString("image_url", obj.optString("image", ""))
-            .takeIf { it.isNotBlank() }
-        // mp3_url이 없고 tts_url만 있을 수 있음
+        var imageOpt = normalizeImageUrl(
+            obj.optString("image_url", obj.optString("image", ""))
+                .takeIf { it.isNotBlank() }
+        )
         val mp3 = obj.optString("mp3_url", obj.optString("tts_url"))
 
         if (sentence.isBlank() || mp3.isBlank()) {
             Log.e("MemoriesAPI", "응답 필드 부족: sentence='${sentence}', image='${imageOpt ?: ""}', mp3='${mp3}'")
             throw Exception("응답 필드 부족 (sentence/mp3_url)")
+        }
+
+        // ★ 이미지가 없으면 /photos 계열에서 최신 1장 보조 조회
+        if (imageOpt == null) {
+            imageOpt = fetchFallbackImageUrl(
+                baseUrl = BuildConfig.BASE_URL,
+                patientId = activePatientId,
+                idToken = idToken,
+                client = client
+            )
         }
 
         Log.d("MemoriesAPI", "Using URL: $workingUrl  (patientId=$activePatientId)")
@@ -230,15 +303,13 @@ fun Patient_Sentence(
         loadInitial()
     }
 
-    // ─── 6) 다음/이전 이동 로직 ───────────────────────────────────────────────
+    // ─── 8) 다음/이전 이동 로직 ───────────────────────────────────────────────
     fun canGoPrev() = currentIndex > 0
     fun canGoNext() = true // 다음은 항상 가능(끝이면 새 랜덤 fetch)
 
     suspend fun goPrev() {
         stopTTS()
-        if (canGoPrev()) {
-            currentIndex -= 1
-        }
+        if (canGoPrev()) currentIndex -= 1
     }
 
     suspend fun goNext() {
@@ -268,7 +339,7 @@ fun Patient_Sentence(
         }
     }
 
-    // ─── 7) UI ────────────────────────────────────────────────────────────────
+    // ─── 9) UI ────────────────────────────────────────────────────────────────
     Scaffold(
         bottomBar = {
             val navBackStack by navController.currentBackStackEntryAsState()
@@ -376,6 +447,8 @@ fun Patient_Sentence(
                         AsyncImage(
                             model = mem.imageUrl,
                             contentDescription = "Memory Photo",
+                            placeholder = painterResource(R.drawable.rogo),
+                            error = painterResource(R.drawable.rogo),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(220.dp)
@@ -449,7 +522,7 @@ fun Patient_Sentence(
         }
     }
 
-    // ─── 8) MediaPlayer 정리 ──────────────────────────────────────────────────
+    // ─── 10) MediaPlayer 정리 ────────────────────────────────────────────────
     DisposableEffect(Unit) {
         onDispose {
             stopTTS()
@@ -512,7 +585,8 @@ private suspend fun playTTS(
                     .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH)
                     .build()
             )
-            setDataSource(context, Uri.parse(ttsUrl))
+            // ★ http/https는 문자열 오버로드로 직접 지정
+            setDataSource(ttsUrl)
             setOnPreparedListener { it.start() }
             setOnErrorListener { _, what, extra ->
                 Toast.makeText(context, "TTS 오류: what=$what, extra=$extra", Toast.LENGTH_SHORT).show()
@@ -526,6 +600,8 @@ private suspend fun playTTS(
         }
     }
 }
+
+
 
 
 
