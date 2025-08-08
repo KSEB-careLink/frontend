@@ -49,7 +49,7 @@ fun SplashScreen(navController: NavController) {
                 popUpTo("splash") { inclusive = true }
             }
         } else {
-            navController.navigate("p_login") {
+            navController.navigate("choose") {
                 popUpTo("splash") { inclusive = true }
             }
         }
@@ -58,7 +58,7 @@ fun SplashScreen(navController: NavController) {
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF00C4B4))
+            .background(Color(0xFFFAFAFA))
     ) {
         val screenW = maxWidth
         val screenH = maxHeight

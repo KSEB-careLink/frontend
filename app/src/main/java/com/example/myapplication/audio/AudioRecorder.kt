@@ -7,30 +7,53 @@ import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.util.Log
 import androidx.core.content.ContextCompat
-import java.io.*
+import java.io.File
+import java.io.RandomAccessFile
 
 class AudioRecorder(private val context: Context) {
     private var audioRecord: AudioRecord? = null
     private var recordingThread: Thread? = null
-    private var isRecording = false
-    private lateinit var wavFile: File
-    private lateinit var pcmBuffer: ByteArrayOutputStream
+    @Volatile private var isRecording = false
 
-    private val sampleRate = 44100
+    private lateinit var wavFile: File
+    private lateinit var raf: RandomAccessFile
+
+    // 기본 파라미터
+    private var sampleRate = 44100
     private val channelConfig = AudioFormat.CHANNEL_IN_MONO
     private val audioFormat = AudioFormat.ENCODING_PCM_16BIT
     private val channels = 1
-    private val byteRate = sampleRate * 2  // 16bit mono = 2bytes per sample
+    private val bitsPerSample = 16
 
+    /**
+     * 녹음 시작
+     * - 권한 체크
+     * - AudioRecord 초기화 & 상태 확인
+     * - 44바이트 WAV 헤더(임시) 기록 후 스트리밍 기록
+     */
     fun startRecording(): String {
-        val permission = android.Manifest.permission.RECORD_AUDIO
-        if (ContextCompat.checkSelfPermission(context, permission)
-            != PackageManager.PERMISSION_GRANTED
-        ) {
-            throw SecurityException("RECORD_AUDIO 권한이 없습니다.")
+        if (isRecording) {
+            Log.w("AudioRecorder", "startRecording() called while already recording — ignored")
+            return if (this::wavFile.isInitialized) wavFile.absolutePath else ""
         }
 
-        val bufferSize = AudioRecord.getMinBufferSize(sampleRate, channelConfig, audioFormat)
+        if (ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO)
+            != PackageManager.PERMISSION_GRANTED
+        ) throw SecurityException("RECORD_AUDIO 권한이 없습니다.")
+
+        // 일부 기기에서 44.1k가 실패할 수 있어 48k로 폴백 시도
+        var minBuffer = AudioRecord.getMinBufferSize(sampleRate, channelConfig, audioFormat)
+        if (minBuffer == AudioRecord.ERROR || minBuffer == AudioRecord.ERROR_BAD_VALUE) {
+            sampleRate = 48000
+            minBuffer = AudioRecord.getMinBufferSize(sampleRate, channelConfig, audioFormat)
+        }
+        require(minBuffer != AudioRecord.ERROR && minBuffer != AudioRecord.ERROR_BAD_VALUE) {
+            "지원되지 않는 오디오 설정"
+        }
+
+        // 버퍼는 여유 있게 (x2) — 언더런 방지
+        val bufferSize = minBuffer * 2
+
         audioRecord = AudioRecord(
             MediaRecorder.AudioSource.MIC,
             sampleRate,
@@ -39,115 +62,158 @@ class AudioRecorder(private val context: Context) {
             bufferSize
         )
 
+        if (audioRecord?.state != AudioRecord.STATE_INITIALIZED) {
+            audioRecord?.release()
+            audioRecord = null
+            throw IllegalStateException("AudioRecord 초기화 실패")
+        }
+
         wavFile = File(context.cacheDir, "recording_${System.currentTimeMillis()}.wav")
-        pcmBuffer = ByteArrayOutputStream()
+        raf = RandomAccessFile(wavFile, "rw")
+        // 임시 헤더(사이즈 0으로) 먼저 써두기
+        writeWavHeader(raf, 0, sampleRate, channels, bitsPerSample)
 
         audioRecord?.startRecording()
+        if (audioRecord?.recordingState != AudioRecord.RECORDSTATE_RECORDING) {
+            audioRecord?.release()
+            audioRecord = null
+            raf.close()
+            throw IllegalStateException("녹음 시작 실패")
+        }
+
         isRecording = true
 
         recordingThread = Thread {
-            val buffer = ByteArray(bufferSize)
-            while (isRecording) {
-                val read = audioRecord?.read(buffer, 0, buffer.size) ?: 0
-                // 진단용 로그: 읽은 바이트 수와 첫 샘플 값
-                Log.d("AudioDebug", "bytesRead=$read, firstSample=${if (read > 0) buffer[0] else "N/A"}")
-                if (read > 0) {
-                    pcmBuffer.write(buffer, 0, read)
+            var totalPcmBytes: Long = 0
+            try {
+                val buffer = ByteArray(bufferSize)
+                while (isRecording) {
+                    val read = audioRecord?.read(buffer, 0, buffer.size) ?: 0
+                    if (read > 0) {
+                        raf.write(buffer, 0, read)
+                        totalPcmBytes += read
+                    } else if (read < 0) {
+                        // 오류 코드: ERROR_INVALID_OPERATION / ERROR_BAD_VALUE 등
+                        Log.w("AudioRecorder", "AudioRecord read() error: $read")
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("AudioRecorder", "Recording loop exception: ${e.message}", e)
+            } finally {
+                // 헤더 사이즈 갱신 + 파일 동기화/정리
+                try {
+                    updateWavSizes(raf, totalPcmBytes, sampleRate, channels, bitsPerSample)
+                    try {
+                        raf.fd.sync()
+                    } catch (_: Exception) {}
+                    raf.close()
+                } catch (e: Exception) {
+                    Log.e("AudioRecorder", "Finalizing WAV failed: ${e.message}", e)
                 }
             }
-
-            // 녹음 완료 후 WAV 파일 저장
-            val audioData = pcmBuffer.toByteArray()
-            FileOutputStream(wavFile).use { out ->
-                writeWavHeader(out, audioData.size.toLong(), sampleRate, channels, byteRate)
-                out.write(audioData)
-            }
-
-            pcmBuffer.close()
-            Log.d("AudioDebug", "WAV 파일 저장 완료: ${wavFile.absolutePath}")
-        }
-        recordingThread?.start()
+        }.apply { start() }
 
         return wavFile.absolutePath
     }
 
-    fun stopRecording(): String? {
+    /**
+     * 녹음 종료
+     * - 루프 종료 플래그
+     * - AudioRecord stop/release
+     * - 스레드 join (헤더 갱신/파일 닫기까지 대기)
+     */
+    fun stopRecording(): String {
+        if (!isRecording) {
+            Log.w("AudioRecorder", "stopRecording() called while not recording — returning last path")
+            return if (this::wavFile.isInitialized) wavFile.absolutePath else ""
+        }
+
         isRecording = false
 
-        audioRecord?.apply {
-            try {
-                stop()
-            } catch (e: RuntimeException) {
-                e.printStackTrace()
-            }
-            release()
+        audioRecord?.run {
+            try { stop() } catch (_: RuntimeException) {}
+            try { release() } catch (_: Exception) {}
         }
         audioRecord = null
-        recordingThread?.join()
+
+        try {
+            recordingThread?.join()
+        } catch (_: InterruptedException) {}
         recordingThread = null
 
-        Log.d("AudioDebug", "녹음 스레드 종료, 파일 경로: ${wavFile.absolutePath}")
         return wavFile.absolutePath
     }
 
-    // WAV 헤더 생성 함수
+    /** WAV 헤더 쓰기 (임시 사이즈 0) */
     private fun writeWavHeader(
-        out: FileOutputStream,
+        raf: RandomAccessFile,
         totalAudioLen: Long,
         sampleRate: Int,
         channels: Int,
-        byteRate: Int
+        bitsPerSample: Int
+    ) {
+        val byteRate = sampleRate * channels * (bitsPerSample / 8)
+        val totalDataLen = totalAudioLen + 36
+
+        val header = ByteArray(44)
+        // RIFF/WAVE
+        header[0] = 'R'.code.toByte(); header[1] = 'I'.code.toByte(); header[2] = 'F'.code.toByte(); header[3] = 'F'.code.toByte()
+        writeIntLE(header, 4, totalDataLen.toInt())
+        header[8] = 'W'.code.toByte(); header[9] = 'A'.code.toByte(); header[10] = 'V'.code.toByte(); header[11] = 'E'.code.toByte()
+        // fmt chunk
+        header[12] = 'f'.code.toByte(); header[13] = 'm'.code.toByte(); header[14] = 't'.code.toByte(); header[15] = ' '.code.toByte()
+        writeIntLE(header, 16, 16) // Subchunk1Size (PCM)
+        writeShortLE(header, 20, 1) // AudioFormat (PCM)
+        writeShortLE(header, 22, channels.toShort())
+        writeIntLE(header, 24, sampleRate)
+        writeIntLE(header, 28, byteRate)
+        writeShortLE(header, 32, (channels * (bitsPerSample / 8)).toShort()) // BlockAlign
+        writeShortLE(header, 34, bitsPerSample.toShort())
+        // data chunk
+        header[36] = 'd'.code.toByte(); header[37] = 'a'.code.toByte(); header[38] = 't'.code.toByte(); header[39] = 'a'.code.toByte()
+        writeIntLE(header, 40, totalAudioLen.toInt())
+
+        raf.seek(0)
+        raf.write(header, 0, 44)
+        raf.seek(44) // 오디오 데이터 시작
+    }
+
+    /** 녹음 종료 후 사이즈 필드 갱신 */
+    private fun updateWavSizes(
+        raf: RandomAccessFile,
+        totalAudioLen: Long,
+        sampleRate: Int,
+        channels: Int,
+        bitsPerSample: Int
     ) {
         val totalDataLen = totalAudioLen + 36
-        val header = ByteArray(44)
+        // ChunkSize
+        raf.seek(4); writeIntLE(raf, totalDataLen.toInt())
+        // Subchunk2Size (data)
+        raf.seek(40); writeIntLE(raf, totalAudioLen.toInt())
+    }
 
-        header[0] = 'R'.code.toByte()
-        header[1] = 'I'.code.toByte()
-        header[2] = 'F'.code.toByte()
-        header[3] = 'F'.code.toByte()
-        header[4] = (totalDataLen and 0xff).toByte()
-        header[5] = ((totalDataLen shr 8) and 0xff).toByte()
-        header[6] = ((totalDataLen shr 16) and 0xff).toByte()
-        header[7] = ((totalDataLen shr 24) and 0xff).toByte()
-        header[8] = 'W'.code.toByte()
-        header[9] = 'A'.code.toByte()
-        header[10] = 'V'.code.toByte()
-        header[11] = 'E'.code.toByte()
-        header[12] = 'f'.code.toByte()
-        header[13] = 'm'.code.toByte()
-        header[14] = 't'.code.toByte()
-        header[15] = ' '.code.toByte()
-        header[16] = 16
-        header[17] = 0
-        header[18] = 0
-        header[19] = 0
-        header[20] = 1
-        header[21] = 0
-        header[22] = channels.toByte()
-        header[23] = 0
-        header[24] = (sampleRate and 0xff).toByte()
-        header[25] = ((sampleRate shr 8) and 0xff).toByte()
-        header[26] = ((sampleRate shr 16) and 0xff).toByte()
-        header[27] = ((sampleRate shr 24) and 0xff).toByte()
-        header[28] = (byteRate and 0xff).toByte()
-        header[29] = ((byteRate shr 8) and 0xff).toByte()
-        header[30] = ((byteRate shr 16) and 0xff).toByte()
-        header[31] = ((byteRate shr 24) and 0xff).toByte()
-        header[32] = (2).toByte()  // block align
-        header[33] = 0
-        header[34] = 16  // bits per sample
-        header[35] = 0
-        header[36] = 'd'.code.toByte()
-        header[37] = 'a'.code.toByte()
-        header[38] = 't'.code.toByte()
-        header[39] = 'a'.code.toByte()
-        header[40] = (totalAudioLen and 0xff).toByte()
-        header[41] = ((totalAudioLen shr 8) and 0xff).toByte()
-        header[42] = ((totalAudioLen shr 16) and 0xff).toByte()
-        header[43] = ((totalAudioLen shr 24) and 0xff).toByte()
+    private fun writeIntLE(arr: ByteArray, offset: Int, value: Int) {
+        arr[offset] = (value and 0xff).toByte()
+        arr[offset + 1] = ((value shr 8) and 0xff).toByte()
+        arr[offset + 2] = ((value shr 16) and 0xff).toByte()
+        arr[offset + 3] = ((value shr 24) and 0xff).toByte()
+    }
 
-        out.write(header, 0, 44)
+    private fun writeShortLE(arr: ByteArray, offset: Int, value: Short) {
+        arr[offset] = (value.toInt() and 0xff).toByte()
+        arr[offset + 1] = ((value.toInt() shr 8) and 0xff).toByte()
+    }
+
+    private fun writeIntLE(raf: RandomAccessFile, value: Int) {
+        raf.write(byteArrayOf(
+            (value and 0xff).toByte(),
+            ((value shr 8) and 0xff).toByte(),
+            ((value shr 16) and 0xff).toByte(),
+            ((value shr 24) and 0xff).toByte()
+        ))
     }
 }
+
 
 

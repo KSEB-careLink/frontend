@@ -2,7 +2,11 @@
 package com.example.myapplication.screens
 
 import android.Manifest
+import android.content.ContentValues
 import android.content.pm.PackageManager
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -20,12 +24,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.navigation.NavController
-import androidx.navigation.compose.rememberNavController
 import com.example.myapplication.BuildConfig
 import com.example.myapplication.audio.AudioRecorder
 import com.example.myapplication.audio.AutoScrollingText
@@ -35,21 +37,16 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
-import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.asRequestBody
-import okhttp3.MultipartBody
-import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.logging.HttpLoggingInterceptor
 import java.io.File
-import java.util.concurrent.TimeUnit
-import android.content.ContentValues
-import android.os.Build
-import android.os.Environment
-import android.provider.MediaStore
 import java.text.SimpleDateFormat
 import java.util.Locale
+import java.util.concurrent.TimeUnit
 
 @Composable
 fun Recode2(
@@ -241,50 +238,50 @@ fun Recode2(
                     // 녹음 종료
                     val cachePath = recorder.stopRecording()
                     isRecording = false
+
+                    if (cachePath.isNullOrEmpty()) {
+                        Toast.makeText(context, "녹음 저장 실패(캐시 경로 없음)", Toast.LENGTH_LONG).show()
+                        return@Button
+                    }
+
                     Toast.makeText(context, "녹음 저장(캐시): $cachePath", Toast.LENGTH_LONG).show()
 
-                    // 1) Public Music 디렉토리에 복사
+                    // === MediaStore만 사용(이중 복사 제거) ===
+                    val sourceFile = File(cachePath)
                     val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
                         .format(System.currentTimeMillis())
-                    // 공용 음악 폴더 경로
-                    val publicMusicDir =
-                        Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC)
-                    if (!publicMusicDir.exists()) publicMusicDir.mkdirs()
-                    val destFile = File(publicMusicDir, "record_$timestamp.wav")
-                    File(cachePath).copyTo(destFile, overwrite = true)
+                    val displayName = "record_$timestamp.wav"
 
-                    // 2) MediaStore에 등록
                     val values = ContentValues().apply {
-                        put(MediaStore.Audio.Media.DISPLAY_NAME, destFile.name)
+                        put(MediaStore.Audio.Media.DISPLAY_NAME, displayName)
                         put(MediaStore.Audio.Media.MIME_TYPE, "audio/wav")
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                             put(MediaStore.Audio.Media.RELATIVE_PATH, Environment.DIRECTORY_MUSIC)
                             put(MediaStore.Audio.Media.IS_PENDING, 1)
-                        } else {
-                            put(MediaStore.Audio.Media.DATA, destFile.absolutePath)
                         }
                     }
+                    val resolver = context.contentResolver
                     val collection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                         MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
                     } else {
                         MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
                     }
-                    val uri = context.contentResolver.insert(collection, values)
-                    uri?.let { outUri ->
-                        context.contentResolver.openOutputStream(outUri)?.use { out ->
-                            destFile.inputStream().use { input -> input.copyTo(out) }
+                    val newUri = resolver.insert(collection, values)
+                    if (newUri != null) {
+                        resolver.openOutputStream(newUri)?.use { out ->
+                            sourceFile.inputStream().use { input -> input.copyTo(out) }
                         }
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                             values.clear()
                             values.put(MediaStore.Audio.Media.IS_PENDING, 0)
-                            context.contentResolver.update(outUri, values, null, null)
+                            resolver.update(newUri, values, null, null)
                         }
+                        Toast.makeText(context, "로컬에 저장됨: $displayName", Toast.LENGTH_LONG).show()
+                    } else {
+                        Toast.makeText(context, "MediaStore 저장 실패", Toast.LENGTH_LONG).show()
                     }
 
-                    Toast.makeText(context, "로컬에 저장됨: ${destFile.absolutePath}", Toast.LENGTH_LONG)
-                        .show()
-
-                    // 3) 서버 업로드
+                    // 3) 서버 업로드 (응답 use{} + 예외 처리)
                     coroutineScope.launch {
                         val firebaseUser = Firebase.auth.currentUser
                         val idToken = try {
@@ -301,28 +298,47 @@ fun Recode2(
                             .addFormDataPart("guardian_uid", uid)
                             .addFormDataPart("name", name)
                             .addFormDataPart(
-                                "file", destFile.name,
-                                destFile.asRequestBody("audio/wav".toMediaTypeOrNull())
+                                "file",
+                                sourceFile.name,
+                                sourceFile.asRequestBody("audio/wav".toMediaTypeOrNull())
                             )
                             .build()
 
-                        val requestBuilder = Request.Builder()
+                        val request = Request.Builder()
                             .url(uploadUrl)
                             .post(body)
-                        if (idToken.isNotEmpty()) {
-                            requestBuilder.addHeader("Authorization", "Bearer $idToken")
-                        }
-                        val resp = withContext(Dispatchers.IO) {
-                            client.newCall(requestBuilder.build()).execute()
-                        }
-                        withContext(Dispatchers.Main) {
-                            if (resp.isSuccessful) {
-                                Toast.makeText(context, "목소리 등록 성공", Toast.LENGTH_LONG).show()
-                                // 뒤로 가기만 하면 RecodeScreen의 onResume이 동작
-                                navController.popBackStack()
-                            } else {
-                                Toast.makeText(context, "등록 실패: ${resp.code}", Toast.LENGTH_LONG)
-                                    .show()
+                            .apply {
+                                if (idToken.isNotEmpty()) {
+                                    addHeader("Authorization", "Bearer $idToken")
+                                }
+                            }
+                            .build()
+
+                        try {
+                            withContext(Dispatchers.IO) {
+                                client.newCall(request).execute().use { resp ->
+                                    withContext(Dispatchers.Main) {
+                                        if (resp.isSuccessful) {
+                                            Toast.makeText(context, "목소리 등록 성공", Toast.LENGTH_LONG).show()
+                                            // 뒤로 가기만 하면 RecodeScreen의 onResume이 동작
+                                            navController.popBackStack()
+                                        } else {
+                                            Toast.makeText(
+                                                context,
+                                                "등록 실패: ${resp.code}",
+                                                Toast.LENGTH_LONG
+                                            ).show()
+                                        }
+                                    }
+                                }
+                            }
+                        } catch (e: Exception) {
+                            withContext(Dispatchers.Main) {
+                                Toast.makeText(
+                                    context,
+                                    "네트워크 오류: ${e.localizedMessage}",
+                                    Toast.LENGTH_LONG
+                                ).show()
                             }
                         }
                     }
@@ -344,6 +360,7 @@ fun Recode2(
         }
     }
 }
+
 
 
 
