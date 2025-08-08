@@ -1,11 +1,14 @@
+// app/src/main/java/com/example/myapplication/screens/Patient_Sentence.kt
 package com.example.myapplication.screens
 
 import android.Manifest
 import android.content.Context
+import android.content.Context.MODE_PRIVATE
 import android.content.Intent
 import android.media.AudioManager
 import android.media.MediaPlayer
 import android.media.ToneGenerator
+import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
@@ -49,18 +52,25 @@ import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.logging.HttpLoggingInterceptor
 import org.json.JSONObject
+import android.util.Log
 import java.util.concurrent.TimeUnit
 
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
 fun Patient_Sentence(
     navController: NavController,
-    patientId: String,
+    patientId: String, // 네비로 넘어온 원본(비어있거나 "{patientId}"일 수 있음)
     voiceId: String // 현재 화면에선 미사용(백엔드에서 관리)
 ) {
-    // ─── 1) 위치 권한 + 서비스 시작 (유지) ──────────────────────────────────────
+    // ─── 0) patientId 복구 ─────────────────────────────────────────────────────
     val context = LocalContext.current
+    val activePatientId by remember(patientId) {
+        mutableStateOf(resolvePatientId(context, patientId))
+    }
+
+    // ─── 1) 위치 권한 + 서비스 시작 ────────────────────────────────────────────
     val perms = rememberMultiplePermissionsState(
         listOf(
             Manifest.permission.ACCESS_COARSE_LOCATION,
@@ -77,9 +87,13 @@ fun Patient_Sentence(
         }
     }
 
-    // ─── 2) 네트워킹 공용 클라이언트 ───────────────────────────────────────────
+    // ─── 2) OkHttp 클라이언트 (로깅 포함) ──────────────────────────────────────
     val client = remember {
+        val logging = HttpLoggingInterceptor { msg -> Log.d("HTTP", msg) }.apply {
+            level = HttpLoggingInterceptor.Level.BODY
+        }
         OkHttpClient.Builder()
+            .addInterceptor(logging)
             .connectTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
@@ -90,7 +104,7 @@ fun Patient_Sentence(
     // ─── 3) 데이터 모델 ────────────────────────────────────────────────────────
     data class MemoryOne(
         val sentence: String,
-        val imageUrl: String,
+        val imageUrl: String?, // ★ 옵션으로 변경 (없을 수 있음)
         val mp3Url: String
     )
 
@@ -101,41 +115,105 @@ fun Patient_Sentence(
     var isLoading by remember { mutableStateOf(false) }
     var errorMsg by remember { mutableStateOf<String?>(null) }
 
-    // ─── 4) 랜덤 1개 호출 (문서 스펙 준수: /memories/{patientId}/tts) ──────────
-    suspend fun fetchOneRandom(): MemoryOne {
+    // ─── 4) 후보 경로 자동 탐색기 ─────────────────────────────────────────────
+    suspend fun resolveMemoriesTtsUrl(
+        baseUrl: String,
+        patientId: String,
+        idToken: String,
+        client: OkHttpClient
+    ): String {
+        val base = baseUrl.trimEnd('/')
+        val pidEnc = Uri.encode(patientId)
+        val candidates = listOf(
+            "$base/memories/$pidEnc/tts",         // 문서 스펙
+            "$base/memories/tts/$pidEnc",         // 반대 패턴
+            "$base/memory/$pidEnc/tts",           // 단수
+            "$base/memories/tts?patientId=$pidEnc"// 쿼리 파라미터
+        )
+        val tried = mutableListOf<String>()
+
+        for (url in candidates) {
+            tried += url
+            val req = Request.Builder()
+                .url(url)
+                .addHeader("Authorization", "Bearer $idToken")
+                .get()
+                .build()
+
+            val resp = withContext(Dispatchers.IO) { client.newCall(req).execute() }
+            val code = resp.code
+            Log.d("MemoriesAPI", "Probe URL: $url -> $code")
+
+            if (code == 200) return url
+            if (code == 204) throw Exception("아직 생성된 회상 문장이 없습니다. (204)")
+            // 401/403/404 등은 다음 후보 진행
+        }
+        throw Exception("모든 후보 경로가 실패했습니다. 시도 URL: ${tried.joinToString()}")
+    }
+
+    // ─── 5) 랜덤 1개 호출 ────────────────────────────────────────────────────
+    suspend fun fetchOneRandom(ctx: Context): MemoryOne {
         val idToken = Firebase.auth.currentUser
             ?.getIdToken(false)?.await()?.token
             ?: throw Exception("인증 토큰 없음")
 
-        val url = "${BuildConfig.BASE_URL.trimEnd('/')}/memories/$patientId/tts"
+        if (activePatientId.isBlank()) {
+            throw Exception("patientId 없음(네비/SharedPreferences/Firebase 모두 비어 있음)")
+        }
+
+        val workingUrl = resolveMemoriesTtsUrl(
+            baseUrl = BuildConfig.BASE_URL,
+            patientId = activePatientId,
+            idToken = idToken,
+            client = client
+        )
+
         val resp = withContext(Dispatchers.IO) {
             client.newCall(
                 Request.Builder()
-                    .url(url)
+                    .url(workingUrl)
                     .addHeader("Authorization", "Bearer $idToken")
                     .get()
                     .build()
             ).execute()
         }
 
-        if (resp.code == 204) throw Exception("아직 생성된 회상 문장이 없습니다.")
-        if (!resp.isSuccessful) throw Exception("API 오류 ${resp.code}")
+        if (resp.code == 204) throw Exception("아직 생성된 회상 문장이 없습니다. (204)")
+        if (!resp.isSuccessful) throw Exception("API 오류 ${resp.code} @ $workingUrl")
 
-        val obj = JSONObject(resp.body?.string().orEmpty())
+        val bodyStr = resp.body?.string().orEmpty()
+        Log.d("MemoriesAPI", "OK body: $bodyStr")
+        val obj = JSONObject(bodyStr)
+
         val sentence = obj.optString("sentence", obj.optString("reminder_text"))
-        val image = obj.optString("image_url")
+        // 서버가 image_url을 아직 안 줄 수도 있으므로 옵션 처리
+        val imageOpt = obj.optString("image_url", obj.optString("image", ""))
+            .takeIf { it.isNotBlank() }
+        // mp3_url이 없고 tts_url만 있을 수 있음
         val mp3 = obj.optString("mp3_url", obj.optString("tts_url"))
-        if (sentence.isBlank() || image.isBlank() || mp3.isBlank()) {
-            throw Exception("응답 필드 부족 (sentence/image_url/mp3_url)")
+
+        if (sentence.isBlank() || mp3.isBlank()) {
+            Log.e("MemoriesAPI", "응답 필드 부족: sentence='${sentence}', image='${imageOpt ?: ""}', mp3='${mp3}'")
+            throw Exception("응답 필드 부족 (sentence/mp3_url)")
         }
-        return MemoryOne(sentence, image, mp3)
+
+        Log.d("MemoriesAPI", "Using URL: $workingUrl  (patientId=$activePatientId)")
+        withContext(Dispatchers.Main) {
+            Toast.makeText(
+                ctx,
+                "TTS 경로: ${workingUrl.removePrefix(BuildConfig.BASE_URL)}",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+
+        return MemoryOne(sentence, imageOpt, mp3)
     }
 
     suspend fun loadInitial() {
         isLoading = true
         errorMsg = null
         try {
-            val first = fetchOneRandom()
+            val first = fetchOneRandom(context)
             history.clear()
             history += first
             currentIndex = 0
@@ -148,11 +226,11 @@ fun Patient_Sentence(
         }
     }
 
-    LaunchedEffect(patientId) {
+    LaunchedEffect(activePatientId) {
         loadInitial()
     }
 
-    // ─── 5) 다음/이전 이동 로직 ────────────────────────────────────────────────
+    // ─── 6) 다음/이전 이동 로직 ───────────────────────────────────────────────
     fun canGoPrev() = currentIndex > 0
     fun canGoNext() = true // 다음은 항상 가능(끝이면 새 랜덤 fetch)
 
@@ -160,23 +238,19 @@ fun Patient_Sentence(
         stopTTS()
         if (canGoPrev()) {
             currentIndex -= 1
-        } else {
-            // 맨 앞이면 아무것도 하지 않음(버튼 자체를 disabled로 처리)
         }
     }
 
     suspend fun goNext() {
         stopTTS()
-        // 히스토리에 다음 항목이 있으면 인덱스만 이동
         if (currentIndex + 1 < history.size) {
             currentIndex += 1
             return
         }
-        // 없으면 새로 랜덤 Fetch → 히스토리에 추가 → 이동
         isLoading = true
         errorMsg = null
         try {
-            val one = fetchOneRandom()
+            val one = fetchOneRandom(context)
             history += one
             currentIndex += 1
         } catch (e: Exception) {
@@ -194,7 +268,7 @@ fun Patient_Sentence(
         }
     }
 
-    // ─── 6) UI ────────────────────────────────────────────────────────────────
+    // ─── 7) UI ────────────────────────────────────────────────────────────────
     Scaffold(
         bottomBar = {
             val navBackStack by navController.currentBackStackEntryAsState()
@@ -224,9 +298,10 @@ fun Patient_Sentence(
                         label = { Text(label) },
                         selected = selected,
                         onClick = {
+                            val pid = activePatientId
                             val target = when (routePattern) {
-                                "sentence/{patientId}" -> "sentence/$patientId"
-                                "quiz/{patientId}" -> "quiz/$patientId"
+                                "sentence/{patientId}" -> "sentence/$pid"
+                                "quiz/{patientId}" -> "quiz/$pid"
                                 else -> routePattern
                             }
                             if (currentRoute != target) {
@@ -296,16 +371,29 @@ fun Patient_Sentence(
                 else -> {
                     val mem = history[currentIndex]
 
-                    // 이미지
-                    AsyncImage(
-                        model = mem.imageUrl,
-                        contentDescription = "Memory Photo",
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(220.dp)
-                            .clip(RoundedCornerShape(12.dp)),
-                        contentScale = ContentScale.Crop
-                    )
+                    // 이미지(옵션): 없으면 placeholder UI
+                    if (mem.imageUrl != null) {
+                        AsyncImage(
+                            model = mem.imageUrl,
+                            contentDescription = "Memory Photo",
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(220.dp)
+                                .clip(RoundedCornerShape(12.dp)),
+                            contentScale = ContentScale.Crop
+                        )
+                    } else {
+                        // 간단한 플레이스홀더
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(220.dp)
+                                .clip(RoundedCornerShape(12.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("이미지 없음", color = Color.Gray, fontSize = 14.sp)
+                        }
+                    }
                     Spacer(Modifier.height(12.dp))
 
                     // 문장 + 수동 재생 버튼(현재 문장 다시 듣기)
@@ -361,7 +449,7 @@ fun Patient_Sentence(
         }
     }
 
-    // ─── 7) MediaPlayer 정리 ───────────────────────────────────────────────────
+    // ─── 8) MediaPlayer 정리 ──────────────────────────────────────────────────
     DisposableEffect(Unit) {
         onDispose {
             stopTTS()
@@ -370,20 +458,33 @@ fun Patient_Sentence(
 }
 
 // ────────────────────────────────────────────────
+// Pref & patientId 복구 유틸
+// ────────────────────────────────────────────────
+private fun getPatientIdFromPrefs(context: Context): String? {
+    val prefs = context.getSharedPreferences("MyPrefs", MODE_PRIVATE)
+    return prefs.getString("patient_id", null)
+}
+
+private fun resolvePatientId(context: Context, param: String): String {
+    val cleaned = param.trim()
+    if (cleaned.isNotEmpty() && cleaned != "{patientId}" && cleaned.lowercase() != "null") {
+        return cleaned
+    }
+    // 네비 값이 placeholder면 Pref → Firebase uid 순으로 복구
+    getPatientIdFromPrefs(context)?.let { return it }
+    Firebase.auth.currentUser?.uid?.let { return it }
+    return "" // 비어있으면 fetch 단계에서 에러로 처리
+}
+
+// ────────────────────────────────────────────────
 // TTS helpers
 // ────────────────────────────────────────────────
-
-private val ttsClient = OkHttpClient.Builder()
-    .connectTimeout(30, TimeUnit.SECONDS)
-    .writeTimeout(30, TimeUnit.SECONDS)
-    .readTimeout(30, TimeUnit.SECONDS)
-    .build()
-
 private var currentTTSPlayer: MediaPlayer? = null
 
 private fun stopTTS() {
     currentTTSPlayer?.run {
         try { stop() } catch (_: Exception) {}
+        try { reset() } catch (_: Exception) {}
         release()
     }
     currentTTSPlayer = null
@@ -405,8 +506,18 @@ private suspend fun playTTS(
 
         // 재생
         currentTTSPlayer = MediaPlayer().apply {
-            setDataSource(ttsUrl) // 문서 스펙: mp3_url or tts_url
+            setAudioAttributes(
+                android.media.AudioAttributes.Builder()
+                    .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
+                    .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH)
+                    .build()
+            )
+            setDataSource(context, Uri.parse(ttsUrl))
             setOnPreparedListener { it.start() }
+            setOnErrorListener { _, what, extra ->
+                Toast.makeText(context, "TTS 오류: what=$what, extra=$extra", Toast.LENGTH_SHORT).show()
+                true
+            }
             prepareAsync()
         }
     } catch (e: Exception) {
@@ -415,6 +526,9 @@ private suspend fun playTTS(
         }
     }
 }
+
+
+
 
 
 

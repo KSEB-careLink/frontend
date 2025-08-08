@@ -1,3 +1,4 @@
+// PatientLoginScreen.kt
 package com.example.myapplication.screens
 
 import android.content.Context
@@ -44,6 +45,49 @@ fun PatientLoginScreen(navController: NavController) {
     var email     by remember { mutableStateOf("") }
     var password  by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
+
+    // ✅ 자동 로그인: 이미 로그인된 세션이 있으면 /auth/me 확인 후 바로 이동
+    LaunchedEffect(Unit) {
+        isLoading = true
+        try {
+            val user = auth.currentUser
+            if (user != null) {
+                val idToken = user.getIdToken(true).await().token
+                if (idToken != null) {
+                    val meReq = Request.Builder()
+                        .url("${BuildConfig.BASE_URL}/auth/me")
+                        .addHeader("Authorization", "Bearer $idToken")
+                        .get()
+                        .build()
+                    val meResp = withContext(Dispatchers.IO) { client.newCall(meReq).execute() }
+                    if (meResp.isSuccessful) {
+                        val meJson = JSONObject(meResp.body?.string() ?: "{}")
+                        val role = meJson.optString("role")
+                        if (role == "patient") {
+                            val patientId = meJson.optString("uid").takeIf { it.isNotBlank() }
+                                ?: throw Exception("응답에 uid가 없습니다")
+
+                            // 저장
+                            context.getSharedPreferences("MyPrefs", Context.MODE_PRIVATE)
+                                .edit()
+                                .putString("patientId", patientId)
+                                .apply()
+
+                            // 바로 code2/{patientId}로
+                            navController.navigate("code2/$patientId") {
+                                popUpTo("p_login") { inclusive = true }
+                            }
+                            return@LaunchedEffect
+                        }
+                    }
+                }
+            }
+        } catch (_: Exception) {
+            // 조용히 무시하고 로그인 화면 표시
+        } finally {
+            isLoading = false
+        }
+    }
 
     ConstraintLayout(
         modifier = Modifier
@@ -183,7 +227,7 @@ fun PatientLoginScreen(navController: NavController) {
                         val patientId = meJson.optString("uid").takeIf { it.isNotBlank() }
                             ?: throw Exception("응답에 uid가 없습니다")
 
-                        // (선택) SharedPreferences에 patientId 저장
+                        // SharedPreferences에 patientId 저장
                         context.getSharedPreferences("MyPrefs", Context.MODE_PRIVATE)
                             .edit()
                             .putString("patientId", patientId)
@@ -232,7 +276,7 @@ fun PatientLoginScreen(navController: NavController) {
             Text("회원가입", color = Color.White, fontSize = 16.sp)
         }
 
-        // 로딩 오버레이
+        // 로딩 오버레이 (자동 로그인 체크 및 수동 로그인 시 공용)
         if (isLoading) {
             Box(
                 modifier = Modifier
