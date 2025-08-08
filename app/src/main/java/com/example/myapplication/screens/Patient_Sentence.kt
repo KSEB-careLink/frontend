@@ -12,10 +12,12 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.*
-import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -55,9 +57,9 @@ import java.util.concurrent.TimeUnit
 fun Patient_Sentence(
     navController: NavController,
     patientId: String,
-    voiceId: String
+    voiceId: String // 현재 화면에선 미사용(백엔드에서 관리)
 ) {
-    // 1) 런타임 위치 권한 관리
+    // ─── 1) 위치 권한 + 서비스 시작 (유지) ──────────────────────────────────────
     val context = LocalContext.current
     val perms = rememberMultiplePermissionsState(
         listOf(
@@ -65,8 +67,6 @@ fun Patient_Sentence(
             Manifest.permission.ACCESS_FINE_LOCATION
         )
     )
-
-    // 2) 권한 요청 및 서비스 시작
     LaunchedEffect(perms.allPermissionsGranted) {
         if (!perms.allPermissionsGranted) {
             perms.launchMultiplePermissionRequest()
@@ -77,8 +77,7 @@ fun Patient_Sentence(
         }
     }
 
-    // 3) 컴포저블 상태 및 HTTP 클라이언트
-    val scope = rememberCoroutineScope()
+    // ─── 2) 네트워킹 공용 클라이언트 ───────────────────────────────────────────
     val client = remember {
         OkHttpClient.Builder()
             .connectTimeout(30, TimeUnit.SECONDS)
@@ -86,82 +85,152 @@ fun Patient_Sentence(
             .readTimeout(30, TimeUnit.SECONDS)
             .build()
     }
+    val scope = rememberCoroutineScope()
 
-    // 4) 메모리 모델 정의
-    data class MemoryItem(
-        val id: Int,
-        val photoUrl: String,
+    // ─── 3) 데이터 모델 ────────────────────────────────────────────────────────
+    data class MemoryOne(
         val sentence: String,
-        val ttsUrl: String,
-        val createdAt: String
+        val imageUrl: String,
+        val mp3Url: String
     )
 
-    // 5) 화면 상태
-    val memories = remember { mutableStateListOf<MemoryItem>() }
+    // 히스토리 + 현재 인덱스
+    val history = remember { mutableStateListOf<MemoryOne>() }
+    var currentIndex by remember { mutableStateOf(-1) }
+
+    var isLoading by remember { mutableStateOf(false) }
     var errorMsg by remember { mutableStateOf<String?>(null) }
 
-    // 6) 데이터 로드
-    LaunchedEffect(patientId) {
+    // ─── 4) 랜덤 1개 호출 (문서 스펙 준수: /memories/{patientId}/tts) ──────────
+    suspend fun fetchOneRandom(): MemoryOne {
+        val idToken = Firebase.auth.currentUser
+            ?.getIdToken(false)?.await()?.token
+            ?: throw Exception("인증 토큰 없음")
+
+        val url = "${BuildConfig.BASE_URL.trimEnd('/')}/memories/$patientId/tts"
+        val resp = withContext(Dispatchers.IO) {
+            client.newCall(
+                Request.Builder()
+                    .url(url)
+                    .addHeader("Authorization", "Bearer $idToken")
+                    .get()
+                    .build()
+            ).execute()
+        }
+
+        if (resp.code == 204) throw Exception("아직 생성된 회상 문장이 없습니다.")
+        if (!resp.isSuccessful) throw Exception("API 오류 ${resp.code}")
+
+        val obj = JSONObject(resp.body?.string().orEmpty())
+        val sentence = obj.optString("sentence", obj.optString("reminder_text"))
+        val image = obj.optString("image_url")
+        val mp3 = obj.optString("mp3_url", obj.optString("tts_url"))
+        if (sentence.isBlank() || image.isBlank() || mp3.isBlank()) {
+            throw Exception("응답 필드 부족 (sentence/image_url/mp3_url)")
+        }
+        return MemoryOne(sentence, image, mp3)
+    }
+
+    suspend fun loadInitial() {
+        isLoading = true
+        errorMsg = null
         try {
-            val token = Firebase.auth.currentUser
-                ?.getIdToken(false)?.await()?.token
-                ?: throw Exception("인증 토큰 없음")
-            val url = "${BuildConfig.BASE_URL.trimEnd('/')}/memories/list/$patientId"
-            val resp = withContext(Dispatchers.IO) {
-                client.newCall(
-                    Request.Builder()
-                        .url(url)
-                        .addHeader("Authorization", "Bearer $token")
-                        .get()
-                        .build()
-                ).execute()
-            }
-            if (!resp.isSuccessful) throw Exception("API 오류 ${resp.code}")
-            val arr = JSONObject(resp.body?.string().orEmpty())
-                .optJSONArray("memories")
-                ?: throw Exception("memories 배열이 없습니다.")
-            memories.clear()
-            for (i in 0 until arr.length()) {
-                val o = arr.getJSONObject(i)
-                memories += MemoryItem(
-                    id        = o.getInt("id"),
-                    photoUrl  = o.getString("image_url"),
-                    sentence  = o.getString("sentence"),
-                    ttsUrl    = o.getString("tts_audio_url"),
-                    createdAt = o.getString("created_at")
-                )
-            }
-            errorMsg = null
+            val first = fetchOneRandom()
+            history.clear()
+            history += first
+            currentIndex = 0
         } catch (e: Exception) {
+            history.clear()
+            currentIndex = -1
             errorMsg = "로드 실패: ${e.message}"
+        } finally {
+            isLoading = false
         }
     }
 
-    // 7) UI 구성
+    LaunchedEffect(patientId) {
+        loadInitial()
+    }
+
+    // ─── 5) 다음/이전 이동 로직 ────────────────────────────────────────────────
+    fun canGoPrev() = currentIndex > 0
+    fun canGoNext() = true // 다음은 항상 가능(끝이면 새 랜덤 fetch)
+
+    suspend fun goPrev() {
+        stopTTS()
+        if (canGoPrev()) {
+            currentIndex -= 1
+        } else {
+            // 맨 앞이면 아무것도 하지 않음(버튼 자체를 disabled로 처리)
+        }
+    }
+
+    suspend fun goNext() {
+        stopTTS()
+        // 히스토리에 다음 항목이 있으면 인덱스만 이동
+        if (currentIndex + 1 < history.size) {
+            currentIndex += 1
+            return
+        }
+        // 없으면 새로 랜덤 Fetch → 히스토리에 추가 → 이동
+        isLoading = true
+        errorMsg = null
+        try {
+            val one = fetchOneRandom()
+            history += one
+            currentIndex += 1
+        } catch (e: Exception) {
+            errorMsg = "다음 문장 불러오기 실패: ${e.message}"
+        } finally {
+            isLoading = false
+        }
+    }
+
+    // 인덱스가 바뀌면 자동으로 해당 항목 TTS 재생
+    LaunchedEffect(currentIndex) {
+        if (currentIndex in history.indices) {
+            val mem = history[currentIndex]
+            playTTS(mem.mp3Url, context)
+        }
+    }
+
+    // ─── 6) UI ────────────────────────────────────────────────────────────────
     Scaffold(
         bottomBar = {
             val navBackStack by navController.currentBackStackEntryAsState()
             val currentRoute = navBackStack?.destination?.route
             val navColors = NavigationBarItemDefaults.colors(
-                indicatorColor      = Color.Transparent,
-                selectedIconColor   = Color(0xFF00C4B4),
+                indicatorColor = Color.Transparent,
+                selectedIconColor = Color(0xFF00C4B4),
                 unselectedIconColor = Color(0xFF888888),
-                selectedTextColor   = Color(0xFF00C4B4),
+                selectedTextColor = Color(0xFF00C4B4),
                 unselectedTextColor = Color(0xFF888888)
             )
             NavigationBar {
                 listOf(
                     "sentence/{patientId}" to "회상문장",
-                    "quiz/{patientId}"     to "회상퀴즈",
-                    "alert"                to "긴급알림"
-                ).forEach { (route, label) ->
+                    "quiz/{patientId}" to "회상퀴즈",
+                    "alert" to "긴급알림"
+                ).forEach { (routePattern, label) ->
+                    val selected = when {
+                        routePattern.startsWith("sentence/") || routePattern == "sentence/{patientId}" ->
+                            currentRoute?.startsWith("sentence/") == true
+                        routePattern.startsWith("quiz/") || routePattern == "quiz/{patientId}" ->
+                            currentRoute?.startsWith("quiz/") == true
+                        else -> currentRoute == routePattern
+                    }
                     NavigationBarItem(
-                        icon    = { Icon(Icons.Default.VolumeUp, contentDescription = label) },
-                        label   = { Text(label) },
-                        selected= currentRoute == route,
+                        icon = { Icon(Icons.Default.VolumeUp, contentDescription = label) },
+                        label = { Text(label) },
+                        selected = selected,
                         onClick = {
-                            if (currentRoute != route) {
-                                navController.navigate(route) {
+                            val target = when (routePattern) {
+                                "sentence/{patientId}" -> "sentence/$patientId"
+                                "quiz/{patientId}" -> "quiz/$patientId"
+                                else -> routePattern
+                            }
+                            if (currentRoute != target) {
+                                navController.navigate(target) {
                                     popUpTo(navController.graph.startDestinationId)
                                     launchSingleTop = true
                                 }
@@ -189,7 +258,7 @@ fun Patient_Sentence(
             )
             Spacer(Modifier.height(16.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.VolumeUp, contentDescription = null, Modifier.size(24.dp))
+                Icon(Icons.Default.VolumeUp, contentDescription = null, modifier = Modifier.size(24.dp))
                 Spacer(Modifier.width(8.dp))
                 Text(
                     buildAnnotatedString {
@@ -201,42 +270,107 @@ fun Patient_Sentence(
             }
             Spacer(Modifier.height(16.dp))
 
-            errorMsg?.let {
-                Text(it, color = MaterialTheme.colorScheme.error, fontSize = 14.sp)
-                Spacer(Modifier.height(12.dp))
-                return@Column
-            }
-
-            memories.forEach { mem ->
-                AsyncImage(
-                    model = mem.photoUrl,
-                    contentDescription = "Memory Photo",
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(200.dp)
-                        .clip(RoundedCornerShape(12.dp)),
-                    contentScale = ContentScale.Crop
-                )
-                Spacer(Modifier.height(12.dp))
-
-                Button(
-                    onClick = { scope.launch { playTTS(mem.ttsUrl, context) } },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp * 4 / 4),
-                    shape = RoundedCornerShape(8.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C4B4))
+            // 상단 우측: 새로고침(최초부터 다시)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                FilledTonalButton(
+                    onClick = { scope.launch { stopTTS(); loadInitial() } },
+                    enabled = !isLoading
                 ) {
-                    Text(mem.sentence, color = Color.White, fontSize = 16.sp)
+                    Icon(Icons.Default.Refresh, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("처음부터")
                 }
-                Spacer(Modifier.height(24.dp))
             }
+            Spacer(Modifier.height(12.dp))
+
+            when {
+                isLoading && history.isEmpty() -> {
+                    CircularProgressIndicator()
+                }
+                errorMsg != null && history.isEmpty() -> {
+                    Text(errorMsg!!, color = MaterialTheme.colorScheme.error, fontSize = 14.sp)
+                }
+                currentIndex !in history.indices -> {
+                    Text("표시할 회상 문장이 없습니다.", fontSize = 16.sp)
+                }
+                else -> {
+                    val mem = history[currentIndex]
+
+                    // 이미지
+                    AsyncImage(
+                        model = mem.imageUrl,
+                        contentDescription = "Memory Photo",
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(220.dp)
+                            .clip(RoundedCornerShape(12.dp)),
+                        contentScale = ContentScale.Crop
+                    )
+                    Spacer(Modifier.height(12.dp))
+
+                    // 문장 + 수동 재생 버튼(현재 문장 다시 듣기)
+                    Button(
+                        onClick = { scope.launch { stopTTS(); playTTS(mem.mp3Url, context) } },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C4B4))
+                    ) {
+                        Text(mem.sentence, color = Color.White, fontSize = 16.sp)
+                    }
+                    Spacer(Modifier.height(16.dp))
+
+                    // 이전/다음 네비게이션
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        OutlinedButton(
+                            onClick = { scope.launch { goPrev() } },
+                            enabled = canGoPrev() && !isLoading
+                        ) {
+                            Icon(Icons.Default.ArrowBack, contentDescription = "이전")
+                            Spacer(Modifier.width(8.dp))
+                            Text("이전 문장")
+                        }
+
+                        Text("${currentIndex + 1} / ${history.size}", fontSize = 14.sp)
+
+                        Button(
+                            onClick = { scope.launch { goNext() } },
+                            enabled = canGoNext() && !isLoading
+                        ) {
+                            Text("다음 문장")
+                            Spacer(Modifier.width(8.dp))
+                            Icon(Icons.Default.ArrowForward, contentDescription = "다음")
+                        }
+                    }
+
+                    if (isLoading && history.isNotEmpty()) {
+                        Spacer(Modifier.height(12.dp))
+                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    }
+
+                    errorMsg?.let {
+                        Spacer(Modifier.height(8.dp))
+                        Text(it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                    }
+                }
+            }
+        }
+    }
+
+    // ─── 7) MediaPlayer 정리 ───────────────────────────────────────────────────
+    DisposableEffect(Unit) {
+        onDispose {
+            stopTTS()
         }
     }
 }
 
 // ────────────────────────────────────────────────
-// TTS helper
+// TTS helpers
 // ────────────────────────────────────────────────
 
 private val ttsClient = OkHttpClient.Builder()
@@ -246,6 +380,14 @@ private val ttsClient = OkHttpClient.Builder()
     .build()
 
 private var currentTTSPlayer: MediaPlayer? = null
+
+private fun stopTTS() {
+    currentTTSPlayer?.run {
+        try { stop() } catch (_: Exception) {}
+        release()
+    }
+    currentTTSPlayer = null
+}
 
 private suspend fun playTTS(
     ttsUrl: String,
@@ -258,15 +400,12 @@ private suspend fun playTTS(
         delay(200)
         toneGen.release()
 
-        // 기존 해제
-        currentTTSPlayer?.apply {
-            reset()
-            release()
-        }
+        // 기존 플레이어 정리
+        stopTTS()
 
         // 재생
         currentTTSPlayer = MediaPlayer().apply {
-            setDataSource(ttsUrl)
+            setDataSource(ttsUrl) // 문서 스펙: mp3_url or tts_url
             setOnPreparedListener { it.start() }
             prepareAsync()
         }
@@ -276,6 +415,7 @@ private suspend fun playTTS(
         }
     }
 }
+
 
 
 
