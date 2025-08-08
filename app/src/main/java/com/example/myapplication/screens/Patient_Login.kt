@@ -73,8 +73,8 @@ fun PatientLoginScreen(navController: NavController) {
                                 .putString("patientId", patientId)
                                 .apply()
 
-                            // 바로 code2/{patientId}로
-                            navController.navigate("code2/$patientId") {
+                            // 바로 sentence/{patientId}로
+                            navController.navigate("sentence/{patientId}") {
                                 popUpTo("p_login") { inclusive = true }
                             }
                             return@LaunchedEffect
