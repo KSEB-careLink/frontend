@@ -38,8 +38,6 @@ import androidx.core.content.ContextCompat
 import androidx.navigation.NavController
 import androidx.navigation.compose.currentBackStackEntryAsState
 import coil.compose.AsyncImage
-import coil.request.ImageRequest
-import coil.request.CachePolicy
 import com.example.myapplication.BuildConfig
 import com.example.myapplication.R
 import com.example.myapplication.service.LocationUpdatesService
@@ -58,7 +56,7 @@ import okhttp3.logging.HttpLoggingInterceptor
 import org.json.JSONArray
 import org.json.JSONObject
 import android.util.Log
-import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.filled.Star
 import java.util.concurrent.TimeUnit
 
 @OptIn(ExperimentalPermissionsApi::class)
@@ -118,10 +116,10 @@ fun Patient_Sentence(
     var isLoading by remember { mutableStateOf(false) }
     var errorMsg by remember { mutableStateOf<String?>(null) }
 
-    // ★ TTS 엔드포인트 1회만 해두고 재사용
-    var ttsEndpoint by remember { mutableStateOf<String?>(null) }
+    // ✔ 이미 본 조합 기록(중복 방지)
+    val seenKeys = remember { mutableSetOf<String>() }
 
-    // ─── 4) 유틸 ──────────────────────────────────────────────────────────────
+    // ─── 4) gs:// → https 변환 ────────────────────────────────────────────────
     fun normalizeImageUrl(url: String?): String? {
         if (url.isNullOrBlank()) return null
         if (url.startsWith("gs://")) {
@@ -136,10 +134,13 @@ fun Patient_Sentence(
         return url
     }
 
-    fun withCacheBuster(url: String): String {
-        val sep = if (url.contains("?")) "&" else "?"
-        return "$url${sep}_=${System.currentTimeMillis()}"
-    }
+    // 문장 분해(불릿/따옴표/공백 제거)
+    fun splitVariants(raw: String): List<String> =
+        raw.lines()
+            .map { it.trim() }
+            .map { it.removePrefix("-").removePrefix("•").trim() }
+            .map { it.trim('"') }
+            .filter { it.isNotBlank() }
 
     // ─── 5) 환자 최신 사진 Fallback 조회 ──────────────────────────────────────
     suspend fun fetchFallbackImageUrl(
@@ -156,13 +157,10 @@ fun Patient_Sentence(
             "$base/photos?patient_id=$pidEnc&limit=1&order=desc"     // [ { image_url: "..." } ]
         )
 
-        for (raw in candidates) {
-            val url = withCacheBuster(raw)
+        for (url in candidates) {
             val req = Request.Builder()
                 .url(url)
                 .addHeader("Authorization", "Bearer $idToken")
-                .addHeader("Cache-Control", "no-cache, no-store")
-                .addHeader("Pragma", "no-cache")
                 .get()
                 .build()
             val resp = withContext(Dispatchers.IO) { client.newCall(req).execute() }
@@ -172,14 +170,11 @@ fun Patient_Sentence(
             val body = resp.body?.string().orEmpty()
             if (body.isBlank()) continue
 
-            // object 형
             runCatching {
                 val o = JSONObject(body)
                 val img = normalizeImageUrl(o.optString("image_url"))
                 if (!img.isNullOrBlank()) return img
             }
-
-            // array 형
             runCatching {
                 val arr = JSONArray(body)
                 if (arr.length() > 0) {
@@ -191,15 +186,13 @@ fun Patient_Sentence(
         return null
     }
 
-    // ─── 6) /memories tts 경로 자동 탐색(1회) ────────────────────────────────
-    suspend fun resolveMemoriesTtsUrlOnce(
+    // ─── 6) /memories tts 경로 자동 탐색 ─────────────────────────────────────
+    suspend fun resolveMemoriesTtsUrl(
         baseUrl: String,
         patientId: String,
         idToken: String,
         client: OkHttpClient
     ): String {
-        ttsEndpoint?.let { return it } // 이미 있으면 재사용
-
         val base = baseUrl.trimEnd('/')
         val pidEnc = Uri.encode(patientId)
         val candidates = listOf(
@@ -208,33 +201,28 @@ fun Patient_Sentence(
             "$base/memory/$pidEnc/tts",            // 단수
             "$base/memories/tts?patientId=$pidEnc" // 쿼리 파라미터
         )
+        val tried = mutableListOf<String>()
 
-        for (raw in candidates) {
-            val probeUrl = withCacheBuster(raw)
+        for (url in candidates) {
+            tried += url
             val req = Request.Builder()
-                .url(probeUrl)
+                .url(url)
                 .addHeader("Authorization", "Bearer $idToken")
-                .addHeader("Cache-Control", "no-cache, no-store")
-                .addHeader("Pragma", "no-cache")
                 .get()
                 .build()
 
             val resp = withContext(Dispatchers.IO) { client.newCall(req).execute() }
             val code = resp.code
-            Log.d("MemoriesAPI", "Probe URL: $probeUrl -> $code")
+            Log.d("MemoriesAPI", "Probe URL: $url -> $code")
 
-            if (code == 200) {
-                // 원래의 raw(캐시버스터 없는 베이스)를 저장, 호출 시엔 매번 캐시버스터 붙임
-                ttsEndpoint = raw
-                return raw
-            }
+            if (code == 200) return url
             if (code == 204) throw Exception("아직 생성된 회상 문장이 없습니다. (204)")
         }
-        throw Exception("TTS 엔드포인트를 찾지 못했습니다.")
+        throw Exception("모든 후보 경로가 실패했습니다. 시도 URL: ${tried.joinToString()}")
     }
 
-    // ─── 7) 랜덤 1개 호출 (+중복 회피 재시도) ─────────────────────────────────
-    suspend fun fetchOneRandom(ctx: Context, avoidDuplicateOf: MemoryOne? = null): MemoryOne {
+    // ─── 7) 랜덤 1개 호출 (문장 분해 + 중복 방지) ─────────────────────────────
+    suspend fun fetchOneRandom(ctx: Context): MemoryOne {
         val idToken = Firebase.auth.currentUser
             ?.getIdToken(false)?.await()?.token
             ?: throw Exception("인증 토큰 없음")
@@ -243,20 +231,26 @@ fun Patient_Sentence(
             throw Exception("patientId 없음(네비/SharedPreferences/Firebase 모두 비어 있음)")
         }
 
-        val baseEndpoint = resolveMemoriesTtsUrlOnce(
+        val workingUrl = resolveMemoriesTtsUrl(
             baseUrl = BuildConfig.BASE_URL,
             patientId = activePatientId,
             idToken = idToken,
             client = client
         )
 
-        // 최대 3번까지 중복 회피 재시도
-        repeat(3) { attempt ->
-            val workingUrl = withCacheBuster(baseEndpoint)
+        val maxTries = 4
+        repeat(maxTries) { attempt ->
+            val urlWithNonce = buildString {
+                append(workingUrl)
+                append(if (workingUrl.contains("?")) "&" else "?")
+                append("_=")
+                append(System.currentTimeMillis())
+            }
+
             val resp = withContext(Dispatchers.IO) {
                 client.newCall(
                     Request.Builder()
-                        .url(workingUrl)
+                        .url(urlWithNonce)
                         .addHeader("Authorization", "Bearer $idToken")
                         .addHeader("Cache-Control", "no-cache, no-store")
                         .addHeader("Pragma", "no-cache")
@@ -270,17 +264,19 @@ fun Patient_Sentence(
 
             val bodyStr = resp.body?.string().orEmpty()
             Log.d("MemoriesAPI", "OK body: $bodyStr")
+
             val obj = JSONObject(bodyStr)
 
-            val sentence = obj.optString("sentence", obj.optString("reminder_text"))
+            val full = obj.optString("sentence", obj.optString("reminder_text"))
+            val variants = splitVariants(full)
             var imageOpt = normalizeImageUrl(
                 obj.optString("image_url", obj.optString("image", ""))
                     .takeIf { it.isNotBlank() }
             )
             val mp3 = obj.optString("mp3_url", obj.optString("tts_url"))
 
-            if (sentence.isBlank() || mp3.isBlank()) {
-                Log.e("MemoriesAPI", "응답 필드 부족: sentence='${sentence}', image='${imageOpt ?: ""}', mp3='${mp3}'")
+            if (variants.isEmpty() || mp3.isBlank()) {
+                Log.e("MemoriesAPI", "응답 필드 부족: sentence='${full}', image='${imageOpt ?: ""}', mp3='${mp3}'")
                 throw Exception("응답 필드 부족 (sentence/mp3_url)")
             }
 
@@ -293,54 +289,40 @@ fun Patient_Sentence(
                 )
             }
 
-            val item = MemoryOne(sentence, imageOpt, mp3)
-
-            // 직전 항목과 동일하면 다시 시도
-            val dupBase = avoidDuplicateOf ?: history.lastOrNull()
-            val isDup =
-                dupBase != null &&
-                        dupBase.sentence == item.sentence &&
-                        dupBase.mp3Url == item.mp3Url &&
-                        (dupBase.imageUrl ?: "") == (item.imageUrl ?: "")
-
-            if (!isDup) {
-                Log.d("MemoriesAPI", "Using URL: $baseEndpoint  (patientId=$activePatientId)")
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(
-                        ctx,
-                        "TTS 새로고침 완료",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }
-                return item
-            } else {
-                Log.d("MemoriesAPI", "중복 감지(${attempt + 1}/3), 재시도")
-                delay(150)
+            // 아직 보지 않은 문장 변형 선택
+            val shuffled = variants.shuffled()
+            val picked = shuffled.firstOrNull { v ->
+                val key = "$v|$mp3|${imageOpt ?: ""}"
+                !seenKeys.contains(key)
             }
+
+            if (picked == null) {
+                // 변형도 전부 소진 → 재시도
+                Log.d("MemoriesAPI", "중복 감지(모든 변형 사용) → 재시도 ($attempt/${maxTries - 1})")
+                if (attempt < maxTries - 1) {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(ctx, "새 문장을 찾는 중…", Toast.LENGTH_SHORT).show()
+                    }
+                    delay(200)
+                    return@repeat
+                } else {
+                    throw Exception("새 문장을 더 받지 못했습니다(서버가 동일 응답만 반환).")
+                }
+            }
+
+            Log.d("MemoriesAPI", "Using URL: $workingUrl  (patientId=$activePatientId)")
+            withContext(Dispatchers.Main) {
+                Toast.makeText(
+                    ctx,
+                    "TTS 경로: ${workingUrl.removePrefix(BuildConfig.BASE_URL)}",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+
+            return MemoryOne(picked, imageOpt, mp3)
         }
 
-        // 그래도 중복이면 마지막 항목 반환(백엔드에서 실제로 바뀌지 않는 경우)
-        val idToken2 = Firebase.auth.currentUser?.getIdToken(false)?.await()?.token ?: ""
-        val fallbackUrl = withCacheBuster(baseEndpoint)
-        val respFinal = withContext(Dispatchers.IO) {
-            client.newCall(
-                Request.Builder()
-                    .url(fallbackUrl)
-                    .addHeader("Authorization", "Bearer $idToken2")
-                    .addHeader("Cache-Control", "no-cache, no-store")
-                    .addHeader("Pragma", "no-cache")
-                    .get()
-                    .build()
-            ).execute()
-        }
-        val obj = JSONObject(respFinal.body?.string().orEmpty())
-        val sentence = obj.optString("sentence", obj.optString("reminder_text"))
-        val mp3 = obj.optString("mp3_url", obj.optString("tts_url"))
-        var imageOpt = normalizeImageUrl(
-            obj.optString("image_url", obj.optString("image", ""))
-                .takeIf { it.isNotBlank() }
-        ) ?: fetchFallbackImageUrl(BuildConfig.BASE_URL, activePatientId, idToken2, client)
-        return MemoryOne(sentence, imageOpt, mp3)
+        throw Exception("여러 번 시도했지만 새로운 문장을 받지 못했습니다.")
     }
 
     suspend fun loadInitial() {
@@ -349,10 +331,13 @@ fun Patient_Sentence(
         try {
             val first = fetchOneRandom(context)
             history.clear()
+            seenKeys.clear()
             history += first
+            seenKeys += "${first.sentence}|${first.mp3Url}|${first.imageUrl ?: ""}"
             currentIndex = 0
         } catch (e: Exception) {
             history.clear()
+            seenKeys.clear()
             currentIndex = -1
             errorMsg = "로드 실패: ${e.message}"
         } finally {
@@ -382,12 +367,22 @@ fun Patient_Sentence(
         isLoading = true
         errorMsg = null
         try {
-            val last = history.lastOrNull()
-            val one = fetchOneRandom(context, avoidDuplicateOf = last)
+            val one = fetchOneRandom(context)
+            val key = "${one.sentence}|${one.mp3Url}|${one.imageUrl ?: ""}"
+            if (seenKeys.contains(key)) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, "새 문장을 아직 받지 못했어요. 잠시 후 다시 시도해주세요.", Toast.LENGTH_SHORT).show()
+                }
+                return
+            }
             history += one
+            seenKeys += key
             currentIndex += 1
         } catch (e: Exception) {
             errorMsg = "다음 문장 불러오기 실패: ${e.message}"
+            withContext(Dispatchers.Main) {
+                Toast.makeText(context, errorMsg, Toast.LENGTH_SHORT).show()
+            }
         } finally {
             isLoading = false
         }
@@ -427,7 +422,7 @@ fun Patient_Sentence(
                         else -> currentRoute == routePattern
                     }
                     NavigationBarItem(
-                        icon = { Icon(Icons.Default.Timer, contentDescription = label) },
+                        icon = { Icon(Icons.Default.Star, contentDescription = label) },
                         label = { Text(label) },
                         selected = selected,
                         onClick = {
@@ -478,7 +473,6 @@ fun Patient_Sentence(
             }
             Spacer(Modifier.height(16.dp))
 
-            // 상단 우측: 새로고침(최초부터 다시)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 FilledTonalButton(
                     onClick = { scope.launch { stopTTS(); loadInitial() } },
@@ -504,18 +498,9 @@ fun Patient_Sentence(
                 else -> {
                     val mem = history[currentIndex]
 
-                    // 이미지(옵션): 없으면 placeholder UI
                     if (mem.imageUrl != null) {
-                        val req = ImageRequest.Builder(context)
-                            .data(mem.imageUrl)
-                            .crossfade(true)
-                            .memoryCachePolicy(CachePolicy.DISABLED)
-                            .diskCachePolicy(CachePolicy.DISABLED)
-                            .networkCachePolicy(CachePolicy.DISABLED)
-                            .build()
-
                         AsyncImage(
-                            model = req,
+                            model = mem.imageUrl,
                             contentDescription = "Memory Photo",
                             placeholder = painterResource(R.drawable.rogo),
                             error = painterResource(R.drawable.rogo),
@@ -538,7 +523,6 @@ fun Patient_Sentence(
                     }
                     Spacer(Modifier.height(12.dp))
 
-                    // 문장 + 수동 재생 버튼(현재 문장 다시 듣기)
                     Button(
                         onClick = { scope.launch { stopTTS(); playTTS(mem.mp3Url, context) } },
                         modifier = Modifier
@@ -547,11 +531,15 @@ fun Patient_Sentence(
                         shape = RoundedCornerShape(8.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C4B4))
                     ) {
-                        Text(mem.sentence, color = Color.White, fontSize = 16.sp)
+                        Text(
+                            mem.sentence,
+                            color = Color.White,
+                            fontSize = 16.sp,
+                            maxLines = 3
+                        )
                     }
                     Spacer(Modifier.height(16.dp))
 
-                    // 이전/다음 네비게이션
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
@@ -612,10 +600,9 @@ private fun resolvePatientId(context: Context, param: String): String {
     if (cleaned.isNotEmpty() && cleaned != "{patientId}" && cleaned.lowercase() != "null") {
         return cleaned
     }
-    // 네비 값이 placeholder면 Pref → Firebase uid 순으로 복구
     getPatientIdFromPrefs(context)?.let { return it }
     Firebase.auth.currentUser?.uid?.let { return it }
-    return "" // 비어있으면 fetch 단계에서 에러로 처리
+    return ""
 }
 
 // ────────────────────────────────────────────────
@@ -637,16 +624,13 @@ private suspend fun playTTS(
     context: Context
 ) {
     try {
-        // 알림음
         val toneGen = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 100)
         toneGen.startTone(ToneGenerator.TONE_PROP_ACK, 200)
         delay(200)
         toneGen.release()
 
-        // 기존 플레이어 정리
         stopTTS()
 
-        // 재생
         currentTTSPlayer = MediaPlayer().apply {
             setAudioAttributes(
                 android.media.AudioAttributes.Builder()
@@ -654,7 +638,6 @@ private suspend fun playTTS(
                     .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH)
                     .build()
             )
-            // http/https는 문자열 오버로드로 직접 지정
             setDataSource(ttsUrl)
             setOnPreparedListener { it.start() }
             setOnErrorListener { _, what, extra ->
@@ -669,6 +652,10 @@ private suspend fun playTTS(
         }
     }
 }
+
+
+
+
 
 
 
