@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.NavGraph.Companion.findStartDestination
 import com.example.myapplication.BuildConfig
 import com.example.myapplication.R
 import com.example.myapplication.data.DatasetItem
@@ -83,7 +84,12 @@ fun Patient_Quiz(
         }
     }
 
-    Scaffold(bottomBar = { QuizBottomBar(navController) }) { innerPadding ->
+    // 화면 떠날 때 플레이어 정리
+    DisposableEffect(Unit) {
+        onDispose { stopTTS() }
+    }
+
+    Scaffold(bottomBar = { QuizBottomBar(navController, patientId) }) { innerPadding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -100,9 +106,17 @@ fun Patient_Quiz(
                 Text("로딩 중…", fontSize = 16.sp)
             } else {
                 QuizContent(
+                    patientId = patientId,
                     item = items[currentIndex],
                     client = client,
-                    onNext = { if (currentIndex < items.size - 1) currentIndex++ }
+                    onNext = {
+                        stopTTS()
+                        if (currentIndex < items.size - 1) {
+                            currentIndex++
+                        } else {
+                            Toast.makeText(context, "문제를 모두 풀었습니다.", Toast.LENGTH_SHORT).show()
+                        }
+                    }
                 )
             }
         }
@@ -110,9 +124,18 @@ fun Patient_Quiz(
 }
 
 @Composable
-private fun QuizBottomBar(navController: NavController) {
+private fun QuizBottomBar(navController: NavController, patientId: String) {
     val navBackStack by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStack?.destination?.route
+
+    data class Tab(val pattern: String, val actual: String, val label: String)
+
+    val tabs = listOf(
+        Tab(pattern = "sentence/{patientId}", actual = "sentence/$patientId", label = "회상문장"),
+        Tab(pattern = "quiz/{patientId}",     actual = "quiz/$patientId",     label = "회상퀴즈"),
+        Tab(pattern = "alert",                 actual = "alert",               label = "긴급알림")
+    )
+
     val navColors = NavigationBarItemDefaults.colors(
         indicatorColor = Color.Transparent,
         selectedIconColor = Color(0xFF00C4B4),
@@ -120,21 +143,22 @@ private fun QuizBottomBar(navController: NavController) {
         selectedTextColor = Color(0xFF00C4B4),
         unselectedTextColor = Color(0xFF888888)
     )
+
     NavigationBar {
-        listOf(
-            "sentence/{patientId}" to "회상문장",
-            "quiz/{patientId}" to "회상퀴즈",
-            "alert" to "긴급알림"
-        ).forEach { (route, label) ->
+        tabs.forEach { tab ->
+            val selected = currentRoute == tab.pattern || currentRoute == tab.actual
             NavigationBarItem(
-                icon = { Icon(Icons.Default.Timer, contentDescription = label) },
-                label = { Text(label) },
-                selected = currentRoute == route,
+                icon = { Icon(Icons.Default.Timer, contentDescription = tab.label) },
+                label = { Text(tab.label) },
+                selected = selected,
                 onClick = {
-                    if (currentRoute != route) {
-                        navController.navigate(route) {
-                            popUpTo(navController.graph.startDestinationId)
+                    if (!selected) {
+                        navController.navigate(tab.actual) {
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = true
+                            }
                             launchSingleTop = true
+                            restoreState = true
                         }
                     }
                 },
@@ -146,6 +170,7 @@ private fun QuizBottomBar(navController: NavController) {
 
 @Composable
 private fun QuizContent(
+    patientId: String,
     item: DatasetItem,
     client: OkHttpClient,
     onNext: () -> Unit
@@ -153,22 +178,24 @@ private fun QuizContent(
     var selected by remember { mutableStateOf<Int?>(null) }
     var showResult by remember { mutableStateOf(false) }
     var elapsedTime by remember { mutableStateOf(0L) }
-
+    var isCorrect by remember { mutableStateOf<Boolean?>(null) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
+    val startTime = remember(item.id) { System.currentTimeMillis() }
     LaunchedEffect(item.id) {
         selected = null
         showResult = false
+        isCorrect = null
+        elapsedTime = 0L
     }
 
     LaunchedEffect(showResult) {
         if (!showResult) {
-            elapsedTime = 0L
-            val start = System.currentTimeMillis()
+            val begin = startTime
             while (!showResult) {
                 delay(1000)
-                elapsedTime = (System.currentTimeMillis() - start) / 1000
+                elapsedTime = (System.currentTimeMillis() - begin) / 1000
             }
         }
     }
@@ -197,7 +224,37 @@ private fun QuizContent(
                             val idx = row * 2 + col
                             OptionButton(text = opt, modifier = Modifier.weight(1f)) {
                                 selected = idx
-                                showResult = true
+                                scope.launch {
+                                    try {
+                                        val token = Firebase.auth.currentUser?.getIdToken(false)?.await()?.token
+                                        if (token.isNullOrBlank()) {
+                                            Toast.makeText(context, "인증 토큰 없음", Toast.LENGTH_SHORT).show()
+                                            return@launch
+                                        }
+                                        val body = JSONObject().apply {
+                                            put("patient_id", patientId)
+                                            put("quiz_id", item.id)
+                                            put("selected_index", idx) // 0-based
+                                            put("response_time_sec", (System.currentTimeMillis() - startTime) / 1000)
+                                        }.toString()
+                                        val req = Request.Builder()
+                                            .url("${BuildConfig.BASE_URL.trimEnd('/')}/quiz-responses")
+                                            .addHeader("Authorization", "Bearer $token")
+                                            .post(body.toRequestBody("application/json".toMediaType()))
+                                            .build()
+                                        val resp = withContext(Dispatchers.IO) { client.newCall(req).execute() }
+                                        val ok = resp.isSuccessful
+                                        val resBody = resp.body?.string().orEmpty()
+                                        resp.close()
+                                        if (!ok) throw Exception("서버 오류: HTTP ${resp.code}")
+                                        val obj = JSONObject(resBody)
+                                        isCorrect = obj.optBoolean("is_correct", false)
+                                        showResult = true
+                                        playAck()
+                                    } catch (e: Exception) {
+                                        Toast.makeText(context, "제출 실패: ${e.message}", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
                             }
                         }
                     }
@@ -205,20 +262,19 @@ private fun QuizContent(
             }
         } else {
             Spacer(Modifier.height(100.dp))
-            val correctIdx = item.answerIndex - 1
-            val isCorrect = selected == correctIdx
+            val correct = isCorrect == true
 
             Text(
-                if (isCorrect) "정답이에요!" else "오답이에요!",
+                if (correct) "정답이에요!" else "오답이에요!",
                 fontSize = 32.sp,
-                color = if (isCorrect) Color(0xFF00A651) else Color(0xFFE2101A)
+                color = if (correct) Color(0xFF00A651) else Color(0xFFE2101A)
             )
             Spacer(Modifier.height(16.dp))
             Text("풀이 시간: ${elapsedTime}초", fontSize = 18.sp)
             Spacer(Modifier.height(16.dp))
 
             Image(
-                painter = painterResource(if (isCorrect) R.drawable.ch else R.drawable.wr),
+                painter = painterResource(if (correct) R.drawable.ch else R.drawable.wr),
                 contentDescription = null,
                 modifier = Modifier.size(300.dp),
                 contentScale = ContentScale.Fit
@@ -226,28 +282,18 @@ private fun QuizContent(
             Spacer(Modifier.height(16.dp))
             Button(
                 onClick = {
-                    if (isCorrect) {
-                        scope.launch {
-                            val token = Firebase.auth.currentUser?.getIdToken(false)?.await()?.token
-                            if (token.isNullOrBlank()) {
-                                Toast.makeText(context, "인증 토큰 없음", Toast.LENGTH_SHORT).show()
-                                return@launch
-                            }
-                            val body = JSONObject().apply {
-                                put("quiz_id", item.id)
-                                put("selected_index", selected)
-                                put("response_time_sec", elapsedTime)
-                            }.toString()
-                            val req = Request.Builder()
-                                .url("${BuildConfig.BASE_URL}/quiz-responses")
-                                .addHeader("Authorization", "Bearer $token")
-                                .post(body.toRequestBody("application/json".toMediaType()))
-                                .build()
-                            withContext(Dispatchers.IO) { client.newCall(req).execute().close() }
-                            onNext()
-                        }
+                    if (correct) {
+                        stopTTS()
+                        onNext()
                     } else {
+                        selected = null
+                        isCorrect = null
                         showResult = false
+                        stopTTS()
+                        // 다시 같은 문제 읽어주기
+                        scope.launch {
+                            playTTS(item.ttsAudioUrl, context)
+                        }
                     }
                 },
                 modifier = Modifier
@@ -256,7 +302,7 @@ private fun QuizContent(
                 shape = RoundedCornerShape(8.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C4B4))
             ) {
-                Text(if (isCorrect) "다음 문제로" else "다시 풀기", color = Color.White)
+                Text(if (correct) "다음 문제로" else "다시 풀기", color = Color.White)
             }
         }
     }
@@ -270,29 +316,33 @@ private fun OptionButton(text: String, modifier: Modifier = Modifier, onClick: (
 }
 
 // ────────────────────────────────────────────────
-// 공통 TTS 재생 함수
+// 공통 TTS 유틸
 // ────────────────────────────────────────────────
 
 private var currentTTSPlayer: MediaPlayer? = null
+
+private fun stopTTS() {
+    try {
+        currentTTSPlayer?.apply {
+            setOnPreparedListener(null)
+            setOnCompletionListener(null)
+            stop()
+            reset()
+            release()
+        }
+    } catch (_: Exception) { }
+    currentTTSPlayer = null
+}
 
 private suspend fun playTTS(
     ttsUrl: String,
     context: Context
 ) {
+    if (ttsUrl.isBlank()) return
     try {
-        // 1) 효과음
-        val toneGen = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 100)
-        toneGen.startTone(ToneGenerator.TONE_PROP_ACK, 200)
+        playAck()
         delay(200)
-        toneGen.release()
-
-        // 2) 기존 플레이어 해제
-        currentTTSPlayer?.apply {
-            reset()
-            release()
-        }
-
-        // 3) 새로운 MediaPlayer 생성·재생
+        stopTTS()
         currentTTSPlayer = MediaPlayer().apply {
             setDataSource(ttsUrl)
             setOnPreparedListener { it.start() }
@@ -304,6 +354,16 @@ private suspend fun playTTS(
         }
     }
 }
+
+private fun playAck() {
+    try {
+        val toneGen = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 100)
+        toneGen.startTone(ToneGenerator.TONE_PROP_ACK, 200)
+        toneGen.release()
+    } catch (_: Exception) { }
+}
+
+
 
 
 
