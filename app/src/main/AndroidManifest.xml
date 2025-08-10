@@ -6,6 +6,8 @@
     <!-- 정확한 알람 스케줄링 권한 -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
 
+
+
     <!-- 위치 권한 -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
@@ -89,9 +91,14 @@
             </intent-filter>
         </receiver>
 
-        <!-- 로컬 비정기 알림 -->
+<!--        &lt;!&ndash; 로컬 비정기 알림 &ndash;&gt;-->
+<!--        <receiver-->
+<!--            android:name=".receiver.AlarmReceiver"-->
+<!--            android:exported="true"/>-->
+
+        <!-- 예약된 스케줄 알림 -->
         <receiver
-            android:name=".receiver.AlarmReceiver"
+            android:name=".receiver.NotificationReceiver"
             android:exported="true"/>
 
 <!--        &lt;!&ndash; Foreground Service: 위치 10초 주기 전송 &ndash;&gt;-->
@@ -99,6 +106,8 @@
 <!--            android:name=".service.LocationUpdatesService"-->
 <!--            android:exported="false"-->
 <!--            android:foregroundServiceType="location" />-->
+
+
 
     </application>
 </manifest>

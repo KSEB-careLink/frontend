@@ -168,6 +168,13 @@ dependencies {
 
     // 잠금화면 오버레이용 투명 테마
     implementation ("com.google.android.material:material:1.9.0")
+
+    //토큰어쩌구 추가
+    implementation("com.squareup.retrofit2:converter-gson:2.9.0")
+
+    //사용자 토큰 알림이랑 보낼때
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
+
 }
 
 

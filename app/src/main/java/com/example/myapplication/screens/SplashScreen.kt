@@ -6,6 +6,7 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.updateTransition
+import android.util.Log
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -16,16 +17,38 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
 import com.example.myapplication.R
 import kotlinx.coroutines.delay
+import androidx.compose.animation.core.*
+
+import androidx.compose.ui.platform.LocalContext
+import com.example.myapplication.service.NotificationService
+import com.google.firebase.messaging.FirebaseMessaging
 
 @Composable
 fun SplashScreen(navController: NavController) {
+    val context = LocalContext.current // ✅ context 가져오기
+    // 3초 뒤 메인 화면으로 이동
     LaunchedEffect(Unit) {
+
+        //  FCM 토큰 요청 및 서버 전송
+        FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+            if (task.isSuccessful) {
+                val token = task.result
+                Log.d("FCM", "토큰: $token")
+                NotificationService.sendFcmTokenToServer(context, token)
+            } else {
+                Log.e("FCM", "토큰 획득 실패", task.exception)
+            }
+        }
+
+
+        delay(3000)
         // 순수 스플래시만 보여주고 바로 choose로 이동 (자동 로그인 제거)
         delay(1200)
         navController.navigate("choose") {
@@ -47,12 +70,14 @@ fun SplashScreen(navController: NavController) {
         val textY = screenH * 0.50f
 
         Box(modifier = Modifier.fillMaxSize()) {
+            // 로고: 페이드 + 스케일
             FadeScaleLogo(
                 modifier = Modifier
                     .size(logoSize)
                     .align(Alignment.TopCenter)
                     .offset(y = logoY)
             )
+            // AI 텍스트: 500ms 딜레이 후 페이드-인
             FadeInAiText(
                 modifier = Modifier
                     .size(textSize)

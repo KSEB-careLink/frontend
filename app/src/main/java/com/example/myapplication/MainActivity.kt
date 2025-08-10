@@ -15,6 +15,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavType
 import androidx.navigation.NavController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -132,7 +133,6 @@ class MainActivity : ComponentActivity() {
                         val joinCode = backStackEntry.arguments?.getString("joinCode").orEmpty()
                         Code(navController = navController, joinCode = joinCode)
                     }
-
                     composable(
                         route = "code2/{patientId}",
                         arguments = listOf(navArgument("patientId") { type = NavType.StringType })
@@ -150,8 +150,18 @@ class MainActivity : ComponentActivity() {
                         val patientId = backStackEntry.arguments?.getString("patientId") ?: return@composable
                         Main_Page2(navController = navController, patientId = patientId)
                     }
+//                    composable("alarm") {
+//                        Guardian_Alarm(navController)
+//                    }
 
-                    composable("alarm") { Guardian_Alarm(navController) }
+                    composable(
+                        route = "alarm/{patientId}",
+                        arguments = listOf(navArgument("patientId") { type = NavType.StringType })
+                    ) { backStackEntry ->
+                        val patientId = backStackEntry.arguments?.getString("patientId") ?: return@composable
+                        Guardian_Alarm(navController = navController, patientId = patientId)
+                    }
+
 
                     composable(
                         route = "guardian_basic_info/{patientId}",
@@ -176,7 +186,6 @@ class MainActivity : ComponentActivity() {
                         val patientId = backStackEntry.arguments?.getString("patientId") ?: return@composable
                         MemoryInfoListScreen(navController, patientId)
                     }
-
                     composable(
                         route = "recode/{patientId}",
                         arguments = listOf(navArgument("patientId") { type = NavType.StringType })

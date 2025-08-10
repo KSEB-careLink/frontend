@@ -34,7 +34,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                 .toRequestBody("application/json".toMediaTypeOrNull())
 
             val request = okhttp3.Request.Builder()
-                .url("http://<서버주소>/auth/save-token")
+                .url("http://backend-f61l.onrender.com/auth/save-token") //https://backend-f61l.onrender.com/ //서버주소/auth...
                 .post(json)
                 .addHeader("Authorization", "Bearer $jwt")
                 .build()

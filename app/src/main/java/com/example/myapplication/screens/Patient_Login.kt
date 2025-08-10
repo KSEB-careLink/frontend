@@ -2,6 +2,7 @@
 package com.example.myapplication.screens
 
 import android.content.Context
+import android.util.Log
 import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -34,6 +35,8 @@ import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
+import com.google.firebase.messaging.FirebaseMessaging
+import com.example.myapplication.service.NotificationService
 
 @Composable
 fun PatientLoginScreen(navController: NavController) {
@@ -201,6 +204,17 @@ fun PatientLoginScreen(navController: NavController) {
                         auth.signInWithEmailAndPassword(email.trim(), password.trim()).await()
                         val user = auth.currentUser
                             ?: throw Exception("Firebase user is null")
+
+                        // ✅ 로그인 직후: 최신 FCM 토큰 받아서 Firestore에 저장/갱신
+                        runCatching {
+                            FirebaseMessaging.getInstance().token.await()
+                        }.onSuccess { token ->
+                            Log.d("FCM", "환자 로그인 직후 토큰: ${token.take(12)}...")
+                            NotificationService.sendFcmTokenToServer(context, token)
+                        }.onFailure { e ->
+                            Log.e("FCM", "환자 로그인 직후 토큰 획득 실패", e)
+                        }
+
 
                         // 2) ID 토큰 갱신 후 획득
                         val idToken = user.getIdToken(true).await().token

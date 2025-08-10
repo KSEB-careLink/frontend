@@ -35,6 +35,8 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import kotlinx.coroutines.tasks.await
 import android.util.Log
+import com.google.firebase.messaging.FirebaseMessaging
+import com.example.myapplication.service.NotificationService
 
 @Composable
 fun Guardian_Login(navController: NavController) {
@@ -166,9 +168,21 @@ fun Guardian_Login(navController: NavController) {
                             ?: throw Exception("Firebase user is null")
                         val guardianId = user.uid
 
+                        //  로그인 직후: 최신 FCM 토큰 받아서 Firestore에 저장/갱신
+                        // (kotlinx-coroutines-play-services 있어야 await() 사용 가능)
+                        runCatching {
+                            FirebaseMessaging.getInstance().token.await()
+                        }.onSuccess { token ->
+                            Log.d("FCM", "로그인 직후 토큰: ${token.take(12)}...")
+                            NotificationService.sendFcmTokenToServer(context, token)
+                        }.onFailure { e ->
+                            Log.e("FCM", "로그인 직후 토큰 획득 실패", e)
+                        }
+
                         // 2) ID 토큰 획득
                         val idToken = user.getIdToken(true).await().token
                             ?: throw Exception("ID 토큰이 null입니다")
+                        Log.d("GuardianLogin", "발급받은 ID토큰: ${idToken.take(12)}...")
 
                         // 3) 서버 /auth/me 요청
                         val meRequest = Request.Builder()
