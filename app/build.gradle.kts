@@ -3,7 +3,8 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     id("com.google.gms.google-services")
-
+    // 직렬화 플러그인
+    kotlin("plugin.serialization") version "1.9.10"
 }
 
 android {
@@ -17,6 +18,12 @@ android {
         versionCode = 1
         versionName = "1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField("String", "BASE_URL", "\"https://pleasing-really-cow.ngrok-free.app\"") //https://backend-f61l.onrender.com
+    }
+    
+    buildFeatures {
+        compose = true
+        buildConfig = true  // ✅ 이 줄을 꼭 추가하세요!
     }
 
     buildTypes {
@@ -32,6 +39,7 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
+        isCoreLibraryDesugaringEnabled = true
     }
 
     kotlinOptions {
@@ -109,6 +117,8 @@ dependencies {
 // (필요하다면) Analytics, Firestore 등 다른 제품도 버전 없이 추가
     implementation("com.google.firebase:firebase-analytics-ktx")
 
+    // Firebase 알림
+    implementation ("com.google.firebase:firebase-messaging:23.1.2")
 
     // Accompanist Permissions (Compose 런타임 권한 요청)
     implementation("com.google.accompanist:accompanist-permissions:0.37.3")
@@ -122,6 +132,45 @@ dependencies {
 
     // 백엔드 로그인 기능 연동을 위한 코드
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.7.1")
+
+    //Compose용 ConstraintLayout을 사용
+    implementation("androidx.constraintlayout:constraintlayout-compose:1.0.1")
+
+    // WorkManager 코어 + 코틀린 확장
+    implementation ("androidx.work:work-runtime-ktx:2.8.1")
+
+    // LocalActivity 컴포지션
+    implementation ("androidx.activity:activity-compose:1.10.0")
+
+
+    // java.time API desugaring
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.3")
+
+    // core 모듈 (버튼 API 포함)
+    implementation("io.github.vanpra.compose-material-dialogs:core:0.9.0")
+    // datetime 모듈 (timepicker)
+    implementation("io.github.vanpra.compose-material-dialogs:datetime:0.9.0")
+
+     // 파이어베이스 db 연동
+    implementation("io.coil-kt:coil-compose:2.2.2")
+    implementation("com.google.firebase:firebase-firestore-ktx")
+    implementation("com.google.firebase:firebase-storage-ktx")
+
+    // Firebase Storage
+    implementation("com.google.firebase:firebase-storage-ktx:20.4.2")
+    // Coroutines + Play Services
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.7.3")
+    // Kotlinx Serialization
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.0")
+
+    implementation("com.squareup.okhttp3:okhttp:4.10.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+
+    //토큰어쩌구 추가
+    implementation("com.squareup.retrofit2:converter-gson:2.9.0")
+
+    //사용자 토큰 알림이랑 보낼때
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
 
 }
 

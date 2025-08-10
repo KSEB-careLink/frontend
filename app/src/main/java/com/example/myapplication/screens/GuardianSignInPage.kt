@@ -3,12 +3,10 @@ package com.example.myapplication.screens
 import android.util.Patterns
 import android.widget.Toast
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Text
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -17,197 +15,238 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
-import androidx.navigation.compose.rememberNavController
+import com.example.myapplication.BuildConfig
 import com.example.myapplication.R
-import com.example.myapplication.network.RetrofitInstance
-import com.google.firebase.auth.ktx.auth
-import com.google.firebase.ktx.Firebase
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import com.example.myapplication.network.GuardianSignupRequest
+import kotlinx.coroutines.withContext
+import okhttp3.*
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONObject
+import android.util.Log
+import com.google.firebase.ktx.Firebase
+import com.google.firebase.auth.ktx.auth
+import kotlinx.coroutines.tasks.await
 
 @Composable
-fun GuardianSignInPage(navController: NavController) {
-    // Firebase Auth & CoroutineScope
-    val auth = Firebase.auth
-    val coroutineScope = rememberCoroutineScope()
-    val context = LocalContext.current
+fun GuardianSignUpScreen(navController: NavController) {
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val client = remember { OkHttpClient() }
 
     var name by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    var isLoading by remember { mutableStateOf(false) }
 
-    // 레이아웃 상수
-    val imageGroupTopPadding = 80.dp
-    val formTopPadding = 300.dp
-
-    Box(
-        modifier = Modifier
+    BoxWithConstraints(
+        Modifier
             .fillMaxSize()
-            .padding(horizontal = 24.dp)
+            .padding(16.dp)
     ) {
-        // 로고
-        Box(
+        val screenW = maxWidth
+        val screenH = maxHeight
+        val logoSize = screenW * 0.5f
+        val textLogoSize = screenW * 0.3f
+        val logoY = screenH * 0.10f
+        val textY = screenH * 0.25f
+        val formY = screenH * 0.35f
+        val fieldHeight = screenH * 0.07f
+        val fieldSpacer = screenH * 0.02f
+
+        // 로고 이미지
+        Image(
+            painter = painterResource(R.drawable.rogo),
+            contentDescription = "로고",
+            contentScale = ContentScale.Fit,
+            modifier = Modifier
+                .size(logoSize)
+                .align(Alignment.TopCenter)
+                .offset(y = logoY)
+        )
+
+        Image(
+            painter = painterResource(R.drawable.ai_text),
+            contentDescription = "텍스트 로고",
+            contentScale = ContentScale.Fit,
+            modifier = Modifier
+                .size(textLogoSize)
+                .align(Alignment.TopCenter)
+                .offset(y = textY)
+        )
+
+        Column(
             Modifier
                 .align(Alignment.TopCenter)
-                .padding(top = imageGroupTopPadding)
-                .sizeIn(minWidth = 0.dp, minHeight = 0.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Image(
-                painter = painterResource(R.drawable.rogo),
-                contentDescription = "로고",
-                modifier = Modifier
-                    .size(200.dp)
-                    .offset(y = (-20).dp),
-                contentScale = ContentScale.Fit
-            )
-            Image(
-                painter = painterResource(R.drawable.ai_text),
-                contentDescription = "텍스트 로고",
-                modifier = Modifier
-                    .size(150.dp)
-                    .offset(y = 90.dp),
-                contentScale = ContentScale.Fit
-            )
-        }
-
-        // 폼
-        Column(
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .padding(top = formTopPadding)
-                .fillMaxWidth(),
+                .offset(y = formY)
+                .fillMaxWidth(0.9f),
             horizontalAlignment = Alignment.Start
         ) {
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(fieldSpacer))
             Text(
-                text = "회원 가입",
+                "보호자 회원가입",
                 fontSize = 32.sp,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.align(Alignment.CenterHorizontally)
             )
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(fieldSpacer))
 
-            Text(text = "이름", fontSize = 16.sp)
+            Text("이름", fontSize = 16.sp)
             OutlinedTextField(
                 value = name,
-                onValueChange = { name = it },
+                onValueChange = { name = it.trim() },
                 placeholder = { Text("이름") },
+                singleLine = true,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(56.dp),
-                singleLine = true
+                    .height(fieldHeight)
             )
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(fieldSpacer))
 
-            Text(text = "이메일 주소 (아이디)", fontSize = 16.sp)
+            Text("이메일 주소", fontSize = 16.sp)
             OutlinedTextField(
                 value = email,
-                onValueChange = { email = it },
-                placeholder = { Text("example@mail.com") },
+                onValueChange = { email = it.trim() },
+                placeholder = { Text("example@mail.com 형식으로 입력하세요") },
+                singleLine = true,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(56.dp),
-                singleLine = true
+                    .height(fieldHeight)
             )
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(fieldSpacer))
 
-            Text(text = "비밀번호", fontSize = 16.sp)
+            Text("비밀번호", fontSize = 16.sp)
             OutlinedTextField(
                 value = password,
-                onValueChange = { password = it },
-                placeholder = { Text("최소 6자 이상 입력해주세요") },
+                onValueChange = { password = it.trim() },
+                placeholder = { Text("6글자 이상 입력하세요") },
+                visualTransformation = PasswordVisualTransformation(),
+                singleLine = true,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(56.dp),
-                singleLine = true
+                    .height(fieldHeight)
             )
         }
 
-        // 버튼
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(66.dp)
+            Modifier
                 .align(Alignment.BottomCenter)
-                .offset(y = (-140).dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .padding(bottom = 140.dp)
+                .fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // 1) 가입하기: Firebase + 백엔드
             Button(
                 onClick = {
-                    // 빈 값 체크
                     if (name.isBlank() || email.isBlank() || password.isBlank()) {
-                        Toast.makeText(context, "모든 필드를 입력해주세요.", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(ctx, "모든 필드를 입력해주세요.", Toast.LENGTH_SHORT).show()
                         return@Button
                     }
-                    // 이메일 포맷 검증
-                    val trimmedEmail = email.trim()
-                    if (!Patterns.EMAIL_ADDRESS.matcher(trimmedEmail).matches()) {
-                        Toast.makeText(context, "유효한 이메일 주소를 입력하세요.", Toast.LENGTH_SHORT).show()
+                    if (!Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+                        Toast.makeText(ctx, "유효한 이메일을 입력하세요.", Toast.LENGTH_SHORT).show()
                         return@Button
                     }
-                    // Firebase 회원가입
-                    auth.createUserWithEmailAndPassword(trimmedEmail, password)
-                        .addOnCompleteListener { task ->
-                            if (task.isSuccessful) {
-                                // 백엔드 보호자 가입
-                                coroutineScope.launch {
-                                    try {
-                                        // ★ 여기만 바뀌었습니다 ★
-                                        val req = GuardianSignupRequest(
-                                            email = trimmedEmail,
-                                            password = password,
-                                            name = name
-                                        )
-                                        val res = RetrofitInstance.api.signupGuardian(req)
+                    if (password.length < 6) {
+                        Toast.makeText(ctx, "비밀번호를 6자 이상 입력해주세요.", Toast.LENGTH_SHORT).show()
+                        return@Button
+                    }
 
-                                        if (res.isSuccessful) {
-                                            Toast.makeText(context, "가입 성공!", Toast.LENGTH_SHORT).show()
-                                            navController.navigate("G_login") {
-                                                popUpTo("GuardianSignInPage") { inclusive = true }
-                                            }
-                                        } else {
-                                            Toast.makeText(context, "서버 오류: ${res.code()}", Toast.LENGTH_SHORT).show()
-                                        }
-                                    } catch (e: Exception) {
-                                        Toast.makeText(context, "통신 오류: ${e.message}", Toast.LENGTH_SHORT).show()
-                                    }
-                                }
-                            } else {
-                                Toast.makeText(context, "Firebase 가입 실패: ${task.exception?.message}", Toast.LENGTH_SHORT).show()
+                    scope.launch {
+                        isLoading = true
+                        try {
+                            // 1) 백엔드에 회원가입 요청
+                            val signupJson = JSONObject().apply {
+                                put("email", email)
+                                put("password", password)
+                                put("name", name)
+                                put("role", "guardian")
                             }
+                            val signupReq = Request.Builder()
+                                .url("${BuildConfig.BASE_URL}/auth/signup")
+                                .post(
+                                    signupJson.toString()
+                                        .toRequestBody("application/json".toMediaType())
+                                )
+                                .build()
+                            val signupRes = withContext(Dispatchers.IO) {
+                                client.newCall(signupReq).execute()
+                            }
+                            if (!signupRes.isSuccessful) {
+                                throw Exception("signup 실패: ${signupRes.code}")
+                            }
+                            val signupBody = signupRes.body?.string().orEmpty()
+                            val signupJsonRes = JSONObject(signupBody)
+                            val joinCode = signupJsonRes.optString("joinCode")
+                            if (joinCode.isBlank()) {
+                                throw Exception("joinCode 누락")
+                            }
+
+                            // 2) Firebase 이메일/비번 로그인
+                            Firebase.auth
+                                .signInWithEmailAndPassword(email, password)
+                                .await()
+
+                            // 3) ID 토큰 강제 갱신 (Firestore/Storage 규칙 통과용)
+                            Firebase.auth.currentUser
+                                ?.getIdToken(true)
+                                ?.await()
+                                ?.token
+                                ?: throw Exception("ID 토큰 획득 실패")
+
+                            // 4) 화면 전환
+                            Toast.makeText(ctx, "회원가입 및 로그인 성공!", Toast.LENGTH_SHORT).show()
+                            navController.navigate("code/$joinCode") {
+                                popUpTo("GuardianSignUp") { inclusive = true }
+                            }
+
+                        } catch (e: Exception) {
+                            Log.e("GuardianSignUp", "오류", e)
+                            Toast.makeText(ctx, "오류: ${e.message}", Toast.LENGTH_LONG).show()
+                        } finally {
+                            isLoading = false
                         }
+                    }
                 },
                 modifier = Modifier.weight(1f),
-                enabled = name.isNotBlank() && email.isNotBlank() && password.isNotBlank(),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C4B4)),
+                enabled = name.isNotBlank() && Patterns.EMAIL_ADDRESS.matcher(email).matches() && password.length >= 6,
                 shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C4B4))
             ) {
-                Text(text = "가입하기", color = Color.White, fontSize = 16.sp)
+                Text("가입하기", color = Color.White, fontSize = 16.sp)
             }
 
-            // 2) 로그인으로 이동
             Button(
                 onClick = { navController.navigate("G_login") },
                 modifier = Modifier.weight(1f),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C4B4)),
                 shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C4B4))
             ) {
-                Text(text = "로그인", color = Color.White, fontSize = 16.sp)
+                Text("로그인", color = Color.White, fontSize = 16.sp)
+            }
+        }
+
+        if (isLoading) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(Color(0x88000000)),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(color = Color.White)
             }
         }
     }
 }
 
-@Preview(showBackground = true)
-@Composable
-fun PreviewGuardianSignInPage() {
-    GuardianSignInPage(navController = rememberNavController())
-}
+
+
+
+
+
+
+
 
