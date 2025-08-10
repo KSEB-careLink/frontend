@@ -1,3 +1,4 @@
+// app/src/main/java/com/example/myapplication/viewmodel/QuizViewModel.kt
 package com.example.myapplication.viewmodel
 
 import android.util.Log
@@ -14,21 +15,29 @@ class QuizViewModel(
 ) : ViewModel() {
     companion object { private const val TAG = "QuizViewModel" }
 
-    // 퀴즈 항목 리스트
     private val _items = MutableStateFlow<List<DatasetItem>>(emptyList())
     val items = _items.asStateFlow()
 
-    // 에러 메시지를 UI에 전달
     private val _error = MutableStateFlow<String?>(null)
     val error = _error.asStateFlow()
 
-    /**
-     * patientId 에 해당하는 퀴즈 목록을 불러옵니다.
-     */
-    fun loadQuizzes(patientId: String) {
+    // 기존 코드와 호환되게 기본값 제공
+    fun loadQuizzes(
+        patientId: String,
+        photoId: String? = null,
+        imageUrl: String? = null,
+        imagePath: String? = null,
+        description: String? = null
+    ) {
         viewModelScope.launch {
             try {
-                val list = repo.fetchAll(patientId)
+                val list = repo.fetchAll(
+                    patientId = patientId,
+                    photoId = photoId,
+                    imageUrl = imageUrl,
+                    imagePath = imagePath,
+                    description = description
+                )
                 _items.value = list
             } catch (e: Exception) {
                 Log.e(TAG, "퀴즈 로드 실패", e)
@@ -37,6 +46,7 @@ class QuizViewModel(
         }
     }
 }
+
 
 
 

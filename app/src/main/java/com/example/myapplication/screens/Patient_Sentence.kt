@@ -71,22 +71,22 @@ fun Patient_Sentence(
         mutableStateOf(resolvePatientId(context, patientId))
     }
 
-    // ─── 1) 위치 권한 + 서비스 시작 ────────────────────────────────────────────
-    val perms = rememberMultiplePermissionsState(
-        listOf(
-            Manifest.permission.ACCESS_COARSE_LOCATION,
-            Manifest.permission.ACCESS_FINE_LOCATION
-        )
-    )
-    LaunchedEffect(perms.allPermissionsGranted) {
-        if (!perms.allPermissionsGranted) {
-            perms.launchMultiplePermissionRequest()
-        } else {
-            Intent(context, LocationUpdatesService::class.java).also { intent ->
-                ContextCompat.startForegroundService(context, intent)
-            }
-        }
-    }
+//    // ─── 1) 위치 권한 + 서비스 시작 ────────────────────────────────────────────
+//    val perms = rememberMultiplePermissionsState(
+//        listOf(
+//            Manifest.permission.ACCESS_COARSE_LOCATION,
+//            Manifest.permission.ACCESS_FINE_LOCATION
+//        )
+//    )
+//    LaunchedEffect(perms.allPermissionsGranted) {
+//        if (!perms.allPermissionsGranted) {
+//            perms.launchMultiplePermissionRequest()
+//        } else {
+//            Intent(context, LocationUpdatesService::class.java).also { intent ->
+//                ContextCompat.startForegroundService(context, intent)
+//            }
+//        }
+//    }
 
     // ─── 2) OkHttp 클라이언트 (로깅 포함) ──────────────────────────────────────
     val client = remember {
@@ -318,6 +318,12 @@ fun Patient_Sentence(
                     Toast.LENGTH_SHORT
                 ).show()
             }
+            //8월10일 추가
+            val prefs = ctx.getSharedPreferences("MyPrefs", Context.MODE_PRIVATE)
+            prefs.edit()
+                .putString("last_memory_sentence", picked)
+                .putString("last_memory_image_url", imageOpt ?: "")
+                .apply()
 
             return MemoryOne(picked, imageOpt, mp3)
         }

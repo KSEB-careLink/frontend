@@ -44,6 +44,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.logging.HttpLoggingInterceptor
+import org.json.JSONObject // ✅ 추가
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.util.concurrent.TimeUnit
@@ -432,6 +433,24 @@ fun MemoryInfoInputScreen(navController: NavController, patientId: String) {
                         }
 
                         if (ok) {
+                            // ✅ 업로드 응답에서 photo_id / image_url 파싱 → Prefs 저장 (퀴즈 힌트)
+                            val obj = runCatching { JSONObject(body) }.getOrNull()
+                            val returnedPhotoId = obj?.optString(
+                                "photo_id",
+                                obj.optString("photoId", obj.optString("id", ""))
+                            ).orEmpty()
+                            val returnedImageUrl = obj?.optString(
+                                "image_url",
+                                obj.optString("mediaUrl", obj.optString("url", ""))
+                            ).orEmpty()
+
+                            prefs.edit().apply {
+                                if (returnedPhotoId.isNotBlank()) putString("last_photo_id", returnedPhotoId)
+                                if (returnedImageUrl.isNotBlank()) putString("last_image_url", returnedImageUrl)
+                                putString("last_description", description) // 우리가 보낸 설명
+                                apply()
+                            }
+
                             // 업로드 카운트 갱신
                             val prevCount = prefs.getInt("upload_count", 0)
                             val newCount = prevCount + 1
@@ -579,6 +598,7 @@ private suspend fun readAndCompressImage(
     if (finalBitmap != bitmap) finalBitmap.recycle()
     bos.toByteArray()
 }
+
 
 
 

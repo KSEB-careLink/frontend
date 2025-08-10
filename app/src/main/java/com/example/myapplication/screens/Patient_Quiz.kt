@@ -5,6 +5,7 @@ import android.content.Context
 import android.media.AudioManager
 import android.media.MediaPlayer
 import android.media.ToneGenerator
+import android.util.Log
 import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
@@ -44,6 +45,7 @@ import org.json.JSONObject
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import java.util.concurrent.TimeUnit
 
 @Composable
 fun Patient_Quiz(
@@ -52,22 +54,55 @@ fun Patient_Quiz(
     quizViewModel: QuizViewModel = viewModel()
 ) {
     val context = LocalContext.current
+    val prefs = remember { context.getSharedPreferences("MyPrefs", Context.MODE_PRIVATE) }
     val scope = rememberCoroutineScope()
     val client = remember {
         OkHttpClient.Builder()
-            .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
-            .writeTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
-            .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .writeTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
             .build()
     }
 
-    // 퀴즈 데이터 로드
+    // 퀴즈 데이터 로드: 메모리/업로드 힌트를 우선 전달
     LaunchedEffect(patientId) {
-        quizViewModel.loadQuizzes(patientId)
+        val memImageUrl = prefs.getString("last_memory_image_url", null)
+        val memDesc     = prefs.getString("last_memory_sentence", null)
+
+        val photoId  = prefs.getString("last_photo_id", null)
+        val imageUrl = prefs.getString("last_image_url", null)
+        val desc     = prefs.getString("last_description", null)
+
+        Log.d("PatientQuiz", "hints | memImageUrl=$memImageUrl, memDesc=$memDesc, photoId=$photoId, imageUrl=$imageUrl, desc=$desc")
+
+        if (memImageUrl == null && memDesc == null && photoId == null && imageUrl == null && desc == null) {
+            Toast.makeText(context, "힌트 없음 → 서버 자동 보완 시도", Toast.LENGTH_SHORT).show()
+        }
+
+        // ⚠️ QuizViewModel이 선택 파라미터 버전이어야 함 (photoId/imageUrl/description…)
+        quizViewModel.loadQuizzes(
+            patientId = patientId,
+            photoId = photoId,
+            imageUrl = memImageUrl ?: imageUrl,
+            description = memDesc ?: desc
+        )
     }
 
     val items by quizViewModel.items.collectAsState()
     val error by quizViewModel.error.collectAsState()
+
+    // 아이템 로드 성공 시: 힌트 키 정리(중복 재사용 방지)
+    LaunchedEffect(items) {
+        if (items.isNotEmpty()) {
+            prefs.edit()
+                .remove("last_photo_id")
+                .remove("last_image_url")
+                .remove("last_description")
+                .remove("last_memory_image_url")
+                .remove("last_memory_sentence")
+                .apply()
+        }
+    }
 
     LaunchedEffect(error) {
         error?.let { Toast.makeText(context, it, Toast.LENGTH_SHORT).show() }
@@ -233,7 +268,7 @@ private fun QuizContent(
                                         }
                                         val body = JSONObject().apply {
                                             put("patient_id", patientId)
-                                            put("quiz_id", item.id)
+                                            put("quiz_id", item.id) // Int 그대로 전송 OK
                                             put("selected_index", idx) // 0-based
                                             put("response_time_sec", (System.currentTimeMillis() - startTime) / 1000)
                                         }.toString()
@@ -362,6 +397,9 @@ private fun playAck() {
         toneGen.release()
     } catch (_: Exception) { }
 }
+
+
+
 
 
 
