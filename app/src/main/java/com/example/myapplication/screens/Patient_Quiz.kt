@@ -2,9 +2,11 @@
 package com.example.myapplication.screens
 
 import android.content.Context
+import android.media.AudioAttributes
 import android.media.AudioManager
 import android.media.MediaPlayer
 import android.media.ToneGenerator
+import android.net.Uri
 import android.util.Log
 import android.widget.Toast
 import androidx.compose.foundation.Image
@@ -48,14 +50,21 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
+// ────────────────────────────────────────────────
+// 인증 보장 유틸
+// ────────────────────────────────────────────────
 private suspend fun ensureFirebaseLogin(): Boolean = withContext(Dispatchers.IO) {
     val user = Firebase.auth.currentUser ?: return@withContext false
     return@withContext try {
+        // 자주 갱신이 부담이면 false로 두고 만료 시에만 새로고침 전략 고려
         user.getIdToken(true).await()
         true
     } catch (_: Exception) { false }
 }
 
+// ────────────────────────────────────────────────
+// 메인 컴포저블
+// ────────────────────────────────────────────────
 @Composable
 fun Patient_Quiz(
     navController: NavController,
@@ -93,7 +102,7 @@ fun Patient_Quiz(
             return@LaunchedEffect
         }
 
-        // 1) 환자 문서에서 voiceId 조회 (미러링 전략 전제 / 현재는 null일 가능성 큼)
+        // 1) 환자 문서에서 voiceId 조회 (미러링 전략 전제)
         val voiceId = fetchVoiceIdFromPatient(activePatientId)
         if (voiceId.isNullOrBlank()) {
             // 규칙/데이터 정비 전까진 보호자 문서 조회를 시도하지 않고 UX로 유도
@@ -113,7 +122,8 @@ fun Patient_Quiz(
         val imageUrl    = prefs.getString("last_image_url", null)
         val desc        = prefs.getString("last_description", null)
 
-        Log.d("PatientQuiz",
+        Log.d(
+            "PatientQuiz",
             "hints | memImageUrl=$memImageUrl, memDesc=$memDesc, photoId=$photoId, imageUrl=$imageUrl, desc=$desc"
         )
 
@@ -129,11 +139,12 @@ fun Patient_Quiz(
         )
     }
 
-
     val items by quizViewModel.items.collectAsState()
     val error by quizViewModel.error.collectAsState()
 
-    // 아이템 로드 성공 시: 힌트 키 정리(중복 재사용 방지)
+    var currentIndex by remember { mutableStateOf(0) }
+
+    // 아이템 로드 성공 시: 힌트 키 정리(중복 재사용 방지) + ✅ 인덱스 리셋
     LaunchedEffect(items) {
         if (items.isNotEmpty()) {
             prefs.edit()
@@ -143,14 +154,13 @@ fun Patient_Quiz(
                 .remove("last_memory_image_url")
                 .remove("last_memory_sentence")
                 .apply()
+            currentIndex = 0
         }
     }
 
     LaunchedEffect(error) {
         error?.let { Toast.makeText(context, it, Toast.LENGTH_SHORT).show() }
     }
-
-    var currentIndex by remember { mutableStateOf(0) }
 
     // 서버에서 받은 ttsAudioUrl을 사용해 바로 재생
     LaunchedEffect(items, currentIndex) {
@@ -178,9 +188,36 @@ fun Patient_Quiz(
             Spacer(Modifier.height(24.dp))
 
             if (items.isEmpty()) {
-                CircularProgressIndicator()
-                Spacer(Modifier.height(16.dp))
-                Text("로딩 중…", fontSize = 16.sp)
+                // ✅ 에러가 있으면 로딩 대신 에러 UI
+                if (error != null) {
+                    Text(
+                        "문제를 불러오지 못했습니다.\n$error",
+                        fontSize = 16.sp,
+                        color = Color(0xFFE2101A)
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Button(onClick = {
+                        // 필요 시 재시도 로직 (마지막 힌트로 다시 호출)
+                        val memImageUrl = prefs.getString("last_memory_image_url", null)
+                        val memDesc     = prefs.getString("last_memory_sentence", null)
+                        val photoId     = prefs.getString("last_photo_id", null)
+                        val imageUrl    = prefs.getString("last_image_url", null)
+                        val desc        = prefs.getString("last_description", null)
+
+                        scope.launch {
+                            quizViewModel.loadQuizzes(
+                                patientId = activePatientId,
+                                photoId = photoId,
+                                imageUrl = memImageUrl ?: imageUrl,
+                                description = memDesc ?: desc
+                            )
+                        }
+                    }) { Text("다시 시도") }
+                } else {
+                    CircularProgressIndicator()
+                    Spacer(Modifier.height(16.dp))
+                    Text("로딩 중…", fontSize = 16.sp)
+                }
             } else {
                 QuizContent(
                     patientId = activePatientId,
@@ -200,6 +237,9 @@ fun Patient_Quiz(
     }
 }
 
+// ────────────────────────────────────────────────
+// 하단 탭
+// ────────────────────────────────────────────────
 @Composable
 private fun QuizBottomBar(navController: NavController, patientId: String) {
     val navBackStack by navController.currentBackStackEntryAsState()
@@ -245,6 +285,7 @@ private fun QuizBottomBar(navController: NavController, patientId: String) {
     }
 }
 
+// ────────────────────────────────────────────────
 @Composable
 private fun QuizContent(
     patientId: String,
@@ -391,9 +432,8 @@ private fun OptionButton(text: String, modifier: Modifier = Modifier, onClick: (
 }
 
 // ────────────────────────────────────────────────
-// 공통 TTS 유틸
+// 공통 TTS 유틸 (안정화 버전)
 // ────────────────────────────────────────────────
-
 private var currentTTSPlayer: MediaPlayer? = null
 
 private fun stopTTS() {
@@ -419,8 +459,18 @@ private suspend fun playTTS(
         delay(200)
         stopTTS()
         currentTTSPlayer = MediaPlayer().apply {
-            setDataSource(ttsUrl)
+            setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                    .build()
+            )
+            setDataSource(context, Uri.parse(ttsUrl))
             setOnPreparedListener { it.start() }
+            setOnErrorListener { _, what, extra ->
+                Toast.makeText(context, "TTS 오류($what/$extra)", Toast.LENGTH_SHORT).show()
+                true
+            }
             prepareAsync()
         }
     } catch (e: Exception) {
@@ -439,7 +489,7 @@ private fun playAck() {
 }
 
 // ────────────────────────────────────────────────
-// patientId & guardianUid 복구/조회 유틸
+// patientId 복구/조회 유틸
 // ────────────────────────────────────────────────
 private fun getPatientIdFromPrefs(context: Context): String? {
     val prefs = context.getSharedPreferences("MyPrefs", Context.MODE_PRIVATE)
@@ -457,19 +507,7 @@ private fun resolvePatientId(context: Context, param: String): String {
 }
 
 /**
- * SharedPreferences에서 guardian UID를 복구한다.
- * 우선순위: guardian_uid → guardian_id → null
- */
-private fun resolveGuardianUid(context: Context): String? {
-    val prefs = context.getSharedPreferences("MyPrefs", Context.MODE_PRIVATE)
-    val uid = prefs.getString("guardian_uid", null)
-    if (!uid.isNullOrBlank()) return uid
-    val legacy = prefs.getString("guardian_id", null)
-    return legacy
-}
-
-/**
- * Firestore: guardians/{guardianUid}.voiceId 읽기
+ * Firestore: patients/{patientId}.voiceId 읽기
  */
 private suspend fun fetchVoiceIdFromPatient(patientId: String): String? = withContext(Dispatchers.IO) {
     try {
@@ -480,6 +518,8 @@ private suspend fun fetchVoiceIdFromPatient(patientId: String): String? = withCo
         null
     }
 }
+
+
 
 
 
