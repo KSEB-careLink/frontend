@@ -10,8 +10,8 @@ import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.*
@@ -19,33 +19,42 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
-import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.compose.currentBackStackEntryAsState
 import com.example.myapplication.BuildConfig
 import com.example.myapplication.R
 import com.example.myapplication.data.DatasetItem
 import com.example.myapplication.viewmodel.QuizViewModel
 import com.google.firebase.auth.ktx.auth
+import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
-import okhttp3.MediaType.Companion.toMediaType
 import org.json.JSONObject
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import java.util.concurrent.TimeUnit
+
+private suspend fun ensureFirebaseLogin(): Boolean = withContext(Dispatchers.IO) {
+    val user = Firebase.auth.currentUser ?: return@withContext false
+    return@withContext try {
+        user.getIdToken(true).await()
+        true
+    } catch (_: Exception) { false }
+}
 
 @Composable
 fun Patient_Quiz(
@@ -56,6 +65,12 @@ fun Patient_Quiz(
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("MyPrefs", Context.MODE_PRIVATE) }
     val scope = rememberCoroutineScope()
+
+    // 네비게이션 param이 "{patientId}" 같은 플레이스홀더일 수 있어 복구
+    val activePatientId by remember(patientId) {
+        mutableStateOf(resolvePatientId(context, patientId))
+    }
+
     val client = remember {
         OkHttpClient.Builder()
             .connectTimeout(30, TimeUnit.SECONDS)
@@ -64,29 +79,56 @@ fun Patient_Quiz(
             .build()
     }
 
-    // 퀴즈 데이터 로드: 메모리/업로드 힌트를 우선 전달
-    LaunchedEffect(patientId) {
+    // 퀴즈 데이터 로드: 메모리/업로드 힌트를 우선 전달 + voiceId 사전 체크
+    LaunchedEffect(activePatientId) {
+        if (activePatientId.isBlank()) {
+            Toast.makeText(context, "환자 정보가 없습니다.", Toast.LENGTH_SHORT).show()
+            return@LaunchedEffect
+        }
+
+        // 0) Firestore 접근 전에 FirebaseAuth 로그인 보장(커스텀 토큰 로그인 끝났는지)
+        val authed = ensureFirebaseLogin()
+        if (!authed) {
+            Toast.makeText(context, "인증 상태를 확인해 주세요.", Toast.LENGTH_LONG).show()
+            return@LaunchedEffect
+        }
+
+        // 1) 환자 문서에서 voiceId 조회 (미러링 전략 전제 / 현재는 null일 가능성 큼)
+        val voiceId = fetchVoiceIdFromPatient(activePatientId)
+        if (voiceId.isNullOrBlank()) {
+            // 규칙/데이터 정비 전까진 보호자 문서 조회를 시도하지 않고 UX로 유도
+            Toast.makeText(
+                context,
+                "보호자 음성이 환자 문서에 등록되어 있지 않습니다.\n보호자 앱에서 음성을 등록해 주세요.",
+                Toast.LENGTH_LONG
+            ).show()
+            // 필요 시: 다이얼로그/네비게이션 유도 (예: navController.navigate("guardianVoiceEnroll"))
+            return@LaunchedEffect
+        }
+
+        // ▶ 여기서만 퀴즈 생성 API 호출
         val memImageUrl = prefs.getString("last_memory_image_url", null)
         val memDesc     = prefs.getString("last_memory_sentence", null)
+        val photoId     = prefs.getString("last_photo_id", null)
+        val imageUrl    = prefs.getString("last_image_url", null)
+        val desc        = prefs.getString("last_description", null)
 
-        val photoId  = prefs.getString("last_photo_id", null)
-        val imageUrl = prefs.getString("last_image_url", null)
-        val desc     = prefs.getString("last_description", null)
-
-        Log.d("PatientQuiz", "hints | memImageUrl=$memImageUrl, memDesc=$memDesc, photoId=$photoId, imageUrl=$imageUrl, desc=$desc")
+        Log.d("PatientQuiz",
+            "hints | memImageUrl=$memImageUrl, memDesc=$memDesc, photoId=$photoId, imageUrl=$imageUrl, desc=$desc"
+        )
 
         if (memImageUrl == null && memDesc == null && photoId == null && imageUrl == null && desc == null) {
             Toast.makeText(context, "힌트 없음 → 서버 자동 보완 시도", Toast.LENGTH_SHORT).show()
         }
 
-        // ⚠️ QuizViewModel이 선택 파라미터 버전이어야 함 (photoId/imageUrl/description…)
         quizViewModel.loadQuizzes(
-            patientId = patientId,
+            patientId = activePatientId,
             photoId = photoId,
             imageUrl = memImageUrl ?: imageUrl,
             description = memDesc ?: desc
         )
     }
+
 
     val items by quizViewModel.items.collectAsState()
     val error by quizViewModel.error.collectAsState()
@@ -124,7 +166,7 @@ fun Patient_Quiz(
         onDispose { stopTTS() }
     }
 
-    Scaffold(bottomBar = { QuizBottomBar(navController, patientId) }) { innerPadding ->
+    Scaffold(bottomBar = { QuizBottomBar(navController, activePatientId) }) { innerPadding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -141,7 +183,7 @@ fun Patient_Quiz(
                 Text("로딩 중…", fontSize = 16.sp)
             } else {
                 QuizContent(
-                    patientId = patientId,
+                    patientId = activePatientId,
                     item = items[currentIndex],
                     client = client,
                     onNext = {
@@ -268,8 +310,8 @@ private fun QuizContent(
                                         }
                                         val body = JSONObject().apply {
                                             put("patient_id", patientId)
-                                            put("quiz_id", item.id) // Int 그대로 전송 OK
-                                            put("selected_index", idx) // 0-based
+                                            put("quiz_id", item.id)           // Int 그대로 전송
+                                            put("selected_index", idx)        // 0-based
                                             put("response_time_sec", (System.currentTimeMillis() - startTime) / 1000)
                                         }.toString()
                                         val req = Request.Builder()
@@ -326,9 +368,7 @@ private fun QuizContent(
                         showResult = false
                         stopTTS()
                         // 다시 같은 문제 읽어주기
-                        scope.launch {
-                            playTTS(item.ttsAudioUrl, context)
-                        }
+                        scope.launch { playTTS(item.ttsAudioUrl, context) }
                     }
                 },
                 modifier = Modifier
@@ -397,6 +437,53 @@ private fun playAck() {
         toneGen.release()
     } catch (_: Exception) { }
 }
+
+// ────────────────────────────────────────────────
+// patientId & guardianUid 복구/조회 유틸
+// ────────────────────────────────────────────────
+private fun getPatientIdFromPrefs(context: Context): String? {
+    val prefs = context.getSharedPreferences("MyPrefs", Context.MODE_PRIVATE)
+    return prefs.getString("patient_id", null)
+}
+
+private fun resolvePatientId(context: Context, param: String): String {
+    val cleaned = param.trim()
+    if (cleaned.isNotEmpty() && cleaned != "{patientId}" && cleaned.lowercase() != "null") {
+        return cleaned
+    }
+    getPatientIdFromPrefs(context)?.let { return it }
+    Firebase.auth.currentUser?.uid?.let { return it }
+    return ""
+}
+
+/**
+ * SharedPreferences에서 guardian UID를 복구한다.
+ * 우선순위: guardian_uid → guardian_id → null
+ */
+private fun resolveGuardianUid(context: Context): String? {
+    val prefs = context.getSharedPreferences("MyPrefs", Context.MODE_PRIVATE)
+    val uid = prefs.getString("guardian_uid", null)
+    if (!uid.isNullOrBlank()) return uid
+    val legacy = prefs.getString("guardian_id", null)
+    return legacy
+}
+
+/**
+ * Firestore: guardians/{guardianUid}.voiceId 읽기
+ */
+private suspend fun fetchVoiceIdFromPatient(patientId: String): String? = withContext(Dispatchers.IO) {
+    try {
+        val snap = Firebase.firestore.collection("patients").document(patientId).get().await()
+        snap.getString("voiceId")?.takeIf { it.isNotBlank() }
+    } catch (e: Exception) {
+        Log.e("PatientQuiz", "patients voiceId 조회 실패: ${e.message}", e)
+        null
+    }
+}
+
+
+
+
 
 
 

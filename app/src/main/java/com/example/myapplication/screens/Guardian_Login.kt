@@ -1,3 +1,4 @@
+// app/src/main/java/com/example/myapplication/screens/Guardian_Login.kt
 package com.example.myapplication.screens
 
 import android.widget.Toast
@@ -37,6 +38,12 @@ import kotlinx.coroutines.tasks.await
 import android.util.Log
 import com.google.firebase.messaging.FirebaseMessaging
 import com.example.myapplication.service.NotificationService
+
+// 🔽 추가 import
+import com.google.firebase.firestore.ktx.firestore
+import com.google.firebase.firestore.SetOptions
+import com.google.firebase.ktx.Firebase as FirebaseAlias // 이름 충돌 방지용 별칭(선택)
+import com.google.firebase.firestore.DocumentSnapshot
 
 @Composable
 fun Guardian_Login(navController: NavController) {
@@ -168,8 +175,7 @@ fun Guardian_Login(navController: NavController) {
                             ?: throw Exception("Firebase user is null")
                         val guardianId = user.uid
 
-                        //  로그인 직후: 최신 FCM 토큰 받아서 Firestore에 저장/갱신
-                        // (kotlinx-coroutines-play-services 있어야 await() 사용 가능)
+                        // 로그인 직후: 최신 FCM 토큰 받아서 서버에 전달 (선택)
                         runCatching {
                             FirebaseMessaging.getInstance().token.await()
                         }.onSuccess { token ->
@@ -208,7 +214,21 @@ fun Guardian_Login(navController: NavController) {
                                 val patientId = linkedPatients.getString(0)
                                 saveUserInfoToPrefs(context, patientId, guardianId)
 
-                                showToast("로그인 성공!")
+                                // ✅ 4) 앱 진입 시 1회 동기화: guardians → patients voiceId 백필
+                                val mirrored = ensureVoiceIdMirroredOnce(
+                                    patientId = patientId,
+                                    guardianUid = guardianId
+                                )
+
+                                if (mirrored) {
+                                    Log.d("GuardianLogin", "voiceId 미러링 완료(patients/$patientId)")
+                                    showToast("로그인 성공! (음성 동기화 완료)")
+                                } else {
+                                    Log.w("GuardianLogin", "voiceId 미러링 스킵/실패")
+                                    showToast("로그인 성공! (음성 동기화 확인 필요)")
+                                }
+
+                                // 기존 네비 흐름 유지
                                 navController.navigate("code/$joinCode") {
                                     popUpTo("G_login") { inclusive = true }
                                 }
@@ -256,6 +276,43 @@ fun Guardian_Login(navController: NavController) {
         }
     }
 }
+
+/**
+ * ✅ 앱 진입 시 1회 동기화:
+ * - patients/{patientId}.voiceId 가 비어 있으면
+ * - guardians/{guardianUid}.voiceId 를 읽어와 patients 쪽에 SetOptions.merge()로 백필
+ * - 이미 값이 있으면 건드리지 않음
+ * @return true = 이미 있었거나 백필 성공, false = guardian에 voiceId가 없거나 오류
+ */
+private suspend fun ensureVoiceIdMirroredOnce(
+    patientId: String,
+    guardianUid: String
+): Boolean = withContext(Dispatchers.IO) {
+    try {
+        val db = Firebase.firestore
+
+        // 1) 환자 문서에 이미 있으면 스킵
+        val pSnap = db.collection("patients").document(patientId).get().await()
+        val patientHas = pSnap.getString("voiceId")?.isNotBlank() == true
+        if (patientHas) return@withContext true
+
+        // 2) 보호자 문서에서 가져오기
+        val gSnap = db.collection("guardians").document(guardianUid).get().await()
+        val v = gSnap.getString("voiceId")?.takeIf { it.isNotBlank() } ?: return@withContext false
+
+        // 3) 백필
+        db.collection("patients")
+            .document(patientId)
+            .set(mapOf("voiceId" to v), SetOptions.merge())
+            .await()
+
+        true
+    } catch (e: Exception) {
+        Log.e("GuardianLogin", "voiceId 미러링 실패: ${e.message}", e)
+        false
+    }
+}
+
 
 
 
