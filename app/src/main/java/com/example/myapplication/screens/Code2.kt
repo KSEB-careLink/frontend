@@ -158,7 +158,8 @@ fun Code2(
                                 .putString("jwt_token", idToken)
                                 .apply()
 
-                            // 포그라운드 서비스 시작
+                            //위치끄느라잠깐주석처리함
+//                            // 포그라운드 서비스 시작
                             val intent = Intent(context, LocationUpdatesService::class.java)
                             ContextCompat.startForegroundService(context, intent)
 

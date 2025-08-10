@@ -182,6 +182,7 @@ fun Guardian_Login(navController: NavController) {
                         // 2) ID 토큰 획득
                         val idToken = user.getIdToken(true).await().token
                             ?: throw Exception("ID 토큰이 null입니다")
+                        Log.d("GuardianLogin", "발급받은 ID토큰: ${idToken.take(12)}...")
 
                         // 3) 서버 /auth/me 요청
                         val meRequest = Request.Builder()

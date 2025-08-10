@@ -18,7 +18,7 @@ android {
         versionCode = 1
         versionName = "1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        buildConfigField("String", "BASE_URL", "\"https://backend-f61l.onrender.com\"")
+        buildConfigField("String", "BASE_URL", "\"https://pleasing-really-cow.ngrok-free.app\"") //https://backend-f61l.onrender.com
     }
     
     buildFeatures {
@@ -168,6 +168,10 @@ dependencies {
 
     //토큰어쩌구 추가
     implementation("com.squareup.retrofit2:converter-gson:2.9.0")
+
+    //사용자 토큰 알림이랑 보낼때
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
+
 }
 
 
