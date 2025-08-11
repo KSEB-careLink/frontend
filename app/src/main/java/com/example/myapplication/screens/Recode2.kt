@@ -32,8 +32,6 @@ import com.example.myapplication.BuildConfig
 import com.example.myapplication.audio.AudioRecorder
 import com.example.myapplication.audio.AutoScrollingText
 import com.google.firebase.auth.ktx.auth
-import com.google.firebase.firestore.SetOptions
-import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -45,7 +43,6 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.logging.HttpLoggingInterceptor
-import org.json.JSONObject
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Locale
@@ -284,12 +281,14 @@ fun Recode2(
                         Toast.makeText(context, "MediaStore 저장 실패", Toast.LENGTH_LONG).show()
                     }
 
-                    // 3) 서버 업로드 + ✅ 성공 시 voiceId 미러링
+                    // 3) 서버 업로드 (응답 use{} + 예외 처리)
                     coroutineScope.launch {
                         val firebaseUser = Firebase.auth.currentUser
                         val idToken = try {
                             firebaseUser?.getIdToken(true)?.await()?.token.orEmpty()
-                        } catch (_: Exception) { "" }
+                        } catch (_: Exception) {
+                            ""
+                        }
                         val uid = firebaseUser?.uid.orEmpty()
                         val name = firebaseUser?.displayName ?: "GuardianName"
 
@@ -309,40 +308,21 @@ fun Recode2(
                             .url(uploadUrl)
                             .post(body)
                             .apply {
-                                if (idToken.isNotEmpty()) addHeader("Authorization", "Bearer $idToken")
+                                if (idToken.isNotEmpty()) {
+                                    addHeader("Authorization", "Bearer $idToken")
+                                }
                             }
                             .build()
 
                         try {
                             withContext(Dispatchers.IO) {
                                 client.newCall(request).execute().use { resp ->
-                                    val bodyStr = resp.body?.string().orEmpty()
-                                    val success = resp.isSuccessful
-                                    val voiceIdFromResp = runCatching {
-                                        JSONObject(bodyStr).optString("voiceId")
-                                            .takeIf { it.isNotBlank() }
-                                    }.getOrNull()
-
-                                    if (success) {
-                                        // ✅ 3-1) voiceId 미러링 시도
-                                        val mirrored = mirrorVoiceIdToPatient(
-                                            patientId = patientId,
-                                            guardianUid = uid,
-                                            voiceIdHint = voiceIdFromResp
-                                        )
-
-                                        withContext(Dispatchers.Main) {
-                                            Toast.makeText(
-                                                context,
-                                                if (mirrored) "목소리 등록 성공 (환자 문서 미러 완료)"
-                                                else "목소리 등록 성공 (미러링은 추후 재시도 필요)",
-                                                Toast.LENGTH_LONG
-                                            ).show()
+                                    withContext(Dispatchers.Main) {
+                                        if (resp.isSuccessful) {
+                                            Toast.makeText(context, "목소리 등록 성공", Toast.LENGTH_LONG).show()
                                             // 뒤로 가기만 하면 RecodeScreen의 onResume이 동작
                                             navController.popBackStack()
-                                        }
-                                    } else {
-                                        withContext(Dispatchers.Main) {
+                                        } else {
                                             Toast.makeText(
                                                 context,
                                                 "등록 실패: ${resp.code}",
@@ -380,43 +360,6 @@ fun Recode2(
         }
     }
 }
-
-/**
- * ✅ voiceId 미러링:
- * 1) 서버 응답에서 받은 voiceIdHint가 있으면 우선 사용
- * 2) 없으면 guardians/{guardianUid}.voiceId를 읽어서 사용
- * 3) patients/{patientId}.voiceId 에 SetOptions.merge()로 저장
- * 실패하면 false 반환
- */
-private suspend fun mirrorVoiceIdToPatient(
-    patientId: String,
-    guardianUid: String,
-    voiceIdHint: String?
-): Boolean = withContext(Dispatchers.IO) {
-    try {
-        val db = Firebase.firestore
-
-        val voiceId = voiceIdHint ?: run {
-            // 응답에 voiceId가 없으면 guardian 문서에서 조회
-            val gSnap = db.collection("guardians").document(guardianUid).get().await()
-            gSnap.getString("voiceId")
-        }
-
-        if (voiceId.isNullOrBlank()) return@withContext false
-
-        db.collection("patients")
-            .document(patientId)
-            .set(mapOf("voiceId" to voiceId), SetOptions.merge())
-            .await()
-
-        true
-    } catch (e: Exception) {
-        Log.e("Recode2", "voiceId 미러링 실패: ${e.message}", e)
-        false
-    }
-}
-
-
 
 
 
