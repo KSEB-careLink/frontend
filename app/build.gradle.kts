@@ -175,6 +175,8 @@ dependencies {
     //사용자 토큰 알림이랑 보낼때
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
 
+    implementation ("io.coil-kt:coil-compose:2.6.0")
+
 }
 
 

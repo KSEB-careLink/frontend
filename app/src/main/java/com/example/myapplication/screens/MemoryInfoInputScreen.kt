@@ -377,15 +377,15 @@ fun MemoryInfoInputScreen(navController: NavController, patientId: String) {
                     return@Button
                 }
                 val description = """
-                    시간: $timeText
-                    장소: $placeText
-                    등장인물: $charactersText
-                    가장 기억에 남는 것: $memorableText
-                """.trimIndent()
+            시간: $timeText
+            장소: $placeText
+            등장인물: $charactersText
+            가장 기억에 남는 것: $memorableText
+        """.trimIndent()
 
                 val uri = imageUri!!
                 val patientIdFromPrefs = prefs.getString("patient_id", null)
-                val guardianId = prefs.getString("guardian_id", null)
+                val guardianId = prefs.getString("guardian_id", null) // ← 필요 없지만 체크만 유지
                 if (patientIdFromPrefs.isNullOrEmpty() || guardianId.isNullOrEmpty()) {
                     Toast.makeText(context, "필수 정보가 없습니다.", Toast.LENGTH_SHORT).show()
                     return@Button
@@ -394,28 +394,33 @@ fun MemoryInfoInputScreen(navController: NavController, patientId: String) {
                 coroutineScope.launch {
                     isLoading = true
                     try {
+                        // ① 토큰 강제 갱신 X
                         val idToken = Firebase.auth.currentUser
-                            ?.getIdToken(true)?.await()?.token
+                            ?.getIdToken(false)?.await()?.token
                             ?: throw Exception("토큰 획득 실패")
 
-                        val (bytes, mime, fileName) = withContext(Dispatchers.IO) {
-                            // 바이트 읽기 + 리사이즈/압축
-                            val mimeDetected = getMimeType(context, uri) ?: "image/jpeg"
-                            val finalFileName = getFileName(context, uri) ?: "upload.${mimeDetected.substringAfterLast('/')}"
+                        // ② 항상 JPEG로 압축 + MIME = image/jpeg, 파일명 확장자 .jpg 보정
+                        val (bytes, fileName) = withContext(Dispatchers.IO) {
                             val compressed = readAndCompressImage(context, uri, maxDim = 2048, quality = 88)
-                            Triple(compressed, mimeDetected, finalFileName)
+                            val originalName = getFileName(context, uri) ?: "upload.jpg"
+                            val safeName = if (originalName.endsWith(".jpg", true) || originalName.endsWith(".jpeg", true)) {
+                                originalName
+                            } else {
+                                originalName.substringBeforeLast('.', originalName) + ".jpg"
+                            }
+                            Pair(compressed, safeName)
                         }
 
                         val multipart = MultipartBody.Builder()
                             .setType(MultipartBody.FORM)
-                            .addFormDataPart("guardian_id", guardianId)
+                            // ③ guardian_id는 토큰에서 uid를 쓰므로 폼에 넣지 않음
                             .addFormDataPart("patient_id", patientIdFromPrefs)
                             .addFormDataPart("category", selectedCategory)
                             .addFormDataPart("description", description)
                             .addFormDataPart(
                                 "image",
                                 fileName,
-                                bytes.toRequestBody(mime.toMediaTypeOrNull())
+                                bytes.toRequestBody("image/jpeg".toMediaTypeOrNull())
                             )
                             .build()
 
@@ -433,25 +438,31 @@ fun MemoryInfoInputScreen(navController: NavController, patientId: String) {
                         }
 
                         if (ok) {
-                            // ✅ 업로드 응답에서 photo_id / image_url 파싱 → Prefs 저장 (퀴즈 힌트)
+                            // ✅ 업로드 응답에서 photo_id / image_url 파싱 → Prefs 저장 (퀴즈 시드)
                             val obj = runCatching { JSONObject(body) }.getOrNull()
                             val returnedPhotoId = obj?.optString(
                                 "photo_id",
-                                obj.optString("photoId", obj.optString("id", ""))
+                                obj?.optString("photoId", obj?.optString("id", "")) ?: ""
                             ).orEmpty()
                             val returnedImageUrl = obj?.optString(
                                 "image_url",
-                                obj.optString("mediaUrl", obj.optString("url", ""))
+                                obj?.optString("mediaUrl", obj?.optString("url", "")) ?: ""
                             ).orEmpty()
 
+                            // 시드 키 저장 (quiz에서 바로 사용)
                             prefs.edit().apply {
                                 if (returnedPhotoId.isNotBlank()) putString("last_photo_id", returnedPhotoId)
-                                if (returnedImageUrl.isNotBlank()) putString("last_image_url", returnedImageUrl)
-                                putString("last_description", description) // 우리가 보낸 설명
+                                if (returnedImageUrl.isNotBlank()) {
+                                    putString("last_image_url", returnedImageUrl)
+                                    putString("last_memory_image_url", returnedImageUrl)
+                                }
+                                putString("last_description", description)
+                                putString("last_memory_sentence", description)
+                                putString("last_category", selectedCategory)
                                 apply()
                             }
 
-                            // 업로드 카운트 갱신
+                            // 업로드 카운트/UX 유지
                             val prevCount = prefs.getInt("upload_count", 0)
                             val newCount = prevCount + 1
                             prefs.edit().putInt("upload_count", newCount).apply()
@@ -504,7 +515,7 @@ fun MemoryInfoInputScreen(navController: NavController, patientId: String) {
             Text("회상 정보 업로드", color = Color.White)
         }
 
-        // 로딩 인디케이터
+// 로딩 인디케이터
         if (isLoading) {
             Box(
                 Modifier
@@ -515,6 +526,7 @@ fun MemoryInfoInputScreen(navController: NavController, patientId: String) {
                 CircularProgressIndicator(color = Color.White)
             }
         }
+
     }
 }
 

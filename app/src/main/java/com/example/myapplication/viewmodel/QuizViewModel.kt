@@ -27,7 +27,8 @@ class QuizViewModel(
         photoId: String? = null,
         imageUrl: String? = null,
         imagePath: String? = null,
-        description: String? = null
+        description: String? = null,
+        category: String? = null
     ) {
         viewModelScope.launch {
             try {
@@ -36,7 +37,8 @@ class QuizViewModel(
                     photoId = photoId,
                     imageUrl = imageUrl,
                     imagePath = imagePath,
-                    description = description
+                    description = description,
+                    category    = category
                 )
                 _items.value = list
             } catch (e: Exception) {
