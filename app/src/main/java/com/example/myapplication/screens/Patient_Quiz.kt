@@ -102,16 +102,27 @@ fun Patient_Quiz(
             return@LaunchedEffect
         }
 
-        // 1) 환자 문서에서 voiceId 조회 (미러링 전략 전제)
-        val voiceId = fetchVoiceIdFromPatient(activePatientId)
+        // 1) 환자 문서에서 voiceId 조회 (우선 시도)
+        var voiceId = fetchVoiceIdFromPatient(activePatientId)
+
+        // 2) 환자 문서에 없으면, 연결된 보호자 uid → guardians/{uid}.voiceId 폴백 (옵션 A 규칙 필요)
         if (voiceId.isNullOrBlank()) {
-            // 규칙/데이터 정비 전까진 보호자 문서 조회를 시도하지 않고 UX로 유도
+            val guardianUid = fetchGuardianUidForPatient(activePatientId)
+                ?: prefs.getString("guardian_id", null)
+
+            if (!guardianUid.isNullOrBlank()) {
+                voiceId = fetchVoiceIdFromGuardian(guardianUid)
+            }
+        }
+
+        if (voiceId.isNullOrBlank()) {
+            // 환자 문서에도 없고, 연결된 보호자에서도 못 찾으면 유도
             Toast.makeText(
                 context,
-                "보호자 음성이 환자 문서에 등록되어 있지 않습니다.\n보호자 앱에서 음성을 등록해 주세요.",
+                "보호자 음성이 등록되어 있지 않습니다.\n보호자 앱에서 음성을 등록해 주세요.",
                 Toast.LENGTH_LONG
             ).show()
-            // 필요 시: 다이얼로그/네비게이션 유도 (예: navController.navigate("guardianVoiceEnroll"))
+            // 필요 시: navController.navigate("guardianVoiceEnroll")
             return@LaunchedEffect
         }
 
@@ -489,7 +500,7 @@ private fun playAck() {
 }
 
 // ────────────────────────────────────────────────
-// patientId 복구/조회 유틸
+// patientId & voiceId/guardianUid 조회 유틸
 // ────────────────────────────────────────────────
 private fun getPatientIdFromPrefs(context: Context): String? {
     val prefs = context.getSharedPreferences("MyPrefs", Context.MODE_PRIVATE)
@@ -518,6 +529,33 @@ private suspend fun fetchVoiceIdFromPatient(patientId: String): String? = withCo
         null
     }
 }
+
+/**
+ * Firestore: patients/{patientId}.linkedGuardian 읽기
+ */
+private suspend fun fetchGuardianUidForPatient(patientId: String): String? = withContext(Dispatchers.IO) {
+    try {
+        val snap = Firebase.firestore.collection("patients").document(patientId).get().await()
+        snap.getString("linkedGuardian")?.takeIf { it.isNotBlank() }
+    } catch (e: Exception) {
+        Log.e("PatientQuiz", "linkedGuardian 조회 실패: ${e.message}", e)
+        null
+    }
+}
+
+/**
+ * Firestore: guardians/{guardianUid}.voiceId 읽기 (옵션 A 규칙 전제: 연결된 환자만 get 허용)
+ */
+private suspend fun fetchVoiceIdFromGuardian(guardianUid: String): String? = withContext(Dispatchers.IO) {
+    try {
+        val snap = Firebase.firestore.collection("guardians").document(guardianUid).get().await()
+        snap.getString("voiceId")?.takeIf { it.isNotBlank() }
+    } catch (e: Exception) {
+        Log.e("PatientQuiz", "guardians voiceId 조회 실패: ${e.message}", e)
+        null
+    }
+}
+
 
 
 
