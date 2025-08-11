@@ -49,6 +49,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
+import okhttp3.Protocol
 
 // ────────────────────────────────────────────────
 // 인증 보장 유틸
@@ -80,13 +81,14 @@ fun Patient_Quiz(
         mutableStateOf(resolvePatientId(context, patientId))
     }
 
-    val client = remember {
-        OkHttpClient.Builder()
-            .connectTimeout(30, TimeUnit.SECONDS)
-            .writeTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(30, TimeUnit.SECONDS)
-            .build()
-    }
+    val client = OkHttpClient.Builder()
+        .connectTimeout(20, TimeUnit.SECONDS)   // TCP 연결
+        .writeTimeout(120, TimeUnit.SECONDS)    // 이미지/본문 업로드 여유
+        .readTimeout(90, TimeUnit.SECONDS)      // 서버 처리 대기 여유 ↑
+        .callTimeout(120, TimeUnit.SECONDS)     // 전체 콜 상한
+        .retryOnConnectionFailure(true)
+        .protocols(listOf(Protocol.HTTP_1_1))   // ★ HTTP/2 → 1.1 강제 (ngrok 헤더 스톨 회피)
+        .build()
 
     // 퀴즈 데이터 로드: 메모리/업로드 힌트를 우선 전달 + voiceId 사전 체크
     LaunchedEffect(activePatientId) {

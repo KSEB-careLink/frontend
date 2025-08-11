@@ -16,6 +16,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
+import okhttp3.Protocol
 
 class NoPhotoException(message: String) : Exception(message)
 
@@ -27,10 +28,13 @@ class DatasetRepository {
         private const val TAG_FALL  = "QuizFallback"
     }
 
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(30, TimeUnit.SECONDS)
-        .writeTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
+    val client = OkHttpClient.Builder()
+        .connectTimeout(20, TimeUnit.SECONDS)   // TCP 연결
+        .writeTimeout(120, TimeUnit.SECONDS)    // 이미지/본문 업로드 여유
+        .readTimeout(90, TimeUnit.SECONDS)      // 서버 처리 대기 여유 ↑
+        .callTimeout(120, TimeUnit.SECONDS)     // 전체 콜 상한
+        .retryOnConnectionFailure(true)
+        .protocols(listOf(Protocol.HTTP_1_1))   // ★ HTTP/2 → 1.1 강제 (ngrok 헤더 스톨 회피)
         .build()
 
     suspend fun fetchAll(
