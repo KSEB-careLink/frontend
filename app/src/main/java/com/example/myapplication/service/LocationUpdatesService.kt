@@ -13,18 +13,15 @@ import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
-import com.example.myapplication.BuildConfig
 import com.example.myapplication.R
+import com.example.myapplication.network.GeofenceAlertBody
+import com.example.myapplication.network.LocationUpdateBody
+import com.example.myapplication.network.RetrofitInstance
 import com.google.android.gms.location.*
-import com.google.android.gms.tasks.Tasks
 import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import okhttp3.*
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.RequestBody.Companion.toRequestBody
-import org.json.JSONObject
 
 class LocationUpdatesService : Service() {
 
@@ -32,51 +29,9 @@ class LocationUpdatesService : Service() {
     private lateinit var callback: LocationCallback
     private val channelId = "location_updates_channel"
 
-    /** --- (1) Authorization 자동첨부 + 401 자동갱신 설정된 OkHttpClient --- */
-    // 요청마다 Authorization 헤더 붙이기 (캐시 토큰)
-    private class AuthHeaderInterceptor : Interceptor {
-        override fun intercept(chain: Interceptor.Chain): Response {
-            val original = chain.request()
-            val user = FirebaseAuth.getInstance().currentUser
-            val token = try {
-                if (user != null) Tasks.await(user.getIdToken(false)).token else null
-            } catch (_: Exception) { null }
-
-            val authed = if (!token.isNullOrBlank()) {
-                original.newBuilder()
-                    .header("Authorization", "Bearer $token")
-                    .build()
-            } else original
-
-            return chain.proceed(authed)
-        }
-    }
-
-    // 401(id-token-expired)이면 토큰 강제 갱신하여 1회 재시도
-    private class FirebaseAuthenticator : Authenticator {
-        override fun authenticate(route: Route?, response: Response): Request? {
-            // 무한 루프 방지: priorResponse가 있으면 이미 재시도한 것
-            if (response.priorResponse != null) return null
-
-            val user = FirebaseAuth.getInstance().currentUser ?: return null
-            val newToken = try { Tasks.await(user.getIdToken(true)).token } catch (_: Exception) { null }
-                ?: return null
-
-            Log.d("FirebaseAuthenticator", "새로 발급받은 토큰: $newToken")
-
-            return response.request.newBuilder()
-                .header("Authorization", "Bearer $newToken")
-                .build()
-        }
-    }
-
-    private val client: OkHttpClient by lazy {
-        OkHttpClient.Builder()
-            .addInterceptor(AuthHeaderInterceptor())
-            .authenticator(FirebaseAuthenticator())
-            .build()
-    }
-  /** ---------------------------------------------------------------------- */
+    /** 에뮬레이터 과호출 방지용 쿨다운(지오펜스 전용) */
+    private val geofenceCooldownMillis = 30_000L
+    @Volatile private var lastGeofenceSentAt = 0L
 
     override fun onCreate() {
         super.onCreate()
@@ -95,9 +50,14 @@ class LocationUpdatesService : Service() {
 
         callback = object : LocationCallback() {
             override fun onLocationResult(result: LocationResult) {
-                result.lastLocation?.let {
-                    Log.d("LocationSvc", "new location: ${it.latitude},${it.longitude}")
-                    sendLocation(it)
+                result.lastLocation?.let { loc ->
+                    Log.d("LocationSvc", "new location: ${loc.latitude},${loc.longitude}")
+
+                    // 1) Firestore 갱신용: 백엔드에 현재 위치 업로드
+                    sendLocationUpdate(loc)
+
+                    // 2) 지오펜스 판정/푸시 트리거 (쿨다운 적용)
+                    sendGeofenceAlert(loc)
                 }
             }
         }
@@ -119,11 +79,13 @@ class LocationUpdatesService : Service() {
         if (hasFine || hasCoarse) {
             val req = LocationRequest.Builder(
                 Priority.PRIORITY_HIGH_ACCURACY,
-                10_000L
-            ).setMinUpdateIntervalMillis(5_000L).build()
+                10_000L              // 요청 간격 10초
+            ).setMinUpdateIntervalMillis(5_000L) // 최소 업데이트 5초
+                .build()
 
             fusedClient.requestLocationUpdates(req, callback, mainLooper)
         } else {
+            Log.e("LocationSvc", "No location permission. Stop service.")
             stopSelf()
         }
 
@@ -140,37 +102,65 @@ class LocationUpdatesService : Service() {
     private fun createNotification(): Notification =
         NotificationCompat.Builder(this, channelId)
             .setContentTitle("위치 전송 중")
-            .setContentText("10초마다 위치를 서버로 전송합니다")
+            .setContentText("환자 위치 저장 & 지오펜스 감지")
             .setSmallIcon(R.mipmap.ic_launcher)
             .setOngoing(true)
             .build()
 
-    private fun sendLocation(loc: Location) {
+    /** (1) 현재 위치를 백엔드로 업로드 → 서버가 Firestore patients/{uid}.location 갱신 */
+    private fun sendLocationUpdate(loc: Location) {
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                // 로그인 안돼 있으면 스킵
-                val user = FirebaseAuth.getInstance().currentUser
-                if (user == null) {
-                    Log.e("LocationSvc", "No Firebase user; skip update")
+                val user = FirebaseAuth.getInstance().currentUser ?: run {
+                    Log.e("LocationSvc", "No Firebase user; skip location update")
+                    return@launch
+                }
+                val res = RetrofitInstance.api.postLocationUpdate(
+                    LocationUpdateBody(
+                        latitude = loc.latitude,
+                        longitude = loc.longitude
+                    )
+                )
+                if (!res.isSuccessful) {
+                    Log.e("LocationSvc", "location/update fail code=${res.code()} body=${res.errorBody()?.string()}")
+                } else {
+                    Log.d("LocationSvc", "location/update OK")
+                }
+            } catch (e: Exception) {
+                Log.e("LocationSvc", "location/update exception", e)
+            }
+        }
+    }
+
+    /** (2) 지오펜스 이탈 판정 트리거 (쿨다운 적용) */
+    private fun sendGeofenceAlert(loc: Location) {
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val user = FirebaseAuth.getInstance().currentUser ?: run {
+                    Log.e("LocationSvc", "No Firebase user; skip geofence alert")
                     return@launch
                 }
 
-                val json = JSONObject().apply {
-                    put("latitude", loc.latitude)
-                    put("longitude", loc.longitude)
-                }.toString()
-                val body = json.toRequestBody("application/json".toMediaType())
+                val now = System.currentTimeMillis()
+                if (now - lastGeofenceSentAt < geofenceCooldownMillis) {
+                    Log.d("LocationSvc", "geofence call throttled (cooldown)")
+                    return@launch
+                }
+                lastGeofenceSentAt = now
 
-                val req = Request.Builder()
-                    .url("${BuildConfig.BASE_URL}/location/update")
-                    .post(body)
-                    .build()
-
-                val resp = client.newCall(req).execute()
-                Log.d("LocationSvc", "update HTTP code=${resp.code}")
-                resp.close()
+                val res = RetrofitInstance.api.sendGeofenceAlert(
+                    GeofenceAlertBody(
+                        latitude = loc.latitude,
+                        longitude = loc.longitude
+                    )
+                )
+                if (!res.isSuccessful) {
+                    Log.e("LocationSvc", "geofence-alert fail code=${res.code()} body=${res.errorBody()?.string()}")
+                } else {
+                    Log.d("LocationSvc", "geofence-alert OK")
+                }
             } catch (e: Exception) {
-                Log.e("LocationSvc", "update failed", e)
+                Log.e("LocationSvc", "geofence-alert exception", e)
             }
         }
     }
