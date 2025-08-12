@@ -136,7 +136,7 @@ fun Main_Page(navController: NavController) {
 
         // ─── 4) 환자 추가 버튼 ─────────────────────
         Button(
-            onClick = { navController.navigate("addDevice") },
+            onClick = { navController.navigate("choose") },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(66.dp)
