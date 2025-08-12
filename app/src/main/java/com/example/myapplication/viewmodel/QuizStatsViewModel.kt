@@ -1,4 +1,4 @@
-// QuizStatsViewModel.kt
+// app/src/main/java/com/example/myapplication/viewmodel/QuizStatsViewModel.kt
 package com.example.myapplication.viewmodel
 
 import androidx.lifecycle.ViewModel
@@ -13,4 +13,3 @@ class QuizStatsViewModel : ViewModel() {
         _patientId.value = id
     }
 }
-

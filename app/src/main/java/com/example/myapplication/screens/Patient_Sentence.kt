@@ -58,6 +58,7 @@ import org.json.JSONObject
 import android.util.Log
 import androidx.compose.material.icons.filled.Star
 import java.util.concurrent.TimeUnit
+import androidx.compose.ui.text.style.TextOverflow
 
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
@@ -459,12 +460,7 @@ fun Patient_Sentence(
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Image(
-                painter = painterResource(R.drawable.rogo),
-                contentDescription = "Logo",
-                modifier = Modifier.size(200.dp),
-                contentScale = ContentScale.Fit
-            )
+
             Spacer(Modifier.height(16.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.VolumeUp, contentDescription = null, modifier = Modifier.size(24.dp))
@@ -533,17 +529,23 @@ fun Patient_Sentence(
                         onClick = { scope.launch { stopTTS(); playTTS(mem.mp3Url, context) } },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(52.dp),
+                            .heightIn(min = 52.dp)         // ← 고정 높이 제거, 최소만 보장
+                            .wrapContentHeight(),          // ← 내용만큼 세로 확장
                         shape = RoundedCornerShape(8.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C4B4))
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C4B4)),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp) // 여백 확보
                     ) {
                         Text(
-                            mem.sentence,
+                            text = mem.sentence,
                             color = Color.White,
                             fontSize = 16.sp,
-                            maxLines = 3
+                            lineHeight = 22.sp,            // ← 줄간격 확보
+                            maxLines = 3,                  // 필요시 4로 늘리기
+                            overflow = TextOverflow.Ellipsis,
+                            softWrap = true
                         )
                     }
+
                     Spacer(Modifier.height(16.dp))
 
                     Row(

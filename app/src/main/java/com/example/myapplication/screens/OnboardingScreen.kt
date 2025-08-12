@@ -39,73 +39,75 @@ import androidx.compose.ui.text.style.TextAlign
  */
 @Composable
 fun ConsentScreen(modifier: Modifier = Modifier) {
-    // 전체를 Box로 감싸고 가운데 정렬
-    Box(
+    val scroll = rememberScrollState()
+
+    Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(24.dp),
-        contentAlignment = Alignment.Center
+            .padding(horizontal = 24.dp)     // 좌우 여백만 주고
+            .verticalScroll(scroll)          // 세로 스크롤 허용
+            .navigationBarsPadding(),        // 하단 제스처바 피하기
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Column(
+        Spacer(Modifier.height(24.dp))
+
+        // 1) 상단 스크린샷: 화면이 작아도 너무 커지지 않게 최대 높이 제한
+        Image(
+            painter = painterResource(id = R.drawable.ic_0),
+            contentDescription = "개인정보 이용 안내",
             modifier = Modifier
-                .fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center  // 세로 중앙 정렬
+                .fillMaxWidth()
+                .heightIn(max = 360.dp),     // ← 여기로 크기 캡
+            contentScale = ContentScale.Fit
+        )
+
+        Spacer(Modifier.height(24.dp))
+
+        // 2) 타이틀
+        Text(
+            text = "위의 사진과 같은 문제를 \n 생성합니다.",
+            style = MaterialTheme.typography.headlineMedium,
+            textAlign = TextAlign.Center
+        )
+
+        Spacer(Modifier.height(20.dp))
+
+        // 3) 정보 수집 항목 카드
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .wrapContentHeight(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant
+            ),
+            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
         ) {
-            // 1) 상단 스크린샷 (원하시면 지우셔도 됩니다)
-            Image(
-                painter = painterResource(id = R.drawable.ic_0),
-                contentDescription = "개인정보 이용 안내",
-                modifier = Modifier
-                    .size(428.dp),  // 크기 키움
-                contentScale = ContentScale.Fit
-            )
-
-            Spacer(Modifier.height(32.dp))
-
-            // 2) 타이틀
-            Text(
-                text = "위의 사진과 같은 문제를 \n 생성합니다.",
-                style = MaterialTheme.typography.headlineMedium,
-                textAlign = TextAlign.Center
-            )
-
-            Spacer(Modifier.height(24.dp))
-
-            // 3) 정보 수집 항목 카드
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth(0.9f)
-                    .height(IntrinsicSize.Min),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant
-                ),
-                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
-            ) {
-                Column(modifier = Modifier.padding(20.dp)) {
-                    Text(
-                        text = "본 앱에서는 다음 정보를 수집·이용합니다",
-                        style = MaterialTheme.typography.bodyLarge
-                    )
-                    Spacer(Modifier.height(12.dp))
-                    Text("• 사진 및 메모리 정보", style = MaterialTheme.typography.bodyMedium)
-                    Spacer(Modifier.height(8.dp))
-                    Text("• 환자 프로필 정보", style = MaterialTheme.typography.bodyMedium)
-                }
+            Column(modifier = Modifier.padding(20.dp)) {
+                Text(
+                    text = "본 앱에서는 다음 정보를 수집·이용합니다",
+                    style = MaterialTheme.typography.bodyLarge
+                )
+                Spacer(Modifier.height(12.dp))
+                Text("• 사진 및 메모리 정보", style = MaterialTheme.typography.bodyMedium)
+                Spacer(Modifier.height(8.dp))
+                Text("• 환자 프로필 정보", style = MaterialTheme.typography.bodyMedium)
             }
-
-            Spacer(Modifier.height(24.dp))
-
-            // 4) 동의 질문
-            Text(
-                text = "위 개인정보 수집·이용에 동의하십니까?",
-                style = MaterialTheme.typography.bodyLarge,
-                textAlign = TextAlign.Center
-            )
         }
+
+        Spacer(Modifier.height(20.dp))
+
+        // 4) 동의 질문 (이 부분이 이제 안 잘립니다)
+        Text(
+            text = "위 개인정보 수집·이용에 동의하십니까?",
+            style = MaterialTheme.typography.bodyLarge,
+            textAlign = TextAlign.Center
+        )
+
+        Spacer(Modifier.height(24.dp))
     }
 }
+
 
 /**
  * 2~7번 페이지: 튜토리얼 페이지

@@ -8,6 +8,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -59,26 +60,25 @@ fun Code(navController: NavController, joinCode: String) {
             }
         )
 
-        // 코드 박스들
+        // 코드 박스들 (화면 폭에 맞춰 균등 분배 + 정사각형 유지)
         Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
-                .padding(horizontal = 16.dp)
                 .constrainAs(codeRow) {
                     top.linkTo(title.bottom, margin = 32.dp)
-                    start.linkTo(parent.start)
-                    end.linkTo(parent.end)
+                    start.linkTo(parent.start, margin = 24.dp)
+                    end.linkTo(parent.end, margin = 24.dp)
+                    width = Dimension.fillToConstraints
                 }
         ) {
-            for (i in 0 until codeLength) {
+            repeat(codeLength) { i ->
                 Box(
                     modifier = Modifier
-                        .size(48.dp)
-                        .background(
-                            color = Color(0xFF333333),
-                            shape = RoundedCornerShape(8.dp)
-                        ),
+                        .weight(1f)            // 폭 균등 분배
+                        .aspectRatio(1f)       // 정사각형 유지
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(color = Color(0xFF333333)),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
@@ -109,6 +109,13 @@ fun Code(navController: NavController, joinCode: String) {
         }
     }
 }
+
+@Preview(showBackground = true)
+@Composable
+private fun CodePreview() {
+    Code(rememberNavController(), "3baa7b")
+}
+
 
 
 

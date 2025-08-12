@@ -134,17 +134,19 @@ fun Patient_Quiz(
 
         // ── 힌트 수집
         var seedImageUrl = prefs.getString("last_memory_image_url", null)
-        var seedDesc     = prefs.getString("last_memory_sentence", null)
-        var seedPhotoId  = prefs.getString("last_photo_id", null)
-        val imageUrl     = prefs.getString("last_image_url", null)
-        val desc         = prefs.getString("last_description", null)
+        var seedDesc = prefs.getString("last_memory_sentence", null)
+        var seedPhotoId = prefs.getString("last_photo_id", null)
+        val imageUrl = prefs.getString("last_image_url", null)
+        val desc = prefs.getString("last_description", null)
         val seedCategory = prefs.getString("last_category", null)
 
         if (seedImageUrl == null) seedImageUrl = imageUrl
-        if (seedDesc == null)     seedDesc     = desc
+        if (seedDesc == null) seedDesc = desc
 
-        Log.d("PatientQuiz", "hints | memImageUrl=$seedImageUrl, memDesc=$seedDesc, photoId=$seedPhotoId, imageUrl=$imageUrl, desc=$desc")
-
+        Log.d(
+            "PatientQuiz",
+            "hints | memImageUrl=$seedImageUrl, memDesc=$seedDesc, photoId=$seedPhotoId, imageUrl=$imageUrl, desc=$desc"
+        )
 
 
         // ── ★ 폴백: 힌트가 하나도 없으면 최근 업로드 사진/설명으로 자동 시드
@@ -157,7 +159,12 @@ fun Patient_Quiz(
                     val urls = listOf(
                         "$base/photos/patient/${Uri.encode(activePatientId)}/latest",
                         "$base/photos/patient/${Uri.encode(activePatientId)}?limit=1&order=desc",
-                        "$base/photos?patient_id=${java.net.URLEncoder.encode(activePatientId, "UTF-8")}&limit=1&order=desc"
+                        "$base/photos?patient_id=${
+                            java.net.URLEncoder.encode(
+                                activePatientId,
+                                "UTF-8"
+                            )
+                        }&limit=1&order=desc"
                     )
 
                     fun extract(o: JSONObject) {
@@ -168,7 +175,10 @@ fun Patient_Quiz(
                                 "imageUrl",
                                 o.optString(
                                     "mediaUrl",
-                                    o.optString("photo_url", o.optString("photoUrl", o.optString("url", "")))
+                                    o.optString(
+                                        "photo_url",
+                                        o.optString("photoUrl", o.optString("url", ""))
+                                    )
                                 )
                             )
                         ).ifBlank { null }
@@ -198,14 +208,16 @@ fun Patient_Quiz(
                         runCatching {
                             val o = JSONObject(bodyStr)
                             extract(o)
-                            seeded = (seedImageUrl != null || seedDesc != null || seedPhotoId != null)
+                            seeded =
+                                (seedImageUrl != null || seedDesc != null || seedPhotoId != null)
                         }
                         // 배열 응답
                         if (!seeded) runCatching {
                             val arr = JSONArray(bodyStr)
                             if (arr.length() > 0) {
                                 extract(arr.getJSONObject(0))
-                                seeded = (seedImageUrl != null || seedDesc != null || seedPhotoId != null)
+                                seeded =
+                                    (seedImageUrl != null || seedDesc != null || seedPhotoId != null)
                             }
                         }
 
@@ -234,8 +246,6 @@ fun Patient_Quiz(
         }
 
 
-
-
         // 폴백 후에도 여전히 없으면 선택 화면으로 유도(필요 시 라우트 맞게 변경)
         if (seedImageUrl == null && seedDesc == null && seedPhotoId == null) {
             Toast.makeText(context, "회상 항목이 없습니다. 먼저 사진/설명을 등록해 주세요.", Toast.LENGTH_LONG).show()
@@ -245,11 +255,11 @@ fun Patient_Quiz(
 
         // ▶ 퀴즈 생성 API 호출
         quizViewModel.loadQuizzes(
-            patientId   = activePatientId,
-            photoId     = seedPhotoId,              // String? 유지
-            imageUrl    = seedImageUrl,
+            patientId = activePatientId,
+            photoId = seedPhotoId,              // String? 유지
+            imageUrl = seedImageUrl,
             description = seedDesc,
-            category    = seedCategory
+            category = seedCategory
         )
     }
 
@@ -289,81 +299,88 @@ fun Patient_Quiz(
     }
 
     Scaffold(bottomBar = { QuizBottomBar(navController, activePatientId) }) { innerPadding ->
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(Modifier.height(24.dp))
+            val scroll = rememberScrollState()
 
-            if (items.isEmpty()) {
-                if (error != null) {
-                    Text(
-                        "문제를 불러오지 못했습니다.\n$error",
-                        fontSize = 16.sp,
-                        color = Color(0xFFE2101A)
-                    )
-                    Spacer(Modifier.height(12.dp))
-                    Button(onClick = {
-                        stopTTS()
-                        val memImageUrl = prefs.getString("last_memory_image_url", null)
-                        val memDesc     = prefs.getString("last_memory_sentence", null)
-                        val photoId     = prefs.getString("last_photo_id", null)
-                        val imageUrl    = prefs.getString("last_image_url", null)
-                        val desc        = prefs.getString("last_description", null)
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)   // 👈 바닥 정렬
+                    .fillMaxWidth()
+                    .navigationBarsPadding()         // 제스처바/소프트키 피하기
+                    .imePadding()
+                    .padding(start = 24.dp, end = 24.dp, bottom = 12.dp)
+                    .verticalScroll(scroll),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Spacer(Modifier.height(8.dp))
 
+                if (items.isEmpty()) {
+                    if (error != null) {
+                        Text(
+                            "문제를 불러오지 못했습니다.\n$error",
+                            fontSize = 16.sp,
+                            color = Color(0xFFE2101A)
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        Button(onClick = {
+                            stopTTS()
+                            val memImageUrl = prefs.getString("last_memory_image_url", null)
+                            val memDesc = prefs.getString("last_memory_sentence", null)
+                            val photoId = prefs.getString("last_photo_id", null)
+                            val imageUrl = prefs.getString("last_image_url", null)
+                            val desc = prefs.getString("last_description", null)
 
-
-
-                        scope.launch {
-                            quizViewModel.loadQuizzes(
-                                patientId   = activePatientId,
-                                photoId     = photoId,
-                                imageUrl    = memImageUrl ?: imageUrl,
-                                description = memDesc ?: desc
-                            )
-                        }
-                    }) { Text("다시 시도") }
+                            scope.launch {
+                                quizViewModel.loadQuizzes(
+                                    patientId = activePatientId,
+                                    photoId = photoId,
+                                    imageUrl = memImageUrl ?: imageUrl,
+                                    description = memDesc ?: desc
+                                )
+                            }
+                        }) { Text("다시 시도") }
+                    } else {
+                        CircularProgressIndicator()
+                        Spacer(Modifier.height(16.dp))
+                        Text("로딩 중…", fontSize = 16.sp)
+                    }
                 } else {
-                    CircularProgressIndicator()
-                    Spacer(Modifier.height(16.dp))
-                    Text("로딩 중…", fontSize = 16.sp)
+                    val fallbackPhotoUrl = prefs.getString("last_memory_image_url", null)
+                        ?: prefs.getString("last_image_url", null)
+                    val uiPhotoUrl =
+                        items[currentIndex].imageUrl?.takeIf { it.isNotBlank() } ?: fallbackPhotoUrl
+
+                    QuizContent(
+                        patientId = activePatientId,
+                        item = items[currentIndex],
+                        client = client,
+                        hasPrev = currentIndex > 0,
+                        hasNext = currentIndex < items.size - 1,
+                        onPrev = {
+                            stopTTS()
+                            if (currentIndex > 0) currentIndex--
+                            else Toast.makeText(context, "첫 문제입니다.", Toast.LENGTH_SHORT).show()
+                        },
+                        onNext = {
+                            stopTTS()
+                            if (currentIndex < items.size - 1) currentIndex++
+                            else Toast.makeText(context, "문제를 모두 풀었습니다.", Toast.LENGTH_SHORT).show()
+                        },
+                        photoUrl = uiPhotoUrl
+                    )
                 }
-            } else {
-                // 서버가 준 이미지가 없으면, 업로드/메모리에서 저장해둔 값을 폴백으로 사용
-                val fallbackPhotoUrl = prefs.getString("last_memory_image_url", null)
-                    ?: prefs.getString("last_image_url", null)
-                val uiPhotoUrl = items[currentIndex].imageUrl?.takeIf { it.isNotBlank() } ?: fallbackPhotoUrl
 
-
-                QuizContent(
-                    patientId = activePatientId,
-                    item = items[currentIndex],
-                    client = client,
-                    hasPrev = currentIndex > 0,
-                    hasNext = currentIndex < items.size - 1,
-                    onPrev = {
-                        stopTTS()
-                        if (currentIndex > 0) currentIndex--
-                        else Toast.makeText(context, "첫 문제입니다.", Toast.LENGTH_SHORT).show()
-                    },
-                    onNext = {
-                        stopTTS()
-                        if (currentIndex < items.size - 1) currentIndex++
-                        else Toast.makeText(context, "문제를 모두 풀었습니다.", Toast.LENGTH_SHORT).show()
-                    },
-                    photoUrl = uiPhotoUrl            // ★ 추가 전달
-                )
+                Spacer(Modifier.height(8.dp)) // 바텀바와 살짝 간격
             }
-
         }
     }
 }
 
-// ────────────────────────────────────────────────
+    // ────────────────────────────────────────────────
 // 하단 탭
 // ────────────────────────────────────────────────
 @Composable
