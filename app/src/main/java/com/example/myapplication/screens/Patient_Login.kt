@@ -37,6 +37,7 @@ import okhttp3.Request
 import org.json.JSONObject
 import com.google.firebase.messaging.FirebaseMessaging
 import com.example.myapplication.service.NotificationService
+import androidx.compose.ui.text.TextStyle
 
 @Composable
 fun PatientLoginScreen(navController: NavController) {
@@ -151,7 +152,8 @@ fun PatientLoginScreen(navController: NavController) {
         OutlinedTextField(
             value = email,
             onValueChange = { email = it },
-            placeholder = { Text("example@mail.com 형식으로 입력하세요") },
+            textStyle = TextStyle(color = Color.Black),
+            placeholder = { Text("example@mail.com 형식으로 입력하세요", color = Color.Gray) },
             singleLine = true,
             modifier = Modifier
                 .fillMaxWidth()
@@ -176,7 +178,8 @@ fun PatientLoginScreen(navController: NavController) {
         OutlinedTextField(
             value = password,
             onValueChange = { password = it },
-            placeholder = { Text("6글자 이상 입력하세요") },
+            textStyle = TextStyle(color = Color.Black),
+            placeholder = { Text("6글자 이상 입력하세요", color = Color.Gray) },
             visualTransformation = PasswordVisualTransformation(),
             singleLine = true,
             modifier = Modifier

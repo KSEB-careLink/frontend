@@ -35,6 +35,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.text.TextStyle
 
 @Composable
 fun GuardianSignUpScreen(navController: NavController) {
@@ -113,7 +114,8 @@ fun GuardianSignUpScreen(navController: NavController) {
             OutlinedTextField(
                 value = email,
                 onValueChange = { email = it.trim() },
-                placeholder = { Text("example@mail.com 형식으로 입력하세요") },
+                textStyle = TextStyle(color = Color.Black),
+                placeholder = { Text("example@mail.com 형식으로 입력하세요", color = Color.Gray) },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                 modifier = Modifier.fillMaxWidth().height(fieldHeight)
@@ -124,7 +126,8 @@ fun GuardianSignUpScreen(navController: NavController) {
             OutlinedTextField(
                 value = password,
                 onValueChange = { password = it.trim() },
-                placeholder = { Text("6글자 이상 입력하세요") },
+                textStyle = TextStyle(color = Color.Black),
+                placeholder = { Text("6글자 이상 입력하세요", color = Color.Gray) },
                 visualTransformation = PasswordVisualTransformation(),
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth().height(fieldHeight)
