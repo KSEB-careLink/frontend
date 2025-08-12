@@ -1,8 +1,10 @@
+// app/src/main/java/com/example/myapplication/screens/MemoryInfoListScreen.kt
 package com.example.myapplication.screens
 
 import android.content.Context
 import android.util.Log
 import android.widget.Toast
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -22,8 +24,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
-import com.example.myapplication.R
 import com.example.myapplication.BuildConfig
+import com.example.myapplication.R
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
 import com.google.firebase.storage.ktx.storage
@@ -31,21 +33,20 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
-import androidx.compose.foundation.Image
 
-// SharedPreferences에서 보호자 ID 가져오기
-fun getGuardianIdFromPrefs(context: Context): String? =
+// SharedPreferences에서 환자 ID 가져오기 (이 화면에 로컬 정의 유지)
+private fun getPatientIdFromPrefs(context: Context): String? =
     context.getSharedPreferences("MyPrefs", Context.MODE_PRIVATE)
-        .getString("guardian_id", null)
+        .getString("patient_id", null)
 
 // 사진 아이템 데이터 클래스
 data class PhotoItem(
-    val id: String,
+    val id: Long,
     var description: String,
     val imageUrl: String,
     val category: String,
@@ -75,39 +76,54 @@ fun MemoryInfoListScreen(navController: NavController, patientId: String) {
 
     // 데이터 로드
     LaunchedEffect(Unit) {
-        val guardianId = getGuardianIdFromPrefs(context).orEmpty()
-        if (guardianId.isBlank()) {
-            Log.e("PhotosList", "보호자 ID 없음")
+        val localPatientId = patientId.ifBlank {
+            getPatientIdFromPrefs(context).orEmpty()
+        }
+        if (localPatientId.isBlank()) {
+            Log.e("PhotosList", "환자 ID 없음 (patientId 인자/Prefs 확인)")
+            Toast.makeText(context, "환자 ID가 없습니다.", Toast.LENGTH_SHORT).show()
             return@LaunchedEffect
         }
+
         val idToken = Firebase.auth.currentUser
             ?.getIdToken(true)?.await()?.token.orEmpty()
         if (idToken.isBlank()) {
             Log.e("PhotosList", "토큰 획득 실패")
+            Toast.makeText(context, "인증 토큰이 없습니다.", Toast.LENGTH_SHORT).show()
             return@LaunchedEffect
         }
+
         try {
+            // ✅ 올바른 엔드포인트로 수정: /photos/list/:patientId
+            val url = "${BuildConfig.BASE_URL}/photos/list/$localPatientId"
             val req = Request.Builder()
-                .url("${BuildConfig.BASE_URL}/photos/$guardianId")
+                .url(url)
                 .addHeader("Authorization", "Bearer $idToken")
                 .get()
                 .build()
             val res = withContext(Dispatchers.IO) { client.newCall(req).execute() }
+
+            val bodyStr = res.body?.string().orElse("")
             if (!res.isSuccessful) {
-                Log.e("PhotosList", "API 호출 실패: ${res.code}")
+                Log.e("PhotosList", "API 호출 실패: code=${res.code} body=$bodyStr")
+                Toast.makeText(context, "불러오기 실패(${res.code})", Toast.LENGTH_LONG).show()
                 return@LaunchedEffect
             }
-            val bodyStr = res.body?.string().orEmpty()
-            val arr = JSONObject(bodyStr).getJSONArray("photos")
+
+            // ✅ 응답 키: items 로 파싱
+            val json = JSONObject(bodyStr)
+            val arr = json.getJSONArray("items")
+
+            photoList.clear()
             for (i in 0 until arr.length()) {
                 val obj = arr.getJSONObject(i)
                 photoList.add(
                     PhotoItem(
-                        id = obj.getString("id"),
-                        description = obj.getString("description"),
-                        imageUrl = obj.getString("image_url"),
-                        category = obj.getString("category"),
-                        createdAt = obj.getString("created_at")
+                        id = obj.optLong("id"),
+                        description = obj.optString("description", ""),
+                        imageUrl = obj.optString("image_url", ""),
+                        category = obj.optString("category", ""),
+                        createdAt = obj.optString("created_at", "")
                     )
                 )
             }
@@ -194,9 +210,14 @@ fun MemoryInfoListScreen(navController: NavController, patientId: String) {
                     var imageModel by remember { mutableStateOf<String?>(null) }
                     LaunchedEffect(item.imageUrl) {
                         imageModel = try {
-                            if (item.imageUrl.startsWith("https://storage.googleapis.com/")) item.imageUrl
-                            else storage.getReferenceFromUrl(item.imageUrl)
-                                .downloadUrl.await().toString()
+                            // 백엔드는 public GCS URL 반환 (storage.googleapis.com) → 그대로 사용
+                            if (item.imageUrl.startsWith("https://storage.googleapis.com/")) {
+                                item.imageUrl
+                            } else {
+                                // 혹시 gs:// 또는 firebase 경로가 온 경우 대비
+                                storage.getReferenceFromUrl(item.imageUrl)
+                                    .downloadUrl.await().toString()
+                            }
                         } catch (e: Exception) {
                             Log.e("PhotosList", "URL 결정 실패", e)
                             null
@@ -217,7 +238,9 @@ fun MemoryInfoListScreen(navController: NavController, patientId: String) {
                                 contentScale = ContentScale.Crop,
                                 modifier = Modifier.matchParentSize()
                             )
-                        } else CircularProgressIndicator()
+                        } else {
+                            CircularProgressIndicator()
+                        }
                     }
                     Spacer(Modifier.height(8.dp))
                     Row(
@@ -317,6 +340,14 @@ fun MemoryInfoListScreen(navController: NavController, patientId: String) {
                                     withContext(Dispatchers.IO) {
                                         client.newCall(req).execute().use { res ->
                                             if (res.isSuccessful) photoList.remove(item)
+                                            else {
+                                                Log.e("PhotosList", "삭제 실패 code=${res.code}")
+                                                Toast.makeText(
+                                                    context,
+                                                    "삭제 실패(${res.code})",
+                                                    Toast.LENGTH_SHORT
+                                                ).show()
+                                            }
                                         }
                                     }
                                 }
@@ -335,6 +366,10 @@ fun MemoryInfoListScreen(navController: NavController, patientId: String) {
         )
     }
 }
+
+// 작은 헬퍼
+private fun String?.orElse(fallback: String) = if (this.isNullOrEmpty()) fallback else this
+
 
 
 
