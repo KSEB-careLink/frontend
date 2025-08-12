@@ -2,16 +2,12 @@
 package com.example.myapplication.screens
 
 import android.content.Context
+import android.util.Log
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Text
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -35,6 +31,9 @@ import java.nio.charset.StandardCharsets
 import java.time.YearMonth
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.util.concurrent.TimeUnit
+
+private const val TAG = "QuizStats"
 
 @Composable
 fun QuizStatsScreen() {
@@ -62,49 +61,85 @@ fun QuizStatsScreen() {
     }
 
     var errorMsg by remember { mutableStateOf<String?>(null) }
-    val client = remember { OkHttpClient() }
+
+    // 타임아웃 포함 클라이언트
+    val client = remember {
+        OkHttpClient.Builder()
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .writeTimeout(30, TimeUnit.SECONDS)
+            .build()
+    }
 
     // 서버 경로 상수 (서버 마운트에 맞춰 필요 시 수정)
-    val PATH_STATS = "/quizStats"          // 예) app.use('/quizStats', ...)
-    val PATH_MONTHLY_BASE = "/quiz-stats"  // 예) app.use('/quiz-stats', ...)  (카멜케이스면 "/quizStats"로 변경)
+    val PATH_STATS = "/quiz-stats"
+    val PATH_MONTHLY_BASE = "/quiz-stats"
+
+    // 초기 환경 로그
+    LaunchedEffect(Unit) {
+        Log.d(TAG, "BASE_URL=${BuildConfig.BASE_URL}")
+        Log.d(TAG, "PATH_STATS=$PATH_STATS, PATH_MONTHLY_BASE=$PATH_MONTHLY_BASE")
+    }
 
     LaunchedEffect(patientId, month) {
         if (patientId.isNullOrBlank()) {
             errorMsg = "환자 ID가 없습니다."
+            Log.e(TAG, "patientId is null/blank. Abort requests.")
             return@LaunchedEffect
         }
 
         // Firebase ID 토큰
-        val idToken = try { Firebase.auth.currentUser?.getIdToken(true)?.await()?.token } catch (_: Exception) { null }
+        val idToken = try {
+            Firebase.auth.currentUser?.getIdToken(true)?.await()?.token
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to get Firebase ID token: ${e.message}", e)
+            null
+        }
         if (idToken.isNullOrBlank()) {
             errorMsg = "인증 토큰이 없습니다."
+            Log.e(TAG, "ID token is null/blank. Abort requests.")
             return@LaunchedEffect
         }
+        Log.d(TAG, "patientId=$patientId, tokenLen=${idToken.length}, tokenMask=${mask(idToken)}")
+        Log.d(TAG, "Selected month=$month")
 
         // 1) 카테고리별 누적 통계
         launch {
+            val url = "${BuildConfig.BASE_URL}$PATH_STATS?patient_id=${enc(patientId)}"
             try {
-                val url = "${BuildConfig.BASE_URL}$PATH_STATS?patient_id=${enc(patientId)}"
-                val res = withContext(Dispatchers.IO) {
+                val t0 = System.nanoTime()
+                Log.d(TAG, "[REQ] GET $url")
+                Log.d(TAG, "[HDR] Authorization=Bearer ${mask(idToken)}")
+
+                val resp = withContext(Dispatchers.IO) {
                     client.newCall(
-                        Request.Builder().url(url)
+                        Request.Builder()
+                            .url(url)
                             .addHeader("Authorization", "Bearer $idToken")
                             .get()
                             .build()
                     ).execute()
                 }
-                if (!res.isSuccessful) throw Exception("통계 API 오류: ${res.code}")
-                val root = JSONObject(res.body?.string().orEmpty())
 
+                val bodyStr = resp.body?.string().orEmpty()
+                val tookMs = (System.nanoTime() - t0) / 1_000_000.0
+                Log.d(TAG, "[RES] code=${resp.code}, took=${"%.1f".format(tookMs)}ms")
+                Log.d(TAG, "[BODY] ${bodyStr.take(2000)}") // 최대 2000자만 로그
+
+                if (!resp.isSuccessful) throw Exception("통계 API 오류: ${resp.code}")
+
+                val root = JSONObject(bodyStr)
                 totalAccuracy = root.optDoubleOrNull("total_accuracy")
                 totalAvgTime  = root.optDoubleOrNull("total_avg_time")
 
                 val arr: JSONArray = root.optJSONArray("categories")
                     ?: throw Exception("categories 배열이 없습니다.")
                 statsList = List(arr.length()) { i -> arr.getJSONObject(i) }
+                Log.d(TAG, "categories.size=${statsList.size}")
 
                 if (errorMsg?.startsWith("통계") == true) errorMsg = null
             } catch (e: Exception) {
+                Log.e(TAG, "누적 통계 요청 실패: ${e.message}", e)
                 errorMsg = "통계 로드 실패: ${e.message}"
                 statsList = emptyList()
                 totalAccuracy = null
@@ -114,20 +149,31 @@ fun QuizStatsScreen() {
 
         // 2) 월간 통계
         launch {
+            val url = "${BuildConfig.BASE_URL}$PATH_MONTHLY_BASE/monthly" +
+                    "?patient_id=${enc(patientId)}&month=${enc(month)}"
             try {
-                val url = "${BuildConfig.BASE_URL}$PATH_MONTHLY_BASE/monthly" +
-                        "?patient_id=${enc(patientId)}&month=${enc(month)}"
-                val res = withContext(Dispatchers.IO) {
+                val t0 = System.nanoTime()
+                Log.d(TAG, "[REQ] GET $url")
+                Log.d(TAG, "[HDR] Authorization=Bearer ${mask(idToken)}")
+
+                val resp = withContext(Dispatchers.IO) {
                     client.newCall(
-                        Request.Builder().url(url)
+                        Request.Builder()
+                            .url(url)
                             .addHeader("Authorization", "Bearer $idToken")
                             .get()
                             .build()
                     ).execute()
                 }
-                if (!res.isSuccessful) throw Exception("월간 API 오류: ${res.code}")
-                val root = JSONObject(res.body?.string().orEmpty())
 
+                val bodyStr = resp.body?.string().orEmpty()
+                val tookMs = (System.nanoTime() - t0) / 1_000_000.0
+                Log.d(TAG, "[RES] code=${resp.code}, took=${"%.1f".format(tookMs)}ms")
+                Log.d(TAG, "[BODY] ${bodyStr.take(2000)}")
+
+                if (!resp.isSuccessful) throw Exception("월간 API 오류: ${resp.code}")
+
+                val root = JSONObject(bodyStr)
                 monthlyObj = root
                 val dailyArr = root.optJSONArray("daily")
                     ?: root.optJSONArray("by_day")
@@ -135,9 +181,11 @@ fun QuizStatsScreen() {
                 monthlyDaily = if (dailyArr != null) {
                     List(dailyArr.length()) { i -> dailyArr.getJSONObject(i) }
                 } else emptyList()
+                Log.d(TAG, "monthlyDaily.size=${monthlyDaily.size}")
 
                 if (errorMsg?.startsWith("월간") == true) errorMsg = null
             } catch (e: Exception) {
+                Log.e(TAG, "월간 통계 요청 실패: ${e.message}", e)
                 errorMsg = "월간 통계 로드 실패: ${e.message}"
                 monthlyObj = null
                 monthlyDaily = emptyList()
@@ -202,7 +250,6 @@ fun QuizStatsScreen() {
 
         // ───────── 카테고리별 누적 통계 ─────────
         Text("카테고리별 누적 통계", fontSize = 20.sp)
-        // 요청: 작은 글씨 설명 추가
         Text(
             "풀이 기록이 많아질수록 예상 정답률이 실제 정답률에 가까워집니다.",
             style = MaterialTheme.typography.bodySmall,
@@ -227,7 +274,6 @@ fun QuizStatsScreen() {
                         "$category: 정답 $correct / $total, 정확도 ${"%.1f".format(accPct)}%, 평균응답 ${"%.1f".format(avgTime)}초"
                     )
                     Spacer(Modifier.height(6.dp))
-                    // 정확도 프로그레스바
                     Column {
                         Text(
                             "정확도 ${"%.1f".format(accPct)}%",
@@ -294,6 +340,13 @@ private fun MonthDropdown(
 private fun enc(s: String): String =
     URLEncoder.encode(s, StandardCharsets.UTF_8.toString())
 
+// 토큰 마스킹
+private fun mask(token: String, prefix: Int = 10, suffix: Int = 6): String =
+    when {
+        token.length <= prefix + suffix -> "****"
+        else -> token.take(prefix) + "..." + token.takeLast(suffix)
+    }
+
 // JSONObject 확장: 안전 파싱
 private fun JSONObject.optDoubleOrNull(key: String): Double? =
     if (has(key) && !isNull(key)) {
@@ -303,6 +356,7 @@ private fun JSONObject.optDoubleOrNull(key: String): Double? =
 
 private fun JSONObject.optIntOrNull(key: String): Int? =
     if (has(key) && !isNull(key)) optInt(key) else null
+
 
 
 
