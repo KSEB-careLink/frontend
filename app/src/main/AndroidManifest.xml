@@ -41,7 +41,7 @@
 
     <!-- android:networkSecurityConfig="@xml/network_security_config"이거는 네트워크 보안 설정(Network Security Config)으로 10.0.2.2 만 허용 -->
     <application
-        android:name=".screens.MyApplication"
+        android:name=".Lock.MyApplication"
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"

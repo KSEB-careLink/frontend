@@ -1,4 +1,4 @@
-package com.example.myapplication.screens
+package com.example.myapplication.Lock
 
 import android.Manifest
 import android.app.NotificationChannel

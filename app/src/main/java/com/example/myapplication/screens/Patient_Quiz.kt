@@ -15,6 +15,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -408,7 +409,7 @@ private fun QuizBottomBar(navController: NavController, patientId: String) {
         tabs.forEach { tab ->
             val selected = currentRoute == tab.pattern || currentRoute == tab.actual
             NavigationBarItem(
-                icon = { Icon(Icons.Default.Timer, contentDescription = tab.label) },
+                icon = { Icon(Icons.Default.Star, contentDescription = tab.label) },
                 label = { Text(tab.label) },
                 selected = selected,
                 onClick = {

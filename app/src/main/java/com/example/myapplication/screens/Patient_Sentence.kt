@@ -59,6 +59,7 @@ import android.util.Log
 import androidx.compose.material.icons.filled.Star
 import java.util.concurrent.TimeUnit
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.material.icons.filled.CheckCircle
 
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
@@ -492,10 +493,21 @@ fun Patient_Sentence(
                     CircularProgressIndicator()
                 }
                 errorMsg != null && history.isEmpty() -> {
-                    Text(errorMsg!!, color = MaterialTheme.colorScheme.error, fontSize = 14.sp)
-                }
-                currentIndex !in history.indices -> {
-                    Text("표시할 회상 문장이 없습니다.", fontSize = 16.sp)
+                    Icon(
+                        imageVector = Icons.Default.CheckCircle,
+                        contentDescription = null,
+                        tint = Color(0xFF00C4B4),
+                        modifier = Modifier.size(48.dp)
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        "오늘의 회상정보를 모두 보셨습니다.",
+                        fontSize = 18.sp
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedButton(onClick = { scope.launch { loadInitial() } }) {
+                        Text("다시 시도")
+                    }
                 }
                 else -> {
                     val mem = history[currentIndex]
@@ -580,7 +592,7 @@ fun Patient_Sentence(
 
                     errorMsg?.let {
                         Spacer(Modifier.height(8.dp))
-                        Text(it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                        Text("오늘의 회상정보를 모두 보셨습니다.", color = Color.Gray, fontSize = 12.sp)
                     }
                 }
             }
