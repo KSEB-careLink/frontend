@@ -4,9 +4,9 @@ main branch는 사용하지 않음
 com.example.myapplication.screens에 실제로 보여지는 화면들이 있고 화면에 쓰이는 기능들은 com.example.myapplication의 package에 존재함
 
 공통 기능 및 화면: 
-1.로고 화면 및 에니메이션 효과.
-2.보호자,환자 선택 화면.
-3.잠금화면 해제시 소중한 하루를 챙겨보세요! 알림 전송.
+1.로고 화면 및 에니메이션 효과. / SplashScreen.kt
+2.보호자,환자 선택 화면. / Choose_Position Page.kt
+3.잠금화면 해제시 소중한 하루를 챙겨보세요! 알림 전송. / LockOverlayNotificationHelper, LockOverlayReceiver, MyApplication
 
 보호자 쪽 기능 및 화면:
 1.회원가입. / GuardianSignInPage.kt
