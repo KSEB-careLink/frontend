@@ -45,7 +45,7 @@ fun Main_Page2(navController: NavController, patientId: String) {
         Image(
             painter = painterResource(id = R.drawable.rogo),
             contentDescription = "CareLink 로고",
-            modifier = Modifier.size(200.dp)
+            modifier = Modifier.size(170.dp)
         )
 
         // 버튼 목록
