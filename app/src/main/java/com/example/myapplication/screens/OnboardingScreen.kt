@@ -49,7 +49,7 @@ fun ConsentScreen(modifier: Modifier = Modifier) {
             .navigationBarsPadding(),        // 하단 제스처바 피하기
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(84.dp))
 
         // 1) 상단 스크린샷: 화면이 작아도 너무 커지지 않게 최대 높이 제한
         Image(
@@ -97,7 +97,7 @@ fun ConsentScreen(modifier: Modifier = Modifier) {
 
         Spacer(Modifier.height(20.dp))
 
-        // 4) 동의 질문 (이 부분이 이제 안 잘립니다)
+        // 4) 동의 질문
         Text(
             text = "위 개인정보 수집·이용에 동의하십니까?",
             style = MaterialTheme.typography.bodyLarge,

@@ -54,7 +54,12 @@ fun QuizStatsScreen() {
     var monthlyObj by remember { mutableStateOf<JSONObject?>(null) }
     var monthlyDaily by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
 
-    // 최근 18개월 옵션
+    // 월간 예측 필드(새 스키마 대응)
+    var monthlyPredAcc by remember { mutableStateOf<Double?>(null) }
+    var monthlyColdStart by remember { mutableStateOf<Boolean?>(null) }
+    var monthlyBadges by remember { mutableStateOf<List<String>>(emptyList()) }
+
+    // 최근 18개월 옵션 (최신 → 과거 순)
     val monthOptions = remember(currentMonth) {
         val start = YearMonth.parse(currentMonth, ymFormatter)
         (0 until 18).map { i -> start.minusMonths(i.toLong()).format(ymFormatter) }
@@ -79,6 +84,7 @@ fun QuizStatsScreen() {
     LaunchedEffect(Unit) {
         Log.d(TAG, "BASE_URL=${BuildConfig.BASE_URL}")
         Log.d(TAG, "PATH_STATS=$PATH_STATS, PATH_MONTHLY_BASE=$PATH_MONTHLY_BASE")
+        Log.d(TAG, "monthOptions=${monthOptions.joinToString()}")
     }
 
     LaunchedEffect(patientId, month) {
@@ -103,6 +109,13 @@ fun QuizStatsScreen() {
         Log.d(TAG, "patientId=$patientId, tokenLen=${idToken.length}, tokenMask=${mask(idToken)}")
         Log.d(TAG, "Selected month=$month")
 
+        // 선택 월 변경 시 월간 섹션 초기화
+        monthlyObj = null
+        monthlyDaily = emptyList()
+        monthlyPredAcc = null
+        monthlyColdStart = null
+        monthlyBadges = emptyList()
+
         // 1) 카테고리별 누적 통계
         launch {
             val url = "${BuildConfig.BASE_URL}$PATH_STATS?patient_id=${enc(patientId)}"
@@ -124,7 +137,7 @@ fun QuizStatsScreen() {
                 val bodyStr = resp.body?.string().orEmpty()
                 val tookMs = (System.nanoTime() - t0) / 1_000_000.0
                 Log.d(TAG, "[RES] code=${resp.code}, took=${"%.1f".format(tookMs)}ms")
-                Log.d(TAG, "[BODY] ${bodyStr.take(2000)}") // 최대 2000자만 로그
+                Log.d(TAG, "[BODY] ${bodyStr.take(2000)}")
 
                 if (!resp.isSuccessful) throw Exception("통계 API 오류: ${resp.code}")
 
@@ -147,10 +160,11 @@ fun QuizStatsScreen() {
             }
         }
 
-        // 2) 월간 통계
+        // 2) 월간 통계 (캐시 버스터 추가)
         launch {
+            val ts = System.currentTimeMillis()
             val url = "${BuildConfig.BASE_URL}$PATH_MONTHLY_BASE/monthly" +
-                    "?patient_id=${enc(patientId)}&month=${enc(month)}"
+                    "?patient_id=${enc(patientId)}&month=${enc(month)}&_ts=$ts"
             try {
                 val t0 = System.nanoTime()
                 Log.d(TAG, "[REQ] GET $url")
@@ -175,13 +189,28 @@ fun QuizStatsScreen() {
 
                 val root = JSONObject(bodyStr)
                 monthlyObj = root
+
+                // 새 스키마(예측) 파싱
+                monthlyPredAcc = root.optDoubleOrNull("predicted_final_accuracy")
+                monthlyColdStart = root.optBooleanOrNull("cold_start")
+                val uiObj = root.optJSONObject("ui")
+                val badgesArr = uiObj?.optJSONArray("badges")
+                monthlyBadges = if (badgesArr != null) {
+                    List(badgesArr.length()) { i -> badgesArr.optString(i) }
+                } else emptyList()
+
+                // 일별(있으면 사용)
                 val dailyArr = root.optJSONArray("daily")
                     ?: root.optJSONArray("by_day")
                     ?: root.optJSONArray("days")
                 monthlyDaily = if (dailyArr != null) {
                     List(dailyArr.length()) { i -> dailyArr.getJSONObject(i) }
                 } else emptyList()
-                Log.d(TAG, "monthlyDaily.size=${monthlyDaily.size}")
+
+                Log.d(
+                    TAG,
+                    "monthlyDaily.size=${monthlyDaily.size}, predAcc=${monthlyPredAcc}, coldStart=${monthlyColdStart}, badges=${monthlyBadges.size}"
+                )
 
                 if (errorMsg?.startsWith("월간") == true) errorMsg = null
             } catch (e: Exception) {
@@ -189,6 +218,9 @@ fun QuizStatsScreen() {
                 errorMsg = "월간 통계 로드 실패: ${e.message}"
                 monthlyObj = null
                 monthlyDaily = emptyList()
+                monthlyPredAcc = null
+                monthlyColdStart = null
+                monthlyBadges = emptyList()
             }
         }
     }
@@ -199,18 +231,42 @@ fun QuizStatsScreen() {
             Spacer(Modifier.height(8.dp))
         }
 
-        // ───────── 월간 통계 + 드롭다운 ─────────
+        // ───────── 월간 통계 + 선택 UI ─────────
         Text("월간 통계", fontSize = 20.sp)
         Spacer(Modifier.height(6.dp))
 
-        MonthDropdown(
+        MonthSelector(
             month = month,
             options = monthOptions,
-            onSelect = { month = it },
+            onSelect = { selected ->
+                Log.d(TAG, "[UI] month option selected=$selected")
+                month = selected
+            }
         )
 
         Spacer(Modifier.height(6.dp))
 
+        // 월간 예측 정확도(새 스키마) 우선 표시
+        monthlyPredAcc?.let { p ->
+            val pct = if (p <= 1.0) p * 100.0 else p
+            Text("예상 최종 정확도: ${"%.1f".format(pct)}%")
+            if (monthlyColdStart == true) {
+                Text(
+                    "데이터가 적어 추정치 변동이 클 수 있어요.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.Gray
+                )
+            }
+            if (monthlyBadges.isNotEmpty()) {
+                Spacer(Modifier.height(4.dp))
+                monthlyBadges.forEach { b ->
+                    Text("• $b", style = MaterialTheme.typography.bodySmall)
+                }
+            }
+            Spacer(Modifier.height(6.dp))
+        }
+
+        // 구(舊) 스키마(accuracy/average_time/daily) 표시
         monthlyObj?.let { m ->
             val mAcc = m.optDoubleOrNull("accuracy") ?: m.optDoubleOrNull("total_accuracy")
             val mAvg = m.optDoubleOrNull("avg_time")
@@ -227,12 +283,22 @@ fun QuizStatsScreen() {
             mAvg?.let { parts.add("평균 ${"%.1f".format(it)}초") }
             if (mCorrect != null && mTotal != null) parts.add("정답 $mCorrect / $mTotal")
 
-            if (parts.isEmpty()) Text("월간 데이터가 없습니다.") else Text(parts.joinToString(", "))
-        } ?: Text("월간 데이터 없음")
+            if (parts.isEmpty()) {
+                if (monthlyPredAcc == null) {
+                    Text("월간 데이터가 없습니다.")
+                }
+            } else {
+                Text(parts.joinToString(", "))
+            }
+        } ?: run {
+            if (monthlyPredAcc == null) {
+                Text("월간 데이터 없음")
+            }
+        }
 
         if (monthlyDaily.isNotEmpty()) {
             Spacer(Modifier.height(6.dp))
-            val preview = monthlyDaily.take(5) // 처음 5일만 미리보기
+            val preview = monthlyDaily.take(5)
             preview.forEach { d ->
                 val day = d.optString("date", d.optString("day", d.optString("dt", "-")))
                 val acc = d.optDoubleOrNull("accuracy")
@@ -294,46 +360,80 @@ fun QuizStatsScreen() {
     }
 }
 
-/** 월 선택 드롭다운 (Exposed 없이 구현) */
+/** 월 선택: 드롭다운 + 이전/다음달 버튼 포함 (신뢰성 강화) */
 @Composable
-private fun MonthDropdown(
+private fun MonthSelector(
     month: String,
     options: List<String>,
     onSelect: (String) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
+    val idx = remember(month, options) { options.indexOf(month).coerceAtLeast(0) }
+    val canGoNewer = idx > 0                      // 리스트는 최신→과거, -1 하면 더 최신
+    val canGoOlder = idx < options.size - 1       // +1 하면 더 과거
 
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .wrapContentHeight(),
-        contentAlignment = Alignment.TopStart
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth()
     ) {
-        OutlinedTextField(
-            value = month,
-            onValueChange = {},
-            readOnly = true,
-            label = { Text("월 선택 (YYYY-MM)") },
-            trailingIcon = { Text(if (expanded) "▲" else "▼") },
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { expanded = !expanded }
-        )
+        TextButton(
+            onClick = {
+                val next = options.getOrNull(idx + 1) ?: return@TextButton
+                Log.d(TAG, "[UI] month prev-button -> $next")
+                onSelect(next)
+            },
+            enabled = canGoOlder
+        ) { Text("이전달") }
 
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false }
+        Spacer(Modifier.width(8.dp))
+
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .wrapContentHeight(),
+            contentAlignment = Alignment.TopStart
         ) {
-            options.forEach { option ->
-                DropdownMenuItem(
-                    text = { Text(option) },
-                    onClick = {
-                        onSelect(option)
-                        expanded = false
-                    }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { expanded = !expanded }
+            ) {
+                OutlinedTextField(
+                    value = month,
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("월 선택 (YYYY-MM)") },
+                    trailingIcon = { Text(if (expanded) "▲" else "▼") },
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
+
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false }
+            ) {
+                options.forEach { option ->
+                    DropdownMenuItem(
+                        text = { Text(option) },
+                        onClick = {
+                            onSelect(option)
+                            expanded = false
+                        }
+                    )
+                }
+            }
         }
+
+        Spacer(Modifier.width(8.dp))
+
+        TextButton(
+            onClick = {
+                val prev = options.getOrNull(idx - 1) ?: return@TextButton
+                Log.d(TAG, "[UI] month next-button -> $prev")
+                onSelect(prev)
+            },
+            enabled = canGoNewer
+        ) { Text("다음달") }
     }
 }
 
@@ -356,6 +456,9 @@ private fun JSONObject.optDoubleOrNull(key: String): Double? =
 
 private fun JSONObject.optIntOrNull(key: String): Int? =
     if (has(key) && !isNull(key)) optInt(key) else null
+
+private fun JSONObject.optBooleanOrNull(key: String): Boolean? =
+    if (has(key) && !isNull(key)) optBoolean(key) else null
 
 
 

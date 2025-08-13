@@ -39,13 +39,13 @@ fun Main_Page2(navController: NavController, patientId: String) {
         verticalArrangement = Arrangement.spacedBy(20.dp, alignment = Alignment.Top),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Spacer(modifier = Modifier.height(80.dp))
+        Spacer(modifier = Modifier.height(35.dp))
 
         // 로고
         Image(
             painter = painterResource(id = R.drawable.rogo),
             contentDescription = "CareLink 로고",
-            modifier = Modifier.size(170.dp)
+            modifier = Modifier.size(200.dp)
         )
 
         // 버튼 목록
