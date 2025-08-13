@@ -54,12 +54,15 @@ fun QuizStatsScreen() {
     var monthlyObj by remember { mutableStateOf<JSONObject?>(null) }
     var monthlyDaily by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
 
-    // 월간 예측 필드(새 스키마 대응)
-    var monthlyPredAcc by remember { mutableStateOf<Double?>(null) }
+    // 월간 예측/차트 필드
+    var monthlyPredAcc by remember { mutableStateOf<Double?>(null) }       // 0~1 or %
+    var monthlyAccuracyPct by remember { mutableStateOf<Double?>(null) }   // % (소수점)
     var monthlyColdStart by remember { mutableStateOf<Boolean?>(null) }
     var monthlyBadges by remember { mutableStateOf<List<String>>(emptyList()) }
+    var monthlyChart by remember { mutableStateOf<List<Pair<String, Double>>>(emptyList()) }
+    var monthlyChartTitle by remember { mutableStateOf<String?>(null) }
 
-    // 최근 18개월 옵션 (최신 → 과거 순)
+    // 최근 18개월 옵션
     val monthOptions = remember(currentMonth) {
         val start = YearMonth.parse(currentMonth, ymFormatter)
         (0 until 18).map { i -> start.minusMonths(i.toLong()).format(ymFormatter) }
@@ -76,7 +79,7 @@ fun QuizStatsScreen() {
             .build()
     }
 
-    // 서버 경로 상수 (서버 마운트에 맞춰 필요 시 수정)
+    // 서버 경로 상수
     val PATH_STATS = "/quiz-stats"
     val PATH_MONTHLY_BASE = "/quiz-stats"
 
@@ -84,7 +87,6 @@ fun QuizStatsScreen() {
     LaunchedEffect(Unit) {
         Log.d(TAG, "BASE_URL=${BuildConfig.BASE_URL}")
         Log.d(TAG, "PATH_STATS=$PATH_STATS, PATH_MONTHLY_BASE=$PATH_MONTHLY_BASE")
-        Log.d(TAG, "monthOptions=${monthOptions.joinToString()}")
     }
 
     LaunchedEffect(patientId, month) {
@@ -113,8 +115,11 @@ fun QuizStatsScreen() {
         monthlyObj = null
         monthlyDaily = emptyList()
         monthlyPredAcc = null
+        monthlyAccuracyPct = null
         monthlyColdStart = null
         monthlyBadges = emptyList()
+        monthlyChart = emptyList()
+        monthlyChartTitle = null
 
         // 1) 카테고리별 누적 통계
         launch {
@@ -190,14 +195,34 @@ fun QuizStatsScreen() {
                 val root = JSONObject(bodyStr)
                 monthlyObj = root
 
-                // 새 스키마(예측) 파싱
+                // ── 새 스키마(예측/차트) 파싱 ──
                 monthlyPredAcc = root.optDoubleOrNull("predicted_final_accuracy")
                 monthlyColdStart = root.optBooleanOrNull("cold_start")
+
+                // accuracy_percent 우선(이미 %)
+                monthlyAccuracyPct = root.optDoubleOrNull("accuracy_percent")
+                    ?: monthlyPredAcc?.let { if (it <= 1.0) it * 100.0 else it }
+
                 val uiObj = root.optJSONObject("ui")
                 val badgesArr = uiObj?.optJSONArray("badges")
                 monthlyBadges = if (badgesArr != null) {
                     List(badgesArr.length()) { i -> badgesArr.optString(i) }
                 } else emptyList()
+
+                val chartObj = root.optJSONObject("chart")
+                monthlyChartTitle = chartObj?.optString("title", null)
+                monthlyChart = buildList {
+                    val labels = chartObj?.optJSONArray("labels")
+                    val series = chartObj?.optJSONArray("series")
+                    if (labels != null && series != null) {
+                        val n = minOf(labels.length(), series.length())
+                        for (i in 0 until n) {
+                            val label = labels.optString(i)
+                            val value = series.optDouble(i, Double.NaN)
+                            if (!value.isNaN()) add(label to value)
+                        }
+                    }
+                }
 
                 // 일별(있으면 사용)
                 val dailyArr = root.optJSONArray("daily")
@@ -209,7 +234,7 @@ fun QuizStatsScreen() {
 
                 Log.d(
                     TAG,
-                    "monthlyDaily.size=${monthlyDaily.size}, predAcc=${monthlyPredAcc}, coldStart=${monthlyColdStart}, badges=${monthlyBadges.size}"
+                    "monthlyDaily.size=${monthlyDaily.size}, predAcc=${monthlyPredAcc}, accPct=${monthlyAccuracyPct}, coldStart=${monthlyColdStart}, badges=${monthlyBadges.size}, chartPoints=${monthlyChart.size}"
                 )
 
                 if (errorMsg?.startsWith("월간") == true) errorMsg = null
@@ -219,8 +244,11 @@ fun QuizStatsScreen() {
                 monthlyObj = null
                 monthlyDaily = emptyList()
                 monthlyPredAcc = null
+                monthlyAccuracyPct = null
                 monthlyColdStart = null
                 monthlyBadges = emptyList()
+                monthlyChart = emptyList()
+                monthlyChartTitle = null
             }
         }
     }
@@ -247,8 +275,7 @@ fun QuizStatsScreen() {
         Spacer(Modifier.height(6.dp))
 
         // 월간 예측 정확도(새 스키마) 우선 표시
-        monthlyPredAcc?.let { p ->
-            val pct = if (p <= 1.0) p * 100.0 else p
+        monthlyAccuracyPct?.let { pct ->
             Text("예상 최종 정확도: ${"%.1f".format(pct)}%")
             if (monthlyColdStart == true) {
                 Text(
@@ -263,7 +290,32 @@ fun QuizStatsScreen() {
                     Text("• $b", style = MaterialTheme.typography.bodySmall)
                 }
             }
+            Spacer(Modifier.height(8.dp))
+        }
+
+        // 차트 표시 (labels / series → 라벨별 프로그레스 바)
+        if (monthlyChart.isNotEmpty()) {
+            Text(monthlyChartTitle ?: "월간 예측 정확도 차트", fontSize = 16.sp)
             Spacer(Modifier.height(6.dp))
+            monthlyChart.forEach { (label, valuePct) ->
+                Column(Modifier.fillMaxWidth()) {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(label)
+                        Text("${"%.1f".format(valuePct)}%")
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    LinearProgressIndicator(
+                        progress = (valuePct / 100.0).toFloat(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(6.dp)
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+            }
         }
 
         // 구(舊) 스키마(accuracy/average_time/daily) 표시
@@ -283,15 +335,14 @@ fun QuizStatsScreen() {
             mAvg?.let { parts.add("평균 ${"%.1f".format(it)}초") }
             if (mCorrect != null && mTotal != null) parts.add("정답 $mCorrect / $mTotal")
 
-            if (parts.isEmpty()) {
-                if (monthlyPredAcc == null) {
-                    Text("월간 데이터가 없습니다.")
-                }
-            } else {
+            if (parts.isNotEmpty()) {
+                Spacer(Modifier.height(6.dp))
                 Text(parts.joinToString(", "))
+            } else if (monthlyAccuracyPct == null && monthlyChart.isEmpty()) {
+                Text("월간 데이터가 없습니다.")
             }
         } ?: run {
-            if (monthlyPredAcc == null) {
+            if (monthlyAccuracyPct == null && monthlyChart.isEmpty()) {
                 Text("월간 데이터 없음")
             }
         }
@@ -360,7 +411,7 @@ fun QuizStatsScreen() {
     }
 }
 
-/** 월 선택: 드롭다운 + 이전/다음달 버튼 포함 (신뢰성 강화) */
+/** 월 선택: 드롭다운 + 이전/다음달 버튼 */
 @Composable
 private fun MonthSelector(
     month: String,
@@ -369,8 +420,8 @@ private fun MonthSelector(
 ) {
     var expanded by remember { mutableStateOf(false) }
     val idx = remember(month, options) { options.indexOf(month).coerceAtLeast(0) }
-    val canGoNewer = idx > 0                      // 리스트는 최신→과거, -1 하면 더 최신
-    val canGoOlder = idx < options.size - 1       // +1 하면 더 과거
+    val canGoNewer = idx > 0
+    val canGoOlder = idx < options.size - 1
 
     Row(
         verticalAlignment = Alignment.CenterVertically,
