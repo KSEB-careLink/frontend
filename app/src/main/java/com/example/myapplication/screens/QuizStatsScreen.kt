@@ -3,6 +3,7 @@ package com.example.myapplication.screens
 
 import android.content.Context
 import android.util.Log
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -32,6 +33,13 @@ import java.time.YearMonth
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.concurrent.TimeUnit
+import androidx.compose.material3.Surface
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.ui.res.painterResource
+import com.example.myapplication.R
+import androidx.compose.foundation.border
 
 private const val TAG = "QuizStats"
 
@@ -51,21 +59,22 @@ fun QuizStatsScreen() {
     val ymFormatter = remember { DateTimeFormatter.ofPattern("yyyy-MM") }
     val currentMonth = remember { YearMonth.now(seoul).format(ymFormatter) }
     var month by remember { mutableStateOf(currentMonth) }
+
     var monthlyObj by remember { mutableStateOf<JSONObject?>(null) }
     var monthlyDaily by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
 
     // 월간 예측/차트 필드
-    var monthlyPredAcc by remember { mutableStateOf<Double?>(null) }       // 0~1 or %
-    var monthlyAccuracyPct by remember { mutableStateOf<Double?>(null) }   // % (소수점)
+    var monthlyPredAcc by remember { mutableStateOf<Double?>(null) }   // 0~1 or %
+    var monthlyAccuracyPct by remember { mutableStateOf<Double?>(null) } // % (소수점)
     var monthlyColdStart by remember { mutableStateOf<Boolean?>(null) }
     var monthlyBadges by remember { mutableStateOf<List<String>>(emptyList()) }
     var monthlyChart by remember { mutableStateOf<List<Pair<String, Double>>>(emptyList()) }
     var monthlyChartTitle by remember { mutableStateOf<String?>(null) }
 
-    // 최근 18개월 옵션
+    // 최근 6개월 옵션
     val monthOptions = remember(currentMonth) {
         val start = YearMonth.parse(currentMonth, ymFormatter)
-        (0 until 18).map { i -> start.minusMonths(i.toLong()).format(ymFormatter) }
+        (0 until 6).map { i -> start.minusMonths(i.toLong()).format(ymFormatter) }
     }
 
     var errorMsg by remember { mutableStateOf<String?>(null) }
@@ -103,11 +112,13 @@ fun QuizStatsScreen() {
             Log.e(TAG, "Failed to get Firebase ID token: ${e.message}", e)
             null
         }
+
         if (idToken.isNullOrBlank()) {
             errorMsg = "인증 토큰이 없습니다."
             Log.e(TAG, "ID token is null/blank. Abort requests.")
             return@LaunchedEffect
         }
+
         Log.d(TAG, "patientId=$patientId, tokenLen=${idToken.length}, tokenMask=${mask(idToken)}")
         Log.d(TAG, "Selected month=$month")
 
@@ -128,7 +139,6 @@ fun QuizStatsScreen() {
                 val t0 = System.nanoTime()
                 Log.d(TAG, "[REQ] GET $url")
                 Log.d(TAG, "[HDR] Authorization=Bearer ${mask(idToken)}")
-
                 val resp = withContext(Dispatchers.IO) {
                     client.newCall(
                         Request.Builder()
@@ -138,7 +148,6 @@ fun QuizStatsScreen() {
                             .build()
                     ).execute()
                 }
-
                 val bodyStr = resp.body?.string().orEmpty()
                 val tookMs = (System.nanoTime() - t0) / 1_000_000.0
                 Log.d(TAG, "[RES] code=${resp.code}, took=${"%.1f".format(tookMs)}ms")
@@ -148,13 +157,10 @@ fun QuizStatsScreen() {
 
                 val root = JSONObject(bodyStr)
                 totalAccuracy = root.optDoubleOrNull("total_accuracy")
-                totalAvgTime  = root.optDoubleOrNull("total_avg_time")
-
-                val arr: JSONArray = root.optJSONArray("categories")
-                    ?: throw Exception("categories 배열이 없습니다.")
+                totalAvgTime = root.optDoubleOrNull("total_avg_time")
+                val arr: JSONArray = root.optJSONArray("categories") ?: throw Exception("categories 배열이 없습니다.")
                 statsList = List(arr.length()) { i -> arr.getJSONObject(i) }
                 Log.d(TAG, "categories.size=${statsList.size}")
-
                 if (errorMsg?.startsWith("통계") == true) errorMsg = null
             } catch (e: Exception) {
                 Log.e(TAG, "누적 통계 요청 실패: ${e.message}", e)
@@ -174,7 +180,6 @@ fun QuizStatsScreen() {
                 val t0 = System.nanoTime()
                 Log.d(TAG, "[REQ] GET $url")
                 Log.d(TAG, "[HDR] Authorization=Bearer ${mask(idToken)}")
-
                 val resp = withContext(Dispatchers.IO) {
                     client.newCall(
                         Request.Builder()
@@ -184,7 +189,6 @@ fun QuizStatsScreen() {
                             .build()
                     ).execute()
                 }
-
                 val bodyStr = resp.body?.string().orEmpty()
                 val tookMs = (System.nanoTime() - t0) / 1_000_000.0
                 Log.d(TAG, "[RES] code=${resp.code}, took=${"%.1f".format(tookMs)}ms")
@@ -236,7 +240,6 @@ fun QuizStatsScreen() {
                     TAG,
                     "monthlyDaily.size=${monthlyDaily.size}, predAcc=${monthlyPredAcc}, accPct=${monthlyAccuracyPct}, coldStart=${monthlyColdStart}, badges=${monthlyBadges.size}, chartPoints=${monthlyChart.size}"
                 )
-
                 if (errorMsg?.startsWith("월간") == true) errorMsg = null
             } catch (e: Exception) {
                 Log.e(TAG, "월간 통계 요청 실패: ${e.message}", e)
@@ -253,160 +256,193 @@ fun QuizStatsScreen() {
         }
     }
 
-    Column(modifier = Modifier.padding(16.dp)) {
-        errorMsg?.let {
-            Text("오류: $it", color = MaterialTheme.colorScheme.error)
-            Spacer(Modifier.height(8.dp))
-        }
-
-        // ───────── 월간 통계 + 선택 UI ─────────
-        Text("월간 통계", fontSize = 20.sp)
-        Spacer(Modifier.height(6.dp))
-
-        MonthSelector(
-            month = month,
-            options = monthOptions,
-            onSelect = { selected ->
-                Log.d(TAG, "[UI] month option selected=$selected")
-                month = selected
-            }
-        )
-
-        Spacer(Modifier.height(6.dp))
-
-        // 월간 예측 정확도(새 스키마) 우선 표시
-        monthlyAccuracyPct?.let { pct ->
-            Text("예상 최종 정확도: ${"%.1f".format(pct)}%")
-            if (monthlyColdStart == true) {
-                Text(
-                    "데이터가 적어 추정치 변동이 클 수 있어요.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color.Gray
-                )
-            }
-            if (monthlyBadges.isNotEmpty()) {
-                Spacer(Modifier.height(4.dp))
-                monthlyBadges.forEach { b ->
-                    Text("• $b", style = MaterialTheme.typography.bodySmall)
-                }
-            }
-            Spacer(Modifier.height(8.dp))
-        }
-
-        // 차트 표시 (labels / series → 라벨별 프로그레스 바)
-        if (monthlyChart.isNotEmpty()) {
-            Text(monthlyChartTitle ?: "월간 예측 정확도 차트", fontSize = 16.sp)
-            Spacer(Modifier.height(6.dp))
-            monthlyChart.forEach { (label, valuePct) ->
-                Column(Modifier.fillMaxWidth()) {
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(label)
-                        Text("${"%.1f".format(valuePct)}%")
-                    }
-                    Spacer(Modifier.height(4.dp))
-                    LinearProgressIndicator(
-                        progress = (valuePct / 100.0).toFloat(),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(6.dp)
-                    )
-                }
+    // ─────────────────────────────────────────────────────────────
+    // 화면 UI (테두리 추가)
+    // ─────────────────────────────────────────────────────────────
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .border(width = 7.dp, color = Color(0xFFE795BF))
+            .padding(24.dp) // 테두리와 내용 사이 여백
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+        ) {
+            errorMsg?.let {
+                Text("오류: $it", color = MaterialTheme.colorScheme.error)
                 Spacer(Modifier.height(8.dp))
             }
-        }
 
-        // 구(舊) 스키마(accuracy/average_time/daily) 표시
-        monthlyObj?.let { m ->
-            val mAcc = m.optDoubleOrNull("accuracy") ?: m.optDoubleOrNull("total_accuracy")
-            val mAvg = m.optDoubleOrNull("avg_time")
-                ?: m.optDoubleOrNull("average_time")
-                ?: m.optDoubleOrNull("total_avg_time")
-            val mTotal = m.optIntOrNull("total")
-                ?: m.optIntOrNull("total_attempts")
-                ?: m.optIntOrNull("total_questions")
-            val mCorrect = m.optIntOrNull("correct")
-                ?: m.optIntOrNull("correct_count")
+            // ───────── 월간 통계 + 선택 UI ─────────
+            Text("월간 통계", fontSize = 20.sp)
+            Spacer(Modifier.height(26.dp))
 
-            val parts = mutableListOf<String>()
-            mAcc?.let { parts.add("정확도 ${"%.1f".format(it)}%") }
-            mAvg?.let { parts.add("평균 ${"%.1f".format(it)}초") }
-            if (mCorrect != null && mTotal != null) parts.add("정답 $mCorrect / $mTotal")
-
-            if (parts.isNotEmpty()) {
-                Spacer(Modifier.height(6.dp))
-                Text(parts.joinToString(", "))
-            } else if (monthlyAccuracyPct == null && monthlyChart.isEmpty()) {
-                Text("월간 데이터가 없습니다.")
-            }
-        } ?: run {
-            if (monthlyAccuracyPct == null && monthlyChart.isEmpty()) {
-                Text("월간 데이터 없음")
-            }
-        }
-
-        if (monthlyDaily.isNotEmpty()) {
-            Spacer(Modifier.height(6.dp))
-            val preview = monthlyDaily.take(5)
-            preview.forEach { d ->
-                val day = d.optString("date", d.optString("day", d.optString("dt", "-")))
-                val acc = d.optDoubleOrNull("accuracy")
-                val avg = d.optDoubleOrNull("avg_time") ?: d.optDoubleOrNull("average_time")
-                val line = buildString {
-                    append(" - $day")
-                    if (acc != null) append(" · ${"%.1f".format(acc)}%")
-                    if (avg != null) append(" · ${"%.1f".format(avg)}초")
+            MonthSelector(
+                month = month,
+                options = monthOptions,
+                onSelect = { selected ->
+                    Log.d(TAG, "[UI] month option selected=$selected")
+                    month = selected
                 }
-                Text(line)
-            }
-        }
+            )
 
-        Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(26.dp))
 
-        // ───────── 카테고리별 누적 통계 ─────────
-        Text("카테고리별 누적 통계", fontSize = 20.sp)
-        Text(
-            "풀이 기록이 많아질수록 예상 정답률이 실제 정답률에 가까워집니다.",
-            style = MaterialTheme.typography.bodySmall,
-            color = Color.Gray
-        )
-        Spacer(Modifier.height(6.dp))
+            // 차트 표시 (labels / series → 라벨별 프로그레스 바)
+            if (monthlyChart.isNotEmpty()) {
+                Text("다음달 예측 정답률 ($month) 기준", fontSize = 16.sp)
+                Spacer(Modifier.height(6.dp))
 
-        totalAccuracy?.let { Text("전체 정확도: ${"%.1f".format(it)}%") }
-        totalAvgTime?.let { Text("평균 응답 시간: ${"%.1f".format(it)}초") }
-        if (totalAccuracy != null || totalAvgTime != null) Spacer(Modifier.height(8.dp))
+                monthlyChart.forEach { (label, valuePct) ->
+                    val shownLabel = remember(label) {
+                        runCatching {
+                            YearMonth.parse(label, ymFormatter).plusMonths(1).format(ymFormatter)
+                        }.getOrElse { label } // 파싱 안 되면 원래 라벨 유지
+                    }
 
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            items(statsList) { stat ->
-                val category = stat.optString("category", "-")
-                val total = stat.optInt("total", 0)
-                val correct = stat.optInt("correct", 0)
-                val accPct = stat.optDouble("accuracy", 0.0).coerceIn(0.0, 100.0)
-                val avgTime = stat.optDouble("avg_time", 0.0)
-
-                Column {
-                    Text(
-                        "$category: 정답 $correct / $total, 정확도 ${"%.1f".format(accPct)}%, 평균응답 ${"%.1f".format(avgTime)}초"
-                    )
-                    Spacer(Modifier.height(6.dp))
-                    Column {
-                        Text(
-                            "정확도 ${"%.1f".format(accPct)}%",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color.Gray
-                        )
+                    Column(Modifier.fillMaxWidth()) {
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(shownLabel)
+                            Text("${"%.1f".format(valuePct)}%")
+                        }
                         Spacer(Modifier.height(4.dp))
                         LinearProgressIndicator(
-                            progress = (accPct / 100.0).toFloat(),
+                            progress = (valuePct / 100.0).toFloat(),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(6.dp)
                         )
                     }
+                    Spacer(Modifier.height(8.dp))
                 }
             }
+
+            // 구(舊) 스키마(accuracy/average_time/daily) 표시
+            monthlyObj?.let { m ->
+                val mAcc = m.optDoubleOrNull("accuracy") ?: m.optDoubleOrNull("total_accuracy")
+                val mAvg = m.optDoubleOrNull("avg_time")
+                    ?: m.optDoubleOrNull("average_time")
+                    ?: m.optDoubleOrNull("total_avg_time")
+                val mTotal = m.optIntOrNull("total")
+                    ?: m.optIntOrNull("total_attempts")
+                    ?: m.optIntOrNull("total_questions")
+                val mCorrect = m.optIntOrNull("correct") ?: m.optIntOrNull("correct_count")
+
+                val parts = mutableListOf<String>()
+                mAcc?.let { parts.add("정답률 ${"%.1f".format(it)}%") }
+                mAvg?.let { parts.add("평균 ${"%.1f".format(it)}초") }
+                if (mCorrect != null && mTotal != null) parts.add("정답 $mCorrect / $mTotal")
+
+                if (parts.isNotEmpty()) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(parts.joinToString(", "))
+                } else if (monthlyAccuracyPct == null && monthlyChart.isEmpty()) {
+                    Text("월간 데이터가 없습니다.")
+                }
+            } ?: run {
+                if (monthlyAccuracyPct == null && monthlyChart.isEmpty()) {
+                    Text("월간 데이터 없음")
+                }
+            }
+
+            if (monthlyDaily.isNotEmpty()) {
+                Spacer(Modifier.height(6.dp))
+                val preview = monthlyDaily.take(5)
+                preview.forEach { d ->
+                    val day = d.optString("date", d.optString("day", d.optString("dt", "-")))
+                    val acc = d.optDoubleOrNull("accuracy")
+                    val avg = d.optDoubleOrNull("avg_time") ?: d.optDoubleOrNull("average_time")
+                    val line = buildString {
+                        append(" - $day")
+                        if (acc != null) append(" · ${"%.1f".format(acc)}%")
+                        if (avg != null) append(" · ${"%.1f".format(avg)}초")
+                    }
+                    Text(line)
+                }
+            }
+
+            // 섹션 간격 + 구분선
+            Spacer(Modifier.height(24.dp))
+            Divider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
+            Spacer(Modifier.height(24.dp))
+
+            // ───────── 카테고리별 누적 통계 ─────────
+            Text("카테고리별 누적 통계", fontSize = 20.sp)
+            Text(
+                "풀이 기록이 많아질수록 예상 정답률이 실제 정답률에 가까워집니다.",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.Gray
+            )
+            Spacer(Modifier.height(6.dp))
+
+            totalAccuracy?.let { Text("전체 정답률: ${"%.1f".format(it)}%") }
+            totalAvgTime?.let { Text("평균 응답 시간: ${"%.1f".format(it)}초") }
+            if (totalAccuracy != null || totalAvgTime != null) Spacer(Modifier.height(8.dp))
+
+            // 리스트(비-Lazy) — 상위가 스크롤이므로 충돌 방지
+            Column(
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                statsList.forEach { stat ->
+                    val category = stat.optString("category", "-")
+                    val total = stat.optInt("total", 0)
+                    val correct = stat.optInt("correct", 0)
+                    val accPct = stat.optDouble("accuracy", 0.0).coerceIn(0.0, 100.0)
+                    val avgTime = stat.optDouble("avg_time", 0.0)
+
+                    Column {
+                        Text(
+                            "$category: 정답 $correct / $total, 정답률 ${"%.1f".format(accPct)}%, 평균응답 ${"%.1f".format(avgTime)}초"
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        Column {
+                            Text(
+                                "정답률 ${"%.1f".format(accPct)}%",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.Gray
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            LinearProgressIndicator(
+                                progress = (accPct / 100.0).toFloat(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(6.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
+            // ───────── 가이드 카드 (하단 보조 설명) ─────────
+            Spacer(Modifier.height(36.dp))
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                tonalElevation = 2.dp,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(Modifier.padding(16.dp)) {
+                    Text("통계를 더 잘 사용하는 법", fontSize = 16.sp)
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "• 이번 달에 푼 문제수가 늘수록 예측 정답률이 안정됩니다.\n" +
+                                "• 상단에서 월을 바꿔 지난 기록도 확인해 보세요.\n" +
+                                "• 카테고리를 고르게 풀면 누적 정확도가 빨리 올라갑니다.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.Gray,
+                        lineHeight = 18.sp
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.navigationBarsPadding())
         }
     }
 }
@@ -492,11 +528,10 @@ private fun enc(s: String): String =
     URLEncoder.encode(s, StandardCharsets.UTF_8.toString())
 
 // 토큰 마스킹
-private fun mask(token: String, prefix: Int = 10, suffix: Int = 6): String =
-    when {
-        token.length <= prefix + suffix -> "****"
-        else -> token.take(prefix) + "..." + token.takeLast(suffix)
-    }
+private fun mask(token: String, prefix: Int = 10, suffix: Int = 6): String = when {
+    token.length <= prefix + suffix -> "****"
+    else -> token.take(prefix) + "..." + token.takeLast(suffix)
+}
 
 // JSONObject 확장: 안전 파싱
 private fun JSONObject.optDoubleOrNull(key: String): Double? =
@@ -510,6 +545,8 @@ private fun JSONObject.optIntOrNull(key: String): Int? =
 
 private fun JSONObject.optBooleanOrNull(key: String): Boolean? =
     if (has(key) && !isNull(key)) optBoolean(key) else null
+
+
 
 
 

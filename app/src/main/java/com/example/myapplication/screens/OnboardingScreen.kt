@@ -172,7 +172,7 @@ fun OnboardingScreen(
                 4 -> TutorialPage("회상정보의 카테고리를 정하세요.", R.drawable.ic_4, Modifier.fillMaxSize())
                 5 -> TutorialPage("회상정보를 모두 기입하세요.", R.drawable.ic_5, Modifier.fillMaxSize())
                 6 -> TutorialPage("회상 정보 업로드 버튼을 누르세요.", R.drawable.ic_6, Modifier.fillMaxSize())
-                7 -> TutorialPage("회상정보를 9번 입력하고 앱을 이용해 보세요!", R.drawable.ic_7, Modifier.fillMaxSize())
+                7 -> TutorialPage("회상정보를 9번 입력하고 앱을 이용해 보세요!\n     이후 기본 정보와 음성을 등록해주세요", R.drawable.ic_7, Modifier.fillMaxSize())
             }
         }
 

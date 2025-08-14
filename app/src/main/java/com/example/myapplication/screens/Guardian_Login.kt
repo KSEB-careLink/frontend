@@ -220,7 +220,7 @@ fun Guardian_Login(navController: NavController) {
                                 showToast("연결된 환자가 없습니다. 먼저 연결을 진행해주세요.")
                             }
                         } else {
-                            showToast("역할 또는 코드 오류")
+                            showToast("보호자 계정이 아닙니다")
                         }
 
                     } catch (e: Exception) {

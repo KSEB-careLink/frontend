@@ -154,7 +154,7 @@ fun Main_Page(navController: NavController) {
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // ─── 4) 환자 추가 버튼 ─────────────────────
+
         Button(
             onClick = { navController.navigate("choose") },
             modifier = Modifier

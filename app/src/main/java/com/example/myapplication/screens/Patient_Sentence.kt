@@ -9,8 +9,8 @@ import android.media.AudioManager
 import android.media.MediaPlayer
 import android.media.ToneGenerator
 import android.net.Uri
+import android.util.Log
 import android.widget.Toast
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -19,6 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -31,6 +32,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -55,10 +57,7 @@ import okhttp3.Request
 import okhttp3.logging.HttpLoggingInterceptor
 import org.json.JSONArray
 import org.json.JSONObject
-import android.util.Log
-import androidx.compose.material.icons.filled.Star
 import java.util.concurrent.TimeUnit
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material.icons.filled.CheckCircle
 
 @OptIn(ExperimentalPermissionsApi::class)
@@ -73,22 +72,22 @@ fun Patient_Sentence(
         mutableStateOf(resolvePatientId(context, patientId))
     }
 
-//    // ─── 1) 위치 권한 + 서비스 시작 ────────────────────────────────────────────
-//    val perms = rememberMultiplePermissionsState(
-//        listOf(
-//            Manifest.permission.ACCESS_COARSE_LOCATION,
-//            Manifest.permission.ACCESS_FINE_LOCATION
-//        )
-//    )
-//    LaunchedEffect(perms.allPermissionsGranted) {
-//        if (!perms.allPermissionsGranted) {
-//            perms.launchMultiplePermissionRequest()
-//        } else {
-//            Intent(context, LocationUpdatesService::class.java).also { intent ->
-//                ContextCompat.startForegroundService(context, intent)
-//            }
-//        }
-//    }
+    // ─── 1) 위치 권한 + 서비스 시작 ────────────────────────────────────────────
+    val perms = rememberMultiplePermissionsState(
+        listOf(
+            Manifest.permission.ACCESS_COARSE_LOCATION,
+            Manifest.permission.ACCESS_FINE_LOCATION
+        )
+    )
+    LaunchedEffect(perms.allPermissionsGranted) {
+        if (!perms.allPermissionsGranted) {
+            perms.launchMultiplePermissionRequest()
+        } else {
+            Intent(context, LocationUpdatesService::class.java).also { intent ->
+                ContextCompat.startForegroundService(context, intent)
+            }
+        }
+    }
 
     // ─── 2) OkHttp 클라이언트 (로깅 포함) ──────────────────────────────────────
     val client = remember {
@@ -115,7 +114,8 @@ fun Patient_Sentence(
     val history = remember { mutableStateListOf<MemoryOne>() }
     var currentIndex by remember { mutableStateOf(-1) }
 
-    var isLoading by remember { mutableStateOf(false) }
+    // 초기 첫 Compose에서 빈 리스트 접근 방지 위해 true로 시작
+    var isLoading by remember { mutableStateOf(true) }
     var errorMsg by remember { mutableStateOf<String?>(null) }
 
     // ✔ 이미 본 조합 기록(중복 방지)
@@ -320,7 +320,7 @@ fun Patient_Sentence(
                     Toast.LENGTH_SHORT
                 ).show()
             }
-            //8월10일 추가
+            // 8월10일 추가
             val prefs = ctx.getSharedPreferences("MyPrefs", Context.MODE_PRIVATE)
             prefs.edit()
                 .putString("last_memory_sentence", picked)
@@ -355,6 +355,13 @@ fun Patient_Sentence(
 
     LaunchedEffect(activePatientId) {
         loadInitial()
+    }
+
+    // history 크기가 변하면 인덱스를 안전 구간으로 보정
+    LaunchedEffect(history.size) {
+        if (history.isNotEmpty() && currentIndex !in history.indices) {
+            currentIndex = 0
+        }
     }
 
     // ─── 8) 다음/이전 이동 로직 ───────────────────────────────────────────────
@@ -488,11 +495,11 @@ fun Patient_Sentence(
             }
             Spacer(Modifier.height(12.dp))
 
-            when {
-                isLoading && history.isEmpty() -> {
+            // ✅ 빈 리스트일 때는 어떤 경우에도 인덱스 접근 금지
+            if (history.isEmpty()) {
+                if (isLoading) {
                     CircularProgressIndicator()
-                }
-                errorMsg != null && history.isEmpty() -> {
+                } else {
                     Icon(
                         imageVector = Icons.Default.CheckCircle,
                         contentDescription = null,
@@ -501,7 +508,7 @@ fun Patient_Sentence(
                     )
                     Spacer(Modifier.height(12.dp))
                     Text(
-                        "오늘의 회상정보를 모두 보셨습니다.",
+                        text = errorMsg ?: "오늘의 회상정보를 모두 보셨습니다.",
                         fontSize = 18.sp
                     )
                     Spacer(Modifier.height(8.dp))
@@ -509,92 +516,99 @@ fun Patient_Sentence(
                         Text("다시 시도")
                     }
                 }
-                else -> {
-                    val mem = history[currentIndex]
+                // history가 비어있으면 아래 컨텐츠는 렌더하지 않음
+                return@Scaffold
+            }
 
-                    if (mem.imageUrl != null) {
-                        AsyncImage(
-                            model = mem.imageUrl,
-                            contentDescription = "Memory Photo",
-                            placeholder = painterResource(R.drawable.rogo),
-                            error = painterResource(R.drawable.rogo),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(220.dp)
-                                .clip(RoundedCornerShape(12.dp)),
-                            contentScale = ContentScale.Crop
-                        )
-                    } else {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(220.dp)
-                                .clip(RoundedCornerShape(12.dp)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text("이미지 없음", color = Color.Gray, fontSize = 14.sp)
-                        }
-                    }
-                    Spacer(Modifier.height(12.dp))
+            // 여기부터는 history가 최소 1개 보장
+            val safeIndex = currentIndex.coerceIn(0, history.lastIndex)
+            val mem = history.getOrNull(safeIndex) ?: run {
+                // 극히 드문 경합 상황 대비
+                Text("로딩 중…")
+                return@Scaffold
+            }
 
-                    Button(
-                        onClick = { scope.launch { stopTTS(); playTTS(mem.mp3Url, context) } },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 52.dp)         // ← 고정 높이 제거, 최소만 보장
-                            .wrapContentHeight(),          // ← 내용만큼 세로 확장
-                        shape = RoundedCornerShape(8.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C4B4)),
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp) // 여백 확보
-                    ) {
-                        Text(
-                            text = mem.sentence,
-                            color = Color.White,
-                            fontSize = 16.sp,
-                            lineHeight = 22.sp,            // ← 줄간격 확보
-                            maxLines = 3,                  // 필요시 4로 늘리기
-                            overflow = TextOverflow.Ellipsis,
-                            softWrap = true
-                        )
-                    }
-
-                    Spacer(Modifier.height(16.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        OutlinedButton(
-                            onClick = { scope.launch { goPrev() } },
-                            enabled = canGoPrev() && !isLoading
-                        ) {
-                            Icon(Icons.Default.ArrowBack, contentDescription = "이전")
-                            Spacer(Modifier.width(8.dp))
-                            Text("이전 문장")
-                        }
-
-                        Text("${currentIndex + 1} / ${history.size}", fontSize = 14.sp)
-
-                        Button(
-                            onClick = { scope.launch { goNext() } },
-                            enabled = canGoNext() && !isLoading
-                        ) {
-                            Text("다음 문장")
-                            Spacer(Modifier.width(8.dp))
-                            Icon(Icons.Default.ArrowForward, contentDescription = "다음")
-                        }
-                    }
-
-                    if (isLoading && history.isNotEmpty()) {
-                        Spacer(Modifier.height(12.dp))
-                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                    }
-
-                    errorMsg?.let {
-                        Spacer(Modifier.height(8.dp))
-                        Text("오늘의 회상정보를 모두 보셨습니다.", color = Color.Gray, fontSize = 12.sp)
-                    }
+            if (mem.imageUrl != null) {
+                AsyncImage(
+                    model = mem.imageUrl,
+                    contentDescription = "Memory Photo",
+                    placeholder = painterResource(R.drawable.rogo),
+                    error = painterResource(R.drawable.rogo),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(220.dp)
+                        .clip(RoundedCornerShape(12.dp)),
+                    contentScale = ContentScale.Crop
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(220.dp)
+                        .clip(RoundedCornerShape(12.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("이미지 없음", color = Color.Gray, fontSize = 14.sp)
                 }
+            }
+            Spacer(Modifier.height(12.dp))
+
+            Button(
+                onClick = { scope.launch { stopTTS(); playTTS(mem.mp3Url, context) } },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 52.dp)
+                    .wrapContentHeight(),
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C4B4)),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp)
+            ) {
+                Text(
+                    text = mem.sentence,
+                    color = Color.White,
+                    fontSize = 16.sp,
+                    lineHeight = 22.sp,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                    softWrap = true
+                )
+            }
+
+            Spacer(Modifier.height(16.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                OutlinedButton(
+                    onClick = { scope.launch { goPrev() } },
+                    enabled = safeIndex > 0 && !isLoading
+                ) {
+                    Icon(Icons.Default.ArrowBack, contentDescription = "이전")
+                    Spacer(Modifier.width(8.dp))
+                    Text("이전 문장")
+                }
+
+                Text("${safeIndex + 1} / ${history.size}", fontSize = 14.sp)
+
+                Button(
+                    onClick = { scope.launch { goNext() } },
+                    enabled = !isLoading
+                ) {
+                    Text("다음 문장")
+                    Spacer(Modifier.width(8.dp))
+                    Icon(Icons.Default.ArrowForward, contentDescription = "다음")
+                }
+            }
+
+            if (isLoading && history.isNotEmpty()) {
+                Spacer(Modifier.height(12.dp))
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            }
+
+            errorMsg?.let {
+                Spacer(Modifier.height(8.dp))
+                Text("오늘의 회상정보를 모두 보셨습니다.", color = Color.Gray, fontSize = 12.sp)
             }
         }
     }
@@ -672,6 +686,7 @@ private suspend fun playTTS(
         }
     }
 }
+
 
 
 

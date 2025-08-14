@@ -104,7 +104,7 @@ fun GuardianSignUpScreen(navController: NavController) {
             OutlinedTextField(
                 value = name,
                 onValueChange = { name = it.trim() },
-                placeholder = { Text("이름") },
+                placeholder = { Text("이름을 입력하세요") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth().height(fieldHeight)
             )
@@ -135,7 +135,9 @@ fun GuardianSignUpScreen(navController: NavController) {
             Spacer(Modifier.height(fieldSpacer))
 
             // 동의 문구 및 체크박스
-            Text("본 앱에서는 다음 정보를 수집·이용합니다", fontSize = 14.sp)
+            Text(
+                "본 앱에서는 다음 정보를 수집·이용합니다. \n" +
+                        " 동의하지 않을 시 회원가입이 불가능 합니다", fontSize = 14.sp)
             Spacer(Modifier.height(fieldSpacer / 2))
             Row(
                 Modifier.fillMaxWidth(),
