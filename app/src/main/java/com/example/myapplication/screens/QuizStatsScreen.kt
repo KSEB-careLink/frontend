@@ -432,6 +432,7 @@ fun QuizStatsScreen() {
                     Spacer(Modifier.height(8.dp))
                     Text(
                         "• 이번 달에 푼 문제수가 늘수록 예측 정답률이 안정됩니다.\n" +
+                                "• 45일 뒤에 정확한 예측이 시작됩니다.\n" +
                                 "• 상단에서 월을 바꿔 지난 기록도 확인해 보세요.\n" +
                                 "• 카테고리를 고르게 풀면 누적 정확도가 빨리 올라갑니다.",
                         style = MaterialTheme.typography.bodySmall,
