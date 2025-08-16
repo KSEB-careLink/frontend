@@ -46,6 +46,10 @@ fun PatientSignUpScreen(navController: NavController) {
     var agreeProfile by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(false) }
 
+    // 약관 다이얼로그 표시 여부
+    var showPhotoTerms by remember { mutableStateOf(false) }
+    var showProfileTerms by remember { mutableStateOf(false) }
+
     BoxWithConstraints(
         Modifier
             .fillMaxSize()
@@ -55,9 +59,9 @@ fun PatientSignUpScreen(navController: NavController) {
         val screenH = maxHeight
         val logoSize = screenW * 0.5f
         val textLogoSize = screenW * 0.3f
-        val logoY = screenH * 0.04f   // 상단 로고 약간 위로
-        val textY = screenH * 0.18f   // 텍스트 로고 위로
-        val formY = screenH * 0.25f   // 입력 폼 더 위로 이동
+        val logoY = screenH * 0.04f
+        val textY = screenH * 0.18f
+        val formY = screenH * 0.25f
         val fieldHeight = screenH * 0.07f
         val fieldSpacer = screenH * 0.02f
 
@@ -91,7 +95,7 @@ fun PatientSignUpScreen(navController: NavController) {
         ) {
             Spacer(Modifier.height(fieldSpacer))
             Text(
-                "어르신 회원 가입",
+                "어르신 회원가입",
                 fontSize = 32.sp,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.align(Alignment.CenterHorizontally)
@@ -137,45 +141,63 @@ fun PatientSignUpScreen(navController: NavController) {
             )
             Spacer(Modifier.height(fieldSpacer))
 
-            // 동의 문구 및 체크박스
+            // 동의 문구
             Text(
-                "본 앱에서는 다음 정보를 수집·이용합니다. \n" +
-                        " 동의하지 않을 시 회원가입이 불가능 합니다",
+                "본 앱에서는 다음 정보를 수집·이용합니다.\n동의하지 않을 시 회원가입이 불가능 합니다",
                 fontSize = 14.sp,
                 modifier = Modifier.padding(start = 4.dp)
             )
             Spacer(Modifier.height(fieldSpacer / 2))
+
+            // 체크박스 왼쪽, 오른쪽에 '보기' 버튼
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("사진 및 메모리 정보", fontSize = 16.sp)
                 Checkbox(
                     checked = agreePhoto,
                     onCheckedChange = { agreePhoto = it }
                 )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    "사진 및 메모리 정보",
+                    fontSize = 16.sp,
+                    modifier = Modifier.weight(1f)
+                )
+                TextButton(onClick = { showPhotoTerms = true }) {
+                    Text("보기")
+                }
             }
+
             Spacer(Modifier.height(fieldSpacer / 2))
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("환자 프로필 정보", fontSize = 16.sp)
                 Checkbox(
                     checked = agreeProfile,
                     onCheckedChange = { agreeProfile = it }
                 )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    "환자 프로필 정보",
+                    fontSize = 16.sp,
+                    modifier = Modifier.weight(1f)
+                )
+                TextButton(onClick = { showProfileTerms = true }) {
+                    Text("보기")
+                }
             }
 
             Spacer(Modifier.height(fieldSpacer))
-            // 버튼 위치를 체크박스 밑으로 이동
+
+            // 버튼들
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = fieldSpacer)
-                    .padding(bottom = 60.dp),  // 버튼이 화면 아래에 닿지 않도록 여유
+                    .padding(bottom = 60.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Button(
@@ -211,9 +233,12 @@ fun PatientSignUpScreen(navController: NavController) {
                                 val responseBody = signupRes.body?.string()
                                 Log.d("PatientSignUp", "응답 코드: ${signupRes.code}, 바디: $responseBody")
                                 if (!signupRes.isSuccessful) throw Exception("signup 실패: ${signupRes.code}")
+
+                                // (현재 구조 유지) Firebase 이메일/비번 로그인
                                 auth.signInWithEmailAndPassword(email, password).await()
                                 auth.currentUser?.getIdToken(true)?.await()?.token
                                     ?: throw Exception("ID 토큰 획득 실패")
+
                                 Toast.makeText(ctx, "회원가입 및 로그인 성공!", Toast.LENGTH_SHORT).show()
                                 navController.navigate("code2/{patientId}") {
                                     popUpTo("patient") { inclusive = true }
@@ -229,7 +254,10 @@ fun PatientSignUpScreen(navController: NavController) {
                     modifier = Modifier
                         .weight(1f)
                         .height(fieldHeight),
-                    enabled = name.isNotBlank() && Patterns.EMAIL_ADDRESS.matcher(email).matches() && password.length >= 6 && agreePhoto && agreeProfile,
+                    enabled = name.isNotBlank() &&
+                            Patterns.EMAIL_ADDRESS.matcher(email).matches() &&
+                            password.length >= 6 &&
+                            agreePhoto && agreeProfile,
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C4B4))
                 ) {
@@ -259,7 +287,44 @@ fun PatientSignUpScreen(navController: NavController) {
             }
         }
     }
+
+    // 약관 다이얼로그들
+    if (showPhotoTerms) {
+        TermsDialog(
+            title = "사진 및 메모리 정보 수집·이용 동의",
+            text = "• 사진, 동영상, 메모리 설명 텍스트를 수집합니다.\n" +
+                    "• 서비스 기능 제공(회상 콘텐츠 생성, 퀴즈 생성 등)에 사용됩니다.\n" +
+                    "• 보관 기간 및 파기 등은 개인정보 처리방침을 따릅니다.",
+            onDismiss = { showPhotoTerms = false }
+        )
+    }
+    if (showProfileTerms) {
+        TermsDialog(
+            title = "환자 프로필 정보 수집·이용 동의",
+            text = "• 이름, 관계, 기본 프로필 정보 등을 수집합니다.\n" +
+                    "• 사용자 식별, 콘텐츠 개인화, 보호자 연동에 사용됩니다.\n" +
+                    "• 자세한 내용은 개인정보 처리방침을 확인하세요.",
+            onDismiss = { showProfileTerms = false }
+        )
+    }
 }
+
+@Composable
+private fun TermsDialog(
+    title: String,
+    text: String,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title, fontWeight = FontWeight.Bold) },
+        text = { Text(text, fontSize = 14.sp) },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("닫기") }
+        }
+    )
+}
+
 
 
 

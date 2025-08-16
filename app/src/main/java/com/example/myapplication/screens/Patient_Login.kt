@@ -38,6 +38,7 @@ import org.json.JSONObject
 import com.google.firebase.messaging.FirebaseMessaging
 import com.example.myapplication.service.NotificationService
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 
 @Composable
 fun PatientLoginScreen(navController: NavController) {
@@ -133,6 +134,7 @@ fun PatientLoginScreen(navController: NavController) {
         Text(
             text = "어르신 로그인",
             fontSize = 28.sp,
+            fontWeight = FontWeight.Bold,
             modifier = Modifier.constrainAs(title) {
                 top.linkTo(textLogo.bottom, margin = -20.dp)
                 start.linkTo(parent.start); end.linkTo(parent.end)

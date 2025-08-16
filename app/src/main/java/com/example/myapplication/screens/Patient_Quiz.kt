@@ -32,6 +32,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.currentBackStackEntryAsState
+import coil.compose.AsyncImage
+import androidx.compose.ui.draw.clip
 import com.example.myapplication.BuildConfig
 import com.example.myapplication.R
 import com.example.myapplication.data.DatasetItem
@@ -44,6 +46,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
+import okhttp3.FormBody
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
@@ -52,9 +55,6 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
-import coil.compose.AsyncImage
-import androidx.compose.ui.draw.clip
-import okhttp3.FormBody
 
 // ────────────────────────────────────────────────
 // 인증 보장 유틸
@@ -62,7 +62,7 @@ import okhttp3.FormBody
 private suspend fun ensureFirebaseLogin(): Boolean = withContext(Dispatchers.IO) {
     val user = Firebase.auth.currentUser ?: return@withContext false
     return@withContext try {
-        user.getIdToken(false).await() // 강제 갱신(false)로 비용 절감
+        user.getIdToken(false).await()
         true
     } catch (_: Exception) { false }
 }
@@ -93,32 +93,30 @@ fun Patient_Quiz(
             .readTimeout(90, TimeUnit.SECONDS)
             .callTimeout(120, TimeUnit.SECONDS)
             .retryOnConnectionFailure(true)
-            .protocols(listOf(Protocol.HTTP_1_1)) // ngrok 헤더 스톨 회피
+            .protocols(listOf(Protocol.HTTP_1_1))
             .build()
     }
 
-    // 퀴즈 데이터 로드: 메모리/업로드 힌트를 우선 전달 + voiceId 사전 체크
+    // 퀴즈 데이터 로드
     LaunchedEffect(activePatientId) {
         if (activePatientId.isBlank()) {
             Toast.makeText(context, "환자 정보가 없습니다.", Toast.LENGTH_SHORT).show()
             return@LaunchedEffect
         }
 
-        // 0) Firestore 접근 전에 FirebaseAuth 로그인 보장
         val authed = ensureFirebaseLogin()
         if (!authed) {
             Toast.makeText(context, "인증 상태를 확인해 주세요.", Toast.LENGTH_LONG).show()
             return@LaunchedEffect
         }
 
-        // 1) 환자 문서에서 voiceId 조회 (우선 시도)
+        // 1) 환자 문서에서 voiceId 조회
         var voiceId = fetchVoiceIdFromPatient(activePatientId)
 
-        // 2) 환자 문서에 없으면, 연결된 보호자 uid → guardians/{uid}.voiceId 폴백
+        // 2) 없으면 guardians/{uid}.voiceId 폴백
         if (voiceId.isNullOrBlank()) {
             val guardianUid = fetchGuardianUidForPatient(activePatientId)
                 ?: prefs.getString("guardian_id", null)
-
             if (!guardianUid.isNullOrBlank()) {
                 voiceId = fetchVoiceIdFromGuardian(guardianUid)
             }
@@ -133,7 +131,7 @@ fun Patient_Quiz(
             return@LaunchedEffect
         }
 
-        // ── 힌트 수집
+        // 힌트 수집
         var seedImageUrl = prefs.getString("last_memory_image_url", null)
         var seedDesc = prefs.getString("last_memory_sentence", null)
         var seedPhotoId = prefs.getString("last_photo_id", null)
@@ -149,8 +147,7 @@ fun Patient_Quiz(
             "hints | memImageUrl=$seedImageUrl, memDesc=$seedDesc, photoId=$seedPhotoId, imageUrl=$imageUrl, desc=$desc"
         )
 
-
-        // ── ★ 폴백: 힌트가 하나도 없으면 최근 업로드 사진/설명으로 자동 시드
+        // 폴백: 최근 업로드 자동 시드
         if (seedImageUrl == null && seedDesc == null && seedPhotoId == null) {
             try {
                 val token = Firebase.auth.currentUser?.getIdToken(false)?.await()?.token
@@ -160,16 +157,10 @@ fun Patient_Quiz(
                     val urls = listOf(
                         "$base/photos/patient/${Uri.encode(activePatientId)}/latest",
                         "$base/photos/patient/${Uri.encode(activePatientId)}?limit=1&order=desc",
-                        "$base/photos?patient_id=${
-                            java.net.URLEncoder.encode(
-                                activePatientId,
-                                "UTF-8"
-                            )
-                        }&limit=1&order=desc"
+                        "$base/photos?patient_id=${java.net.URLEncoder.encode(activePatientId, "UTF-8")}&limit=1&order=desc"
                     )
 
                     fun extract(o: JSONObject) {
-                        // ★ 다양한 키 지원
                         val img = o.optString(
                             "image_url",
                             o.optString(
@@ -205,25 +196,20 @@ fun Patient_Quiz(
                         if (!ok || bodyStr.isBlank()) continue
 
                         var seeded = false
-                        // 객체 응답
                         runCatching {
                             val o = JSONObject(bodyStr)
                             extract(o)
-                            seeded =
-                                (seedImageUrl != null || seedDesc != null || seedPhotoId != null)
+                            seeded = (seedImageUrl != null || seedDesc != null || seedPhotoId != null)
                         }
-                        // 배열 응답
                         if (!seeded) runCatching {
                             val arr = JSONArray(bodyStr)
                             if (arr.length() > 0) {
                                 extract(arr.getJSONObject(0))
-                                seeded =
-                                    (seedImageUrl != null || seedDesc != null || seedPhotoId != null)
+                                seeded = (seedImageUrl != null || seedDesc != null || seedPhotoId != null)
                             }
                         }
 
                         if (seeded) {
-                            // ★ Prefs에 저장해두면 다음 진입 때 바로 사용 가능
                             prefs.edit().apply {
                                 seedPhotoId?.let { putString("last_photo_id", it) }
                                 seedImageUrl?.let {
@@ -246,18 +232,15 @@ fun Patient_Quiz(
             }
         }
 
-
-        // 폴백 후에도 여전히 없으면 선택 화면으로 유도(필요 시 라우트 맞게 변경)
         if (seedImageUrl == null && seedDesc == null && seedPhotoId == null) {
             Toast.makeText(context, "회상 항목이 없습니다. 먼저 사진/설명을 등록해 주세요.", Toast.LENGTH_LONG).show()
-            // navController.navigate("memoryInfoList/$activePatientId") // 앱 라우트에 맞게 사용
             return@LaunchedEffect
         }
 
         // ▶ 퀴즈 생성 API 호출
         quizViewModel.loadQuizzes(
             patientId = activePatientId,
-            photoId = seedPhotoId,              // String? 유지
+            photoId = seedPhotoId,
             imageUrl = seedImageUrl,
             description = seedDesc,
             category = seedCategory
@@ -288,9 +271,10 @@ fun Patient_Quiz(
     }
 
     // 서버에서 받은 ttsAudioUrl을 사용해 바로 재생
+    val scopeForTts = rememberCoroutineScope()
     LaunchedEffect(items, currentIndex) {
         if (items.isNotEmpty()) {
-            scope.launch { playTTS(items[currentIndex].ttsAudioUrl, context) }
+            scopeForTts.launch { playTTS(items[currentIndex].ttsAudioUrl, context) }
         }
     }
 
@@ -300,20 +284,24 @@ fun Patient_Quiz(
     }
 
     Scaffold(bottomBar = { QuizBottomBar(navController, activePatientId) }) { innerPadding ->
-        Box(
+        // ★★ 여기서부터 레이아웃을 '중앙 정렬'로 변경 ★★
+        val scroll = rememberScrollState()
+
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
+                .navigationBarsPadding()
+                .imePadding()
+                .padding(horizontal = 24.dp)
         ) {
-            val scroll = rememberScrollState()
+            // 위 여백을 유연하게
+            Spacer(Modifier.weight(1f))
 
+            // 본문 블록(스크롤 가능)
             Column(
                 modifier = Modifier
-                    .align(Alignment.BottomCenter)   // 👈 바닥 정렬
                     .fillMaxWidth()
-                    .navigationBarsPadding()         // 제스처바/소프트키 피하기
-                    .imePadding()
-                    .padding(start = 24.dp, end = 24.dp, bottom = 12.dp)
                     .verticalScroll(scroll),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
@@ -375,13 +363,16 @@ fun Patient_Quiz(
                     )
                 }
 
-                Spacer(Modifier.height(8.dp)) // 바텀바와 살짝 간격
+                Spacer(Modifier.height(8.dp))
             }
+
+            // 아래 여백을 유연하게 (하단바 위에 본문이 ‘중간쯤’ 위치)
+            Spacer(Modifier.weight(1f))
         }
     }
 }
 
-    // ────────────────────────────────────────────────
+// ────────────────────────────────────────────────
 // 하단 탭
 // ────────────────────────────────────────────────
 @Composable
@@ -440,8 +431,7 @@ private fun QuizContent(
     onPrev: () -> Unit,
     onNext: () -> Unit,
     photoUrl: String? = null
-)
- {
+) {
     var selected by remember { mutableStateOf<Int?>(null) }
     var showResult by remember { mutableStateOf(false) }
     var elapsedTime by remember { mutableStateOf(0L) }
@@ -510,8 +500,9 @@ private fun QuizContent(
                                 enabled = !submitting && !showResult
                             ) {
                                 if (submitting) return@OptionButton
-                                selected = idx
                                 submitting = true
+                                selected = idx
+                                val start = startTime
                                 scope.launch {
                                     try {
                                         val token = Firebase.auth.currentUser?.getIdToken(false)?.await()?.token
@@ -520,20 +511,19 @@ private fun QuizContent(
                                             return@launch
                                         }
 
-                                        val elapsedSec = ((System.currentTimeMillis() - startTime) / 1000).coerceAtLeast(0)
+                                        val elapsedSec = ((System.currentTimeMillis() - start) / 1000).coerceAtLeast(0)
                                         val selectedText = item.options.getOrNull(idx) ?: ""
 
-                                        // ✅ 서버가 0/1베이스, 텍스트 비교 등 어떤 방식이든 맞춰지도록 풍성하게 전송
                                         val form = FormBody.Builder(Charsets.UTF_8)
                                             .add("patient_id", patientId)
                                             .add("quiz_id", item.id.toString())
-                                            .add("question_id", item.id.toString())            // 호환용
-                                            .add("selected_index", idx.toString())             // 0-base
-                                            .add("selectedIndex", idx.toString())              // 호환용
-                                            .add("selected_index_1based", (idx + 1).toString())// 1-base도 같이
-                                            .add("answer_index", idx.toString())               // 호환용
-                                            .add("choice_index", idx.toString())               // 호환용
-                                            .add("selected_option", selectedText)              // 텍스트 비교용
+                                            .add("question_id", item.id.toString())
+                                            .add("selected_index", idx.toString())
+                                            .add("selectedIndex", idx.toString())
+                                            .add("selected_index_1based", (idx + 1).toString())
+                                            .add("answer_index", idx.toString())
+                                            .add("choice_index", idx.toString())
+                                            .add("selected_option", selectedText)
                                             .add("options_json", JSONArray(item.options).toString())
                                             .add("response_time_sec", elapsedSec.toString())
                                             .build()
@@ -550,15 +540,14 @@ private fun QuizContent(
                                         }
 
                                         val base = BuildConfig.BASE_URL.trimEnd('/')
-                                        var (ok, resBody) = postOnce("$base/quiz-responses")   // 1순위: kebab
+                                        var (ok, resBody) = postOnce("$base/quiz-responses")
                                         if (!ok) {
-                                            val second = postOnce("$base/quizResponses")       // 2순위: camel
+                                            val second = postOnce("$base/quizResponses")
                                             ok = second.first
                                             if (ok) resBody = second.second
                                         }
                                         if (!ok) throw Exception("서버 오류: $resBody")
 
-                                        // ── 응답 파싱: 여러 키 지원 + 0/1베이스 모두 허용
                                         fun pickBool(o: JSONObject?, vararg keys: String): Boolean? {
                                             if (o == null) return null
                                             for (k in keys) if (o.has(k)) {
@@ -594,7 +583,6 @@ private fun QuizContent(
                                         fun asJsonOrNull(s: String): JSONObject? =
                                             runCatching { JSONObject(s) }.getOrNull()
 
-                                        // 평문 true/false도 허용
                                         val trimmed = resBody.trim()
                                         if (trimmed.equals("true", true)) {
                                             isCorrect = true
@@ -605,12 +593,10 @@ private fun QuizContent(
                                             val data = root?.optJSONObject("data")
                                             val result = root?.optJSONObject("result")
 
-                                            // 1) is_correct / correct 바로 쓰기
                                             var correct: Boolean? = pickBool(root, "is_correct", "correct")
                                                 ?: pickBool(data, "is_correct", "correct")
                                                 ?: pickBool(result, "is_correct", "correct")
 
-                                            // 2) 없으면 정답 인덱스/옵션으로 계산
                                             if (correct == null) {
                                                 val corrIdx = pickInt(root, "correct_index", "answer_index", "correctIndex", "answerIndex")
                                                     ?: pickInt(data, "correct_index", "answer_index", "correctIndex", "answerIndex")
@@ -637,14 +623,12 @@ private fun QuizContent(
                                             "QuizSubmit",
                                             "quizId=${item.id}, selected=$idx($selectedText) -> isCorrect=$isCorrect | body=$resBody"
                                         )
-
                                     } catch (e: Exception) {
                                         Toast.makeText(context, "제출 실패: ${e.message}", Toast.LENGTH_SHORT).show()
                                     } finally {
                                         submitting = false
                                     }
                                 }
-
                             }
                         }
                     }
@@ -673,7 +657,7 @@ private fun QuizContent(
 
         Spacer(Modifier.height(20.dp))
 
-        // ⏮️ ⏭️ 이전/다음 네비게이션 (TTS 정리 + 자동 재생은 상위 LaunchedEffect가 처리)
+        // ⏮️ ⏭️ 이전/다음 네비게이션
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             OutlinedButton(
                 onClick = {
@@ -787,9 +771,7 @@ private fun resolvePatientId(context: Context, param: String): String {
     return ""
 }
 
-/**
- * Firestore: patients/{patientId}.voiceId 읽기
- */
+/** Firestore: patients/{patientId}.voiceId 읽기 */
 private suspend fun fetchVoiceIdFromPatient(patientId: String): String? = withContext(Dispatchers.IO) {
     try {
         val snap = Firebase.firestore.collection("patients").document(patientId).get().await()
@@ -800,9 +782,7 @@ private suspend fun fetchVoiceIdFromPatient(patientId: String): String? = withCo
     }
 }
 
-/**
- * Firestore: patients/{patientId}.linkedGuardian 읽기
- */
+/** Firestore: patients/{patientId}.linkedGuardian 읽기 */
 private suspend fun fetchGuardianUidForPatient(patientId: String): String? = withContext(Dispatchers.IO) {
     try {
         val snap = Firebase.firestore.collection("patients").document(patientId).get().await()
@@ -813,9 +793,7 @@ private suspend fun fetchGuardianUidForPatient(patientId: String): String? = wit
     }
 }
 
-/**
- * Firestore: guardians/{guardianUid}.voiceId 읽기 (옵션 A 규칙 전제: 연결된 환자만 get 허용)
- */
+/** Firestore: guardians/{guardianUid}.voiceId 읽기 */
 private suspend fun fetchVoiceIdFromGuardian(guardianUid: String): String? = withContext(Dispatchers.IO) {
     try {
         val snap = Firebase.firestore.collection("guardians").document(guardianUid).get().await()
@@ -825,6 +803,7 @@ private suspend fun fetchVoiceIdFromGuardian(guardianUid: String): String? = wit
         null
     }
 }
+
 
 
 
