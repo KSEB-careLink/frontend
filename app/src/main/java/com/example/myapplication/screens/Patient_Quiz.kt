@@ -176,6 +176,7 @@ fun Patient_Quiz(
                         val desc0 = o.optString("description", null)
                         val pid = o.optLong("photo_id", o.optLong("id", -1L))
                         if (!img.isNullOrBlank()) seedImageUrl = img
+                        if (!desc0.isNotBlank()) { /* no-op */ }
                         if (!desc0.isNullOrBlank()) seedDesc = desc0
                         if (pid > 0) seedPhotoId = pid.toString()
                     }
@@ -435,7 +436,7 @@ private fun QuizContent(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    // ⏱️ 재도전 시 타이머도 리셋되도록 attempt 키 도입
+    // ⏱️ 재도전 시 타이머도 리셋되도록 attempt 키 도입(필요 시 활용)
     var attempt by remember(item.id) { mutableStateOf(0) }
     val startTime = remember(item.id, attempt) { System.currentTimeMillis() }
 
@@ -448,6 +449,7 @@ private fun QuizContent(
         attempt = 0
     }
 
+    // 진행 중에만 1초 간격으로 경과시간 갱신
     LaunchedEffect(showResult) {
         if (!showResult) {
             val begin = startTime
@@ -464,7 +466,7 @@ private fun QuizContent(
             .padding(vertical = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // 결과 화면에서는 사진 숨김
+        // ✅ 결과 화면에서는 사진 숨김
         if (!showResult && !photoUrl.isNullOrBlank()) {
             AsyncImage(
                 model = photoUrl,
@@ -511,8 +513,12 @@ private fun QuizContent(
                                             return@launch
                                         }
 
-                                        val elapsedSec = ((System.currentTimeMillis() - start) / 1000).coerceAtLeast(0)
+                                        val elapsedSec = ((System.currentTimeMillis() - start) / 1000)
+                                            .coerceAtLeast(0)
                                         val selectedText = item.options.getOrNull(idx) ?: ""
+
+                                        // ✨ 결과 화면에서 0초로 보이지 않도록 즉시 확정값 반영
+                                        elapsedTime = elapsedSec
 
                                         val form = FormBody.Builder(Charsets.UTF_8)
                                             .add("patient_id", patientId)
@@ -621,7 +627,7 @@ private fun QuizContent(
 
                                         Log.d(
                                             "QuizSubmit",
-                                            "quizId=${item.id}, selected=$idx($selectedText) -> isCorrect=$isCorrect | body=$resBody"
+                                            "quizId=${item.id}, selected=$idx($selectedText) -> isCorrect=$isCorrect | elapsed=${elapsedTime}s | body=$resBody"
                                         )
                                     } catch (e: Exception) {
                                         Toast.makeText(context, "제출 실패: ${e.message}", Toast.LENGTH_SHORT).show()
@@ -657,7 +663,7 @@ private fun QuizContent(
 
         Spacer(Modifier.height(20.dp))
 
-        // ⏮️ ⏭️ 이전/다음/다시풀기 네비게이션
+        // ⏮️ ⏭️ 이전/다음 네비게이션
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             OutlinedButton(
                 onClick = {
@@ -667,36 +673,17 @@ private fun QuizContent(
                 enabled = hasPrev
             ) { Text("이전 문제") }
 
-            // ✅ 두 번째 버튼: 정답이면 '다음 문제', 오답이면 '다시 풀기'
+            // ✅ 결과가 보이면 정답/오답 상관없이 '다음 문제'
             val isAnswerShown = showResult && isCorrect != null
-            val isRight = isCorrect == true
 
             Button(
                 onClick = {
                     stopTTS()
-                    if (isAnswerShown && isRight) {
-                        onNext()
-                    } else if (isAnswerShown && !isRight) {
-                        // 다시 풀기: 상태 리셋 + 타이머/음성 재시작
-                        selected = null
-                        showResult = false
-                        isCorrect = null
-                        elapsedTime = 0L
-                        submitting = false
-                        attempt += 1           // ⏱️ 타이머 기준점 갱신
-                        // 문제 읽기 다시 재생
-                        scope.launch { playTTS(item.ttsAudioUrl, context) }
-                    }
+                    onNext()
                 },
-                enabled = when {
-                    // 정답 → 다음 문제 (마지막이면 비활성화)
-                    isAnswerShown && isRight -> hasNext
-                    // 오답 → 언제나 재도전 가능
-                    isAnswerShown && !isRight -> true
-                    else -> false
-                },
+                enabled = isAnswerShown && hasNext,
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C4B4))
-            ) { Text(if (isAnswerShown && !isRight) "다시 풀기" else "다음 문제", color = Color.White) }
+            ) { Text("다음 문제", color = Color.White) }
         }
     }
 }
@@ -825,6 +812,7 @@ private suspend fun fetchVoiceIdFromGuardian(guardianUid: String): String? = wit
         null
     }
 }
+
 
 
 
