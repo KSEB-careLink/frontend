@@ -188,40 +188,17 @@ fun Patient_Sentence(
         return null
     }
 
-    // ─── 6) /memories tts 경로 자동 탐색 ─────────────────────────────────────
-    suspend fun resolveMemoriesTtsUrl(
+    // ─── 6) /memories tts 경로: 네트워크 호출 없이 '계산'만 ───────────────────────
+    fun resolveMemoriesTtsUrl(
         baseUrl: String,
-        patientId: String,
-        idToken: String,
-        client: OkHttpClient
+        patientId: String
     ): String {
         val base = baseUrl.trimEnd('/')
         val pidEnc = Uri.encode(patientId)
-        val candidates = listOf(
-            "$base/memories/$pidEnc/tts",          // 문서 스펙
-            "$base/memories/tts/$pidEnc",          // 반대 패턴
-            "$base/memory/$pidEnc/tts",            // 단수
-            "$base/memories/tts?patientId=$pidEnc" // 쿼리 파라미터
-        )
-        val tried = mutableListOf<String>()
-
-        for (url in candidates) {
-            tried += url
-            val req = Request.Builder()
-                .url(url)
-                .addHeader("Authorization", "Bearer $idToken")
-                .get()
-                .build()
-
-            val resp = withContext(Dispatchers.IO) { client.newCall(req).execute() }
-            val code = resp.code
-            Log.d("MemoriesAPI", "Probe URL: $url -> $code")
-
-            if (code == 200) return url
-            if (code == 204) throw Exception("아직 생성된 회상 문장이 없습니다. (204)")
-        }
-        throw Exception("모든 후보 경로가 실패했습니다. 시도 URL: ${tried.joinToString()}")
+        // 문서 스펙 경로 고정 사용 (필요시 다른 패턴은 fetchOneRandom에서 순차 시도)
+        return "$base/memories/$pidEnc/tts"
     }
+
 
     // ─── 7) 랜덤 1개 호출 (문장 분해 + 중복 방지) ─────────────────────────────
     suspend fun fetchOneRandom(ctx: Context): MemoryOne {
@@ -233,104 +210,135 @@ fun Patient_Sentence(
             throw Exception("patientId 없음(네비/SharedPreferences/Firebase 모두 비어 있음)")
         }
 
-        val workingUrl = resolveMemoriesTtsUrl(
+        // ✨ 탐색 GET 제거: URL만 계산
+        val primaryUrl = resolveMemoriesTtsUrl(
             baseUrl = BuildConfig.BASE_URL,
-            patientId = activePatientId,
-            idToken = idToken,
-            client = client
+            patientId = activePatientId
+        )
+
+        // 필요시 대체 경로도 '실제 사용 시점'에만 시도
+        val candidates = listOf(
+            primaryUrl, // 문서 스펙
+            BuildConfig.BASE_URL.trimEnd('/') + "/memories/tts/${Uri.encode(activePatientId)}",
+            BuildConfig.BASE_URL.trimEnd('/') + "/memory/${Uri.encode(activePatientId)}/tts",
+            BuildConfig.BASE_URL.trimEnd('/') + "/memories/tts?patientId=${Uri.encode(activePatientId)}"
         )
 
         val maxTries = 4
-        repeat(maxTries) { attempt ->
-            val urlWithNonce = buildString {
-                append(workingUrl)
-                append(if (workingUrl.contains("?")) "&" else "?")
-                append("_=")
-                append(System.currentTimeMillis())
-            }
+        var lastErr: Exception? = null
 
-            val resp = withContext(Dispatchers.IO) {
-                client.newCall(
-                    Request.Builder()
-                        .url(urlWithNonce)
-                        .addHeader("Authorization", "Bearer $idToken")
-                        .addHeader("Cache-Control", "no-cache, no-store")
-                        .addHeader("Pragma", "no-cache")
-                        .get()
-                        .build()
-                ).execute()
-            }
+        for (endpoint in candidates) {
+            repeat(maxTries) { attempt ->
+                // ✅ nonce( ?_=... ) 제거: 서버 분기/오작동 방지
+                val req = Request.Builder()
+                    .url(endpoint)
+                    .addHeader("Authorization", "Bearer $idToken")
+                    .addHeader("Cache-Control", "no-cache, no-store")
+                    .addHeader("Pragma", "no-cache")
+                    .get()
+                    .build()
 
-            if (resp.code == 204) throw Exception("아직 생성된 회상 문장이 없습니다. (204)")
-            if (!resp.isSuccessful) throw Exception("API 오류 ${resp.code} @ $workingUrl")
+                val resp = withContext(Dispatchers.IO) { client.newCall(req).execute() }
+                val bodyStr = resp.body?.string().orEmpty()
 
-            val bodyStr = resp.body?.string().orEmpty()
-            Log.d("MemoriesAPI", "OK body: $bodyStr")
-
-            val obj = JSONObject(bodyStr)
-
-            val full = obj.optString("sentence", obj.optString("reminder_text"))
-            val variants = splitVariants(full)
-            var imageOpt = normalizeImageUrl(
-                obj.optString("image_url", obj.optString("image", ""))
-                    .takeIf { it.isNotBlank() }
-            )
-            val mp3 = obj.optString("mp3_url", obj.optString("tts_url"))
-
-            if (variants.isEmpty() || mp3.isBlank()) {
-                Log.e("MemoriesAPI", "응답 필드 부족: sentence='${full}', image='${imageOpt ?: ""}', mp3='${mp3}'")
-                throw Exception("응답 필드 부족 (sentence/mp3_url)")
-            }
-
-            if (imageOpt == null) {
-                imageOpt = fetchFallbackImageUrl(
-                    baseUrl = BuildConfig.BASE_URL,
-                    patientId = activePatientId,
-                    idToken = idToken,
-                    client = client
-                )
-            }
-
-            // 아직 보지 않은 문장 변형 선택
-            val shuffled = variants.shuffled()
-            val picked = shuffled.firstOrNull { v ->
-                val key = "$v|$mp3|${imageOpt ?: ""}"
-                !seenKeys.contains(key)
-            }
-
-            if (picked == null) {
-                // 변형도 전부 소진 → 재시도
-                Log.d("MemoriesAPI", "중복 감지(모든 변형 사용) → 재시도 ($attempt/${maxTries - 1})")
-                if (attempt < maxTries - 1) {
-                    withContext(Dispatchers.Main) {
-                        Toast.makeText(ctx, "새 문장을 찾는 중…", Toast.LENGTH_SHORT).show()
-                    }
-                    delay(200)
+                if (resp.code == 204) {
+                    // 서버가 진짜 "아직 없음"을 의미하는 케이스
+                    lastErr = Exception("아직 생성된 회상 문장이 없습니다. (204)")
+                    // 다음 후보 endpoint로 넘어감
                     return@repeat
-                } else {
-                    throw Exception("새 문장을 더 받지 못했습니다(서버가 동일 응답만 반환).")
                 }
-            }
 
-            Log.d("MemoriesAPI", "Using URL: $workingUrl  (patientId=$activePatientId)")
-            withContext(Dispatchers.Main) {
-                Toast.makeText(
-                    ctx,
-                    "TTS 경로: ${workingUrl.removePrefix(BuildConfig.BASE_URL)}",
-                    Toast.LENGTH_SHORT
-                ).show()
-            }
-            // 8월10일 추가
-            val prefs = ctx.getSharedPreferences("MyPrefs", Context.MODE_PRIVATE)
-            prefs.edit()
-                .putString("last_memory_sentence", picked)
-                .putString("last_memory_image_url", imageOpt ?: "")
-                .apply()
+                if (!resp.isSuccessful) {
+                    // 404 이면서 서버 메시지가 "아직 없습니다"면 짧게 재시도 후 같은 endpoint 재시도
+                    if (resp.code == 404 && bodyStr.contains("회상 문장이 아직 없습니다")) {
+                        if (attempt < maxTries - 1) {
+                            // 짧은 backoff
+                            withContext(Dispatchers.IO) { Thread.sleep(200) }
+                            return@repeat
+                        } else {
+                            lastErr = Exception("서버 응답 404: 선택된 사진 회상문장 없음(재시도 소진) @ $endpoint")
+                            return@repeat
+                        }
+                    } else {
+                        lastErr = Exception("API 오류 ${resp.code} @ $endpoint: $bodyStr")
+                        return@repeat
+                    }
+                }
 
-            return MemoryOne(picked, imageOpt, mp3)
+                // 200 성공
+                Log.d("MemoriesAPI", "OK body: $bodyStr")
+                val obj = JSONObject(bodyStr)
+
+                val full = obj.optString("sentence", obj.optString("reminder_text"))
+                val variants = splitVariants(full)
+                var imageOpt = normalizeImageUrl(
+                    obj.optString("image_url", obj.optString("image", ""))
+                        .takeIf { it.isNotBlank() }
+                )
+                val mp3 = obj.optString("mp3_url", obj.optString("tts_url"))
+
+                if (variants.isEmpty() || mp3.isBlank()) {
+                    Log.e(
+                        "MemoriesAPI",
+                        "응답 필드 부족: sentence='${full}', image='${imageOpt ?: ""}', mp3='${mp3}'"
+                    )
+                    lastErr = Exception("응답 필드 부족 (sentence/mp3_url)")
+                    return@repeat
+                }
+
+                if (imageOpt == null) {
+                    imageOpt = fetchFallbackImageUrl(
+                        baseUrl = BuildConfig.BASE_URL,
+                        patientId = activePatientId,
+                        idToken = idToken,
+                        client = client
+                    )
+                }
+
+                // 아직 보지 않은 문장 변형 선택
+                val shuffled = variants.shuffled()
+                val picked = shuffled.firstOrNull { v ->
+                    val key = "$v|$mp3|${imageOpt ?: ""}"
+                    !seenKeys.contains(key)
+                }
+
+                if (picked == null) {
+                    Log.d("MemoriesAPI", "중복 감지(모든 변형 사용) → 재시도 ($attempt/${maxTries - 1})")
+                    if (attempt < maxTries - 1) {
+                        withContext(Dispatchers.Main) {
+                            Toast.makeText(ctx, "새 문장을 찾는 중…", Toast.LENGTH_SHORT).show()
+                        }
+                        withContext(Dispatchers.IO) { Thread.sleep(200) }
+                        return@repeat
+                    } else {
+                        lastErr = Exception("새 문장을 더 받지 못했습니다(서버가 동일 응답만 반환).")
+                        return@repeat
+                    }
+                }
+
+                // 마지막 성공 상태 저장
+                withContext(Dispatchers.Main) {
+                    // 필요하면 안내 토스트 유지
+                    Toast.makeText(
+                        ctx,
+                        "TTS 경로: ${endpoint.removePrefix(BuildConfig.BASE_URL)}",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+
+                // 최근 값 Pref 저장
+                val prefs = ctx.getSharedPreferences("MyPrefs", Context.MODE_PRIVATE)
+                prefs.edit()
+                    .putString("last_memory_sentence", picked)
+                    .putString("last_memory_image_url", imageOpt ?: "")
+                    .apply()
+
+                return MemoryOne(picked, imageOpt, mp3)
+            }
         }
 
-        throw Exception("여러 번 시도했지만 새로운 문장을 받지 못했습니다.")
+        // 모든 후보/재시도 실패
+        throw (lastErr ?: Exception("여러 번 시도했지만 새로운 문장을 받지 못했습니다."))
     }
 
     suspend fun loadInitial() {
@@ -414,6 +422,7 @@ fun Patient_Sentence(
     // ─── 9) UI ────────────────────────────────────────────────────────────────
     Scaffold(
         bottomBar = {
+            // ← 기존 bottomBar 그대로 유지
             val navBackStack by navController.currentBackStackEntryAsState()
             val currentRoute = navBackStack?.destination?.route
             val navColors = NavigationBarItemDefaults.colors(
@@ -460,43 +469,15 @@ fun Patient_Sentence(
             }
         }
     ) { innerPadding ->
-        Column(
-            Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .padding(24.dp)
-                .verticalScroll(rememberScrollState()),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-
-            Spacer(Modifier.height(16.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.VolumeUp, contentDescription = null, modifier = Modifier.size(24.dp))
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    buildAnnotatedString {
-                        append("기억 ")
-                        withStyle(SpanStyle(color = Color(0xFF00C4B4))) { append("나시나요?") }
-                    },
-                    fontSize = 24.sp
-                )
-            }
-            Spacer(Modifier.height(16.dp))
-
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                FilledTonalButton(
-                    onClick = { scope.launch { stopTTS(); loadInitial() } },
-                    enabled = !isLoading
-                ) {
-                    Icon(Icons.Default.Refresh, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("처음부터")
-                }
-            }
-            Spacer(Modifier.height(12.dp))
-
-            // ✅ 빈 리스트일 때는 어떤 경우에도 인덱스 접근 금지
-            if (history.isEmpty()) {
+        // history 빈 처리 (기존 그대로)
+        if (history.isEmpty()) {
+            Column(
+                Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
                 if (isLoading) {
                     CircularProgressIndicator()
                 } else {
@@ -507,111 +488,172 @@ fun Patient_Sentence(
                         modifier = Modifier.size(48.dp)
                     )
                     Spacer(Modifier.height(12.dp))
-                    Text(
-                        text = errorMsg ?: "오늘의 회상정보를 모두 보셨습니다.",
-                        fontSize = 18.sp
-                    )
+                    Text(text = errorMsg ?: "오늘의 회상정보를 모두 보셨습니다.", fontSize = 18.sp)
                     Spacer(Modifier.height(8.dp))
-                    OutlinedButton(onClick = { scope.launch { loadInitial() } }) {
+                    OutlinedButton(onClick = { scope.launch { stopTTS(); loadInitial() } }) {
                         Text("다시 시도")
                     }
                 }
-                // history가 비어있으면 아래 컨텐츠는 렌더하지 않음
-                return@Scaffold
             }
+            return@Scaffold
+        }
 
-            // 여기부터는 history가 최소 1개 보장
-            val safeIndex = currentIndex.coerceIn(0, history.lastIndex)
-            val mem = history.getOrNull(safeIndex) ?: run {
-                // 극히 드문 경합 상황 대비
-                Text("로딩 중…")
-                return@Scaffold
-            }
+        val safeIndex = currentIndex.coerceIn(0, history.lastIndex)
+        val mem = history[safeIndex]
 
-            if (mem.imageUrl != null) {
-                AsyncImage(
-                    model = mem.imageUrl,
-                    contentDescription = "Memory Photo",
-                    placeholder = painterResource(R.drawable.rogo),
-                    error = painterResource(R.drawable.rogo),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(220.dp)
-                        .clip(RoundedCornerShape(12.dp)),
-                    contentScale = ContentScale.Crop
-                )
-            } else {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(220.dp)
-                        .clip(RoundedCornerShape(12.dp)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("이미지 없음", color = Color.Gray, fontSize = 14.sp)
-                }
-            }
-            Spacer(Modifier.height(12.dp))
-
-            Button(
-                onClick = { scope.launch { stopTTS(); playTTS(mem.mp3Url, context) } },
+        Box(
+            Modifier
+                .fillMaxSize()
+                .padding(innerPadding) // 바텀바 인셋 반영
+        ) {
+            // ⬆️ 스크롤 본문(안전판: Column + verticalScroll)
+            val scrollState = rememberScrollState()
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 52.dp)
-                    .wrapContentHeight(),
-                shape = RoundedCornerShape(8.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C4B4)),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp)
+                    .fillMaxSize()
+                    .padding(horizontal = 24.dp)
+                    // 하단 고정 컨트롤에 가리지 않도록 아래쪽 여백
+                    .padding(bottom = 160.dp)
+                    .verticalScroll(scrollState)
             ) {
-                Text(
-                    text = mem.sentence,
-                    color = Color.White,
-                    fontSize = 16.sp,
-                    lineHeight = 22.sp,
-                    maxLines = 3,
-                    overflow = TextOverflow.Ellipsis,
-                    softWrap = true
-                )
-            }
+                // 화면을 아래로 내리기 위한 스페이서 (원하면 80~160dp로 조절)
+                Spacer(Modifier.height(120.dp))
 
-            Spacer(Modifier.height(16.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                OutlinedButton(
-                    onClick = { scope.launch { goPrev() } },
-                    enabled = safeIndex > 0 && !isLoading
-                ) {
-                    Icon(Icons.Default.ArrowBack, contentDescription = "이전")
+                Spacer(Modifier.height(16.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.VolumeUp, contentDescription = null, modifier = Modifier.size(24.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text("이전 문장")
+                    Text(
+                        buildAnnotatedString {
+                            append("기억 "); withStyle(SpanStyle(color = Color(0xFF00C4B4))) { append("나시나요?") }
+                        },
+                        fontSize = 24.sp
+                    )
                 }
+                Spacer(Modifier.height(16.dp))
 
-                Text("${safeIndex + 1} / ${history.size}", fontSize = 14.sp)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    FilledTonalButton(
+                        onClick = { scope.launch { stopTTS(); loadInitial() } },
+                        enabled = !isLoading
+                    ) {
+                        Icon(Icons.Default.Refresh, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("처음부터")
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
+
+                if (mem.imageUrl != null) {
+                    AsyncImage(
+                        model = mem.imageUrl,
+                        contentDescription = "Memory Photo",
+                        placeholder = painterResource(R.drawable.rogo),
+                        error = painterResource(R.drawable.rogo),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(220.dp)
+                            .clip(RoundedCornerShape(12.dp)),
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(220.dp)
+                            .clip(RoundedCornerShape(12.dp)),
+                        contentAlignment = Alignment.Center
+                    ) { Text("이미지 없음", color = Color.Gray, fontSize = 14.sp) }
+                }
+                Spacer(Modifier.height(12.dp))
+
+                // ✅ 긴 문장: 카드 안에서 스크롤 → 절대 잘리지 않음
+                Card(
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 72.dp, max = 260.dp)
+                            .verticalScroll(rememberScrollState())
+                            .padding(16.dp)
+                    ) {
+                        Text(
+                            text = mem.sentence,
+                            fontSize = 16.sp,
+                            lineHeight = 22.sp,
+                            softWrap = true
+                            // maxLines/overflow 미지정 → 끊김 없음
+                        )
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
 
                 Button(
-                    onClick = { scope.launch { goNext() } },
-                    enabled = !isLoading
+                    onClick = { scope.launch { stopTTS(); playTTS(mem.mp3Url, context) } },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 52.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C4B4)),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp)
                 ) {
-                    Text("다음 문장")
+                    Icon(Icons.Default.VolumeUp, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
-                    Icon(Icons.Default.ArrowForward, contentDescription = "다음")
+                    Text("다시 듣기")
                 }
-            }
-
-            if (isLoading && history.isNotEmpty()) {
                 Spacer(Modifier.height(12.dp))
-                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
             }
 
-            errorMsg?.let {
-                Spacer(Modifier.height(8.dp))
-                Text("오늘의 회상정보를 모두 보셨습니다.", color = Color.Gray, fontSize = 12.sp)
+            // ⬇️ 하단 고정 컨트롤 (바텀바 위)
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 12.dp)
+                    .navigationBarsPadding()
+                    .imePadding(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    OutlinedButton(
+                        onClick = { scope.launch { stopTTS(); if (safeIndex > 0) currentIndex -= 1 } },
+                        enabled = safeIndex > 0 && !isLoading
+                    ) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "이전")
+                        Spacer(Modifier.width(8.dp))
+                        Text("이전 문장")
+                    }
+
+                    Text("${safeIndex + 1} / ${history.size}", fontSize = 14.sp)
+
+                    Button(onClick = { scope.launch { goNext() } }, enabled = !isLoading) {
+                        Text("다음 문장")
+                        Spacer(Modifier.width(8.dp))
+                        Icon(Icons.Default.ArrowForward, contentDescription = "다음")
+                    }
+                }
+
+                if (isLoading && history.isNotEmpty()) {
+                    Spacer(Modifier.height(12.dp))
+                    LinearProgressIndicator(Modifier.fillMaxWidth())
+                }
+
+                errorMsg?.let {
+                    Spacer(Modifier.height(8.dp))
+                    Text("오늘의 회상정보를 모두 보셨습니다.", color = Color.Gray, fontSize = 12.sp)
+                }
             }
         }
     }
+
+
+
 
     // ─── 10) MediaPlayer 정리 ────────────────────────────────────────────────
     DisposableEffect(Unit) {

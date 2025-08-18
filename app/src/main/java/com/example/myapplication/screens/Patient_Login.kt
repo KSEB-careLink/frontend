@@ -51,7 +51,7 @@ fun PatientLoginScreen(navController: NavController) {
     var password  by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
 
-    // ✅ 자동 로그인: 이미 로그인된 세션이 있으면 /auth/me 확인 후 바로 이동
+    // ✅ 자동 로그인: 이미 로그인된 세션이 있으면 /auth/me 확인 후 바로 이동 (+ FCM 토큰 송신 추가)
     LaunchedEffect(Unit) {
         isLoading = true
         try {
@@ -72,6 +72,16 @@ fun PatientLoginScreen(navController: NavController) {
                             val patientId = meJson.optString("uid").takeIf { it.isNotBlank() }
                                 ?: throw Exception("응답에 uid가 없습니다")
 
+                            // 🔔 자동 로그인 시에도 FCM 토큰 전송
+                            runCatching {
+                                FirebaseMessaging.getInstance().token.await()
+                            }.onSuccess { token ->
+                                Log.d("FCM", "자동 로그인 FCM 토큰: ${token.take(12)}...")
+                                NotificationService.sendFcmTokenToServer(context, token)
+                            }.onFailure { e ->
+                                Log.e("FCM", "자동 로그인 FCM 토큰 획득 실패", e)
+                            }
+
                             // 저장
                             context.getSharedPreferences("MyPrefs", Context.MODE_PRIVATE)
                                 .edit()
@@ -79,7 +89,7 @@ fun PatientLoginScreen(navController: NavController) {
                                 .apply()
 
                             // 바로 sentence/{patientId}로
-                            navController.navigate("sentence/{patientId}") {
+                            navController.navigate("sentence/$patientId") {
                                 popUpTo("p_login") { inclusive = true }
                             }
                             return@LaunchedEffect
@@ -210,7 +220,7 @@ fun PatientLoginScreen(navController: NavController) {
                         val user = auth.currentUser
                             ?: throw Exception("Firebase user is null")
 
-                        // ✅ 로그인 직후: 최신 FCM 토큰 받아서 Firestore에 저장/갱신
+                        // ✅ 로그인 직후: 최신 FCM 토큰 받아서 서버로 전달
                         runCatching {
                             FirebaseMessaging.getInstance().token.await()
                         }.onSuccess { token ->
@@ -219,7 +229,6 @@ fun PatientLoginScreen(navController: NavController) {
                         }.onFailure { e ->
                             Log.e("FCM", "환자 로그인 직후 토큰 획득 실패", e)
                         }
-
 
                         // 2) ID 토큰 갱신 후 획득
                         val idToken = user.getIdToken(true).await().token
@@ -295,7 +304,7 @@ fun PatientLoginScreen(navController: NavController) {
             Text("회원가입", color = Color.White, fontSize = 16.sp)
         }
 
-        // 로딩 오버레이 (자동 로그인 체크 및 수동 로그인 시 공용)
+        // 로딩 오버레이
         if (isLoading) {
             Box(
                 modifier = Modifier
@@ -318,6 +327,7 @@ fun PatientLoginScreen(navController: NavController) {
 fun PreviewPatientLogin() {
     PatientLoginScreen(navController = rememberNavController())
 }
+
 
 
 

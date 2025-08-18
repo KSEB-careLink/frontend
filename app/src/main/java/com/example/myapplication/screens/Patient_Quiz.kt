@@ -47,11 +47,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import okhttp3.FormBody
-import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
 import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
@@ -284,7 +282,7 @@ fun Patient_Quiz(
     }
 
     Scaffold(bottomBar = { QuizBottomBar(navController, activePatientId) }) { innerPadding ->
-        // ★★ 여기서부터 레이아웃을 '중앙 정렬'로 변경 ★★
+        // 중앙 정렬 + '조금 아래'로 이동
         val scroll = rememberScrollState()
 
         Column(
@@ -295,10 +293,8 @@ fun Patient_Quiz(
                 .imePadding()
                 .padding(horizontal = 24.dp)
         ) {
-            // 위 여백을 유연하게
-            Spacer(Modifier.weight(1f))
+            Spacer(Modifier.weight(1.2f))
 
-            // 본문 블록(스크롤 가능)
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -366,8 +362,7 @@ fun Patient_Quiz(
                 Spacer(Modifier.height(8.dp))
             }
 
-            // 아래 여백을 유연하게 (하단바 위에 본문이 ‘중간쯤’ 위치)
-            Spacer(Modifier.weight(1f))
+            Spacer(Modifier.weight(0.8f))
         }
     }
 }
@@ -440,13 +435,17 @@ private fun QuizContent(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    val startTime = remember(item.id) { System.currentTimeMillis() }
+    // ⏱️ 재도전 시 타이머도 리셋되도록 attempt 키 도입
+    var attempt by remember(item.id) { mutableStateOf(0) }
+    val startTime = remember(item.id, attempt) { System.currentTimeMillis() }
+
     LaunchedEffect(item.id) {
         selected = null
         showResult = false
         isCorrect = null
         elapsedTime = 0L
         submitting = false
+        attempt = 0
     }
 
     LaunchedEffect(showResult) {
@@ -465,7 +464,8 @@ private fun QuizContent(
             .padding(vertical = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        if (!photoUrl.isNullOrBlank()) {
+        // 결과 화면에서는 사진 숨김
+        if (!showResult && !photoUrl.isNullOrBlank()) {
             AsyncImage(
                 model = photoUrl,
                 contentDescription = "회상 사진",
@@ -657,7 +657,7 @@ private fun QuizContent(
 
         Spacer(Modifier.height(20.dp))
 
-        // ⏮️ ⏭️ 이전/다음 네비게이션
+        // ⏮️ ⏭️ 이전/다음/다시풀기 네비게이션
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             OutlinedButton(
                 onClick = {
@@ -667,14 +667,36 @@ private fun QuizContent(
                 enabled = hasPrev
             ) { Text("이전 문제") }
 
+            // ✅ 두 번째 버튼: 정답이면 '다음 문제', 오답이면 '다시 풀기'
+            val isAnswerShown = showResult && isCorrect != null
+            val isRight = isCorrect == true
+
             Button(
                 onClick = {
                     stopTTS()
-                    onNext()
+                    if (isAnswerShown && isRight) {
+                        onNext()
+                    } else if (isAnswerShown && !isRight) {
+                        // 다시 풀기: 상태 리셋 + 타이머/음성 재시작
+                        selected = null
+                        showResult = false
+                        isCorrect = null
+                        elapsedTime = 0L
+                        submitting = false
+                        attempt += 1           // ⏱️ 타이머 기준점 갱신
+                        // 문제 읽기 다시 재생
+                        scope.launch { playTTS(item.ttsAudioUrl, context) }
+                    }
                 },
-                enabled = (showResult && isCorrect == true && hasNext),
+                enabled = when {
+                    // 정답 → 다음 문제 (마지막이면 비활성화)
+                    isAnswerShown && isRight -> hasNext
+                    // 오답 → 언제나 재도전 가능
+                    isAnswerShown && !isRight -> true
+                    else -> false
+                },
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C4B4))
-            ) { Text("다음 문제", color = Color.White) }
+            ) { Text(if (isAnswerShown && !isRight) "다시 풀기" else "다음 문제", color = Color.White) }
         }
     }
 }
@@ -803,6 +825,8 @@ private suspend fun fetchVoiceIdFromGuardian(guardianUid: String): String? = wit
         null
     }
 }
+
+
 
 
 

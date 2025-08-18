@@ -101,11 +101,11 @@
             android:name=".receiver.NotificationReceiver"
             android:exported="true"/>
 
-<!--        &lt;!&ndash; Foreground Service: 위치 10초 주기 전송 &ndash;&gt;-->
-<!--        <service-->
-<!--            android:name=".service.LocationUpdatesService"-->
-<!--            android:exported="false"-->
-<!--            android:foregroundServiceType="location" />-->
+        <!-- Foreground Service: 위치 10초 주기 전송 -->
+        <service
+            android:name=".service.LocationUpdatesService"
+            android:exported="false"
+            android:foregroundServiceType="location" />
 
 
 

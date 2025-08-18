@@ -7,6 +7,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.provider.OpenableColumns
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -44,7 +45,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.logging.HttpLoggingInterceptor
-import org.json.JSONObject // ✅ 추가
+import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.util.concurrent.TimeUnit
@@ -53,6 +54,17 @@ import java.util.concurrent.TimeUnit
 fun MemoryInfoInputScreen(navController: NavController, patientId: String) {
     val context = LocalContext.current
     val prefs = context.getSharedPreferences("MyPrefs", Context.MODE_PRIVATE)
+
+    // 네비 인자/Prefs에서 환자ID 해석
+    val activePatientId by remember(patientId) {
+        mutableStateOf(resolvePatientId(context, patientId))
+    }
+    // 네비 인자가 유효하면 prefs에 저장(다음 화면에서도 재사용되도록)
+    LaunchedEffect(activePatientId) {
+        if (!activePatientId.isNullOrBlank()) {
+            prefs.edit().putString("patient_id", activePatientId).apply()
+        }
+    }
 
     var imageUri by remember { mutableStateOf<Uri?>(null) }
     var previewBitmap by remember { mutableStateOf<Bitmap?>(null) }
@@ -371,25 +383,26 @@ fun MemoryInfoInputScreen(navController: NavController, patientId: String) {
         // 업로드 버튼
         Button(
             onClick = {
-                // 입력 검증
+                // 입력 검증 (이미지/텍스트)
                 if (imageUri == null || listOf(timeText, placeText, charactersText, memorableText).any { it.isBlank() }) {
                     Toast.makeText(context, "모든 항목을 입력하고 사진을 선택해주세요", Toast.LENGTH_SHORT).show()
                     return@Button
                 }
-                val description = """
-            시간: $timeText
-            장소: $placeText
-            등장인물: $charactersText
-            가장 기억에 남는 것: $memorableText
-        """.trimIndent()
-
-                val uri = imageUri!!
-                val patientIdFromPrefs = prefs.getString("patient_id", null)
-                val guardianId = prefs.getString("guardian_id", null) // ← 필요 없지만 체크만 유지
-                if (patientIdFromPrefs.isNullOrEmpty() || guardianId.isNullOrEmpty()) {
-                    Toast.makeText(context, "필수 정보가 없습니다.", Toast.LENGTH_SHORT).show()
+                // 환자ID 최종 확인
+                val pid = activePatientId
+                if (pid.isNullOrBlank()) {
+                    Toast.makeText(context, "필수 정보가 없습니다. (환자 ID)", Toast.LENGTH_SHORT).show()
                     return@Button
                 }
+
+                val description = """
+                    시간: $timeText
+                    장소: $placeText
+                    등장인물: $charactersText
+                    가장 기억에 남는 것: $memorableText
+                """.trimIndent()
+
+                val uri = imageUri!!
 
                 coroutineScope.launch {
                     isLoading = true
@@ -411,12 +424,20 @@ fun MemoryInfoInputScreen(navController: NavController, patientId: String) {
                             Pair(compressed, safeName)
                         }
 
+                        // 현재 로그인 사용자 UID(있으면 함께 전송)
+                        val guardianUid = Firebase.auth.currentUser?.uid
+
+                        // ✅ 서버 호환: patientId 우선(camel), snake도 함께 전송(필요 시)
                         val multipart = MultipartBody.Builder()
                             .setType(MultipartBody.FORM)
-                            // ③ guardian_id는 토큰에서 uid를 쓰므로 폼에 넣지 않음
-                            .addFormDataPart("patient_id", patientIdFromPrefs)
+                            .addFormDataPart("patientId", pid)         // camel
+                            .addFormDataPart("patient_id", pid)        // snake (호환용)
                             .addFormDataPart("category", selectedCategory)
                             .addFormDataPart("description", description)
+                            .apply {
+                                guardianUid?.let { addFormDataPart("guardian_id", it) }
+                            }
+                            // ⚠ 서버에 따라 'image' 또는 'file'을 기대할 수 있음. 우선 'image' 사용.
                             .addFormDataPart(
                                 "image",
                                 fileName,
@@ -428,6 +449,7 @@ fun MemoryInfoInputScreen(navController: NavController, patientId: String) {
                         val request = Request.Builder()
                             .url(url)
                             .addHeader("Authorization", "Bearer $idToken")
+                            .addHeader("Accept", "application/json")
                             .post(multipart)
                             .build()
 
@@ -438,18 +460,18 @@ fun MemoryInfoInputScreen(navController: NavController, patientId: String) {
                         }
 
                         if (ok) {
-                            // ✅ 업로드 응답에서 photo_id / image_url 파싱 → Prefs 저장 (퀴즈 시드)
+                            // ✅ 업로드 응답 파싱
                             val obj = runCatching { JSONObject(body) }.getOrNull()
                             val returnedPhotoId = obj?.optString(
                                 "photo_id",
-                                obj?.optString("photoId", obj?.optString("id", "")) ?: ""
+                                obj?.optString("photoId", obj.optString("id", ""))
                             ).orEmpty()
                             val returnedImageUrl = obj?.optString(
                                 "image_url",
-                                obj?.optString("mediaUrl", obj?.optString("url", "")) ?: ""
+                                obj?.optString("mediaUrl", obj.optString("url", ""))
                             ).orEmpty()
 
-                            // 시드 키 저장 (quiz에서 바로 사용)
+                            // 시드 키 저장
                             prefs.edit().apply {
                                 if (returnedPhotoId.isNotBlank()) putString("last_photo_id", returnedPhotoId)
                                 if (returnedImageUrl.isNotBlank()) {
@@ -457,12 +479,10 @@ fun MemoryInfoInputScreen(navController: NavController, patientId: String) {
                                     putString("last_memory_image_url", returnedImageUrl)
                                 }
                                 putString("last_description", description)
-                                putString("last_memory_sentence", description)
                                 putString("last_category", selectedCategory)
                                 apply()
                             }
 
-                            // 업로드 카운트/UX 유지
                             val prevCount = prefs.getInt("upload_count", 0)
                             val newCount = prevCount + 1
                             prefs.edit().putInt("upload_count", newCount).apply()
@@ -486,11 +506,12 @@ fun MemoryInfoInputScreen(navController: NavController, patientId: String) {
                                     "회상정보 9개 입력 완료! 앱을 이용할 수 있습니다.",
                                     Toast.LENGTH_SHORT
                                 ).show()
-                                navController.navigate("main2/$patientId") {
-                                    popUpTo("MemoryInfoInput/$patientId") { inclusive = true }
+                                navController.navigate("main2/$pid") {
+                                    popUpTo("MemoryInfoInput/$pid") { inclusive = true }
                                 }
                             }
                         } else {
+                            Log.e("Upload", "HTTP $code, body=$body")
                             Toast.makeText(
                                 context,
                                 "업로드 실패: $code - $body",
@@ -515,7 +536,7 @@ fun MemoryInfoInputScreen(navController: NavController, patientId: String) {
             Text("회상 정보 업로드", color = Color.White)
         }
 
-// 로딩 인디케이터
+        // 로딩 인디케이터
         if (isLoading) {
             Box(
                 Modifier
@@ -526,13 +547,22 @@ fun MemoryInfoInputScreen(navController: NavController, patientId: String) {
                 CircularProgressIndicator(color = Color.White)
             }
         }
-
     }
 }
 
 /* ===========================
    Helper functions (IO safe)
    =========================== */
+
+// 네비 인자/Prefs에서 patientId 추출
+private fun resolvePatientId(context: Context, navArg: String?): String? {
+    val fromNav = navArg?.trim().orEmpty()
+    if (fromNav.isNotEmpty() && fromNav != "{patientId}" && !fromNav.equals("null", true)) {
+        return fromNav
+    }
+    val prefs = context.getSharedPreferences("MyPrefs", Context.MODE_PRIVATE)
+    return prefs.getString("patient_id", null)
+}
 
 private fun getMimeType(context: Context, uri: Uri): String? {
     return context.contentResolver.getType(uri)
@@ -559,7 +589,7 @@ private fun getFileName(context: Context, uri: Uri): String? {
 }
 
 /**
- * 이미지를 다운샘플링 후 JPEG/WEBP로 압축해서 바이트 배열 반환.
+ * 이미지를 다운샘플링 후 JPEG로 압축해서 바이트 배열 반환.
  * - maxDim: 긴 변 기준 최대 픽셀
  * - quality: 0~100
  */
@@ -604,12 +634,16 @@ private suspend fun readAndCompressImage(
             .also { if (it != bitmap) bitmap.recycle() }
     } else bitmap
 
-    // 5) JPEG로 압축 (PNG 원본이어도 전송 효율상 JPEG 권장)
-    val bos = ByteArrayOutputStream()
-    finalBitmap.compress(Bitmap.CompressFormat.JPEG, quality.coerceIn(60, 95), bos)
+    // 5) JPEG로 압축
+    val result = ByteArrayOutputStream().use { bos ->
+        finalBitmap.compress(Bitmap.CompressFormat.JPEG, quality.coerceIn(60, 95), bos)
+        bos.toByteArray()
+    }
     if (finalBitmap != bitmap) finalBitmap.recycle()
-    bos.toByteArray()
+    result
 }
+
+
 
 
 
