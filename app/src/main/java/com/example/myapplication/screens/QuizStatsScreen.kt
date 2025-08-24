@@ -3,17 +3,27 @@ package com.example.myapplication.screens
 
 import android.content.Context
 import android.util.Log
-import androidx.compose.foundation.Image
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ShowChart
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.myapplication.BuildConfig
@@ -29,17 +39,14 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
+import java.time.LocalDate
 import java.time.YearMonth
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.concurrent.TimeUnit
-import androidx.compose.material3.Surface
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.ui.res.painterResource
-import com.example.myapplication.R
-import androidx.compose.foundation.border
+import kotlin.math.max
+import kotlin.math.min
+import androidx.compose.ui.graphics.nativeCanvas
 
 private const val TAG = "QuizStats"
 
@@ -47,7 +54,7 @@ private const val TAG = "QuizStats"
 fun QuizStatsScreen() {
     val context = LocalContext.current
     val prefs = context.getSharedPreferences("MyPrefs", Context.MODE_PRIVATE)
-    val patientId = prefs.getString("patient_id", null)
+    val activePatientId = prefs.getString("patient_id", null)
 
     // --- 카테고리별 누적 통계 ---
     var statsList by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
@@ -64,12 +71,10 @@ fun QuizStatsScreen() {
     var monthlyDaily by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
 
     // 월간 예측/차트 필드
-    var monthlyPredAcc by remember { mutableStateOf<Double?>(null) }   // 0~1 or %
-    var monthlyAccuracyPct by remember { mutableStateOf<Double?>(null) } // % (소수점)
+    var monthlyPredAcc by remember { mutableStateOf<Double?>(null) }
+    var monthlyAccuracyPct by remember { mutableStateOf<Double?>(null) }
     var monthlyColdStart by remember { mutableStateOf<Boolean?>(null) }
     var monthlyBadges by remember { mutableStateOf<List<String>>(emptyList()) }
-    var monthlyChart by remember { mutableStateOf<List<Pair<String, Double>>>(emptyList()) }
-    var monthlyChartTitle by remember { mutableStateOf<String?>(null) }
 
     // 최근 6개월 옵션
     val monthOptions = remember(currentMonth) {
@@ -98,8 +103,8 @@ fun QuizStatsScreen() {
         Log.d(TAG, "PATH_STATS=$PATH_STATS, PATH_MONTHLY_BASE=$PATH_MONTHLY_BASE")
     }
 
-    LaunchedEffect(patientId, month) {
-        if (patientId.isNullOrBlank()) {
+    LaunchedEffect(activePatientId, month) {
+        if (activePatientId.isNullOrBlank()) {
             errorMsg = "환자 ID가 없습니다."
             Log.e(TAG, "patientId is null/blank. Abort requests.")
             return@LaunchedEffect
@@ -119,7 +124,7 @@ fun QuizStatsScreen() {
             return@LaunchedEffect
         }
 
-        Log.d(TAG, "patientId=$patientId, tokenLen=${idToken.length}, tokenMask=${mask(idToken)}")
+        Log.d(TAG, "patientId=$activePatientId, tokenLen=${idToken.length}, tokenMask=${mask(idToken)}")
         Log.d(TAG, "Selected month=$month")
 
         // 선택 월 변경 시 월간 섹션 초기화
@@ -129,12 +134,10 @@ fun QuizStatsScreen() {
         monthlyAccuracyPct = null
         monthlyColdStart = null
         monthlyBadges = emptyList()
-        monthlyChart = emptyList()
-        monthlyChartTitle = null
 
         // 1) 카테고리별 누적 통계
         launch {
-            val url = "${BuildConfig.BASE_URL}$PATH_STATS?patient_id=${enc(patientId)}"
+            val url = "${BuildConfig.BASE_URL}$PATH_STATS?patient_id=${enc(activePatientId)}"
             try {
                 val t0 = System.nanoTime()
                 Log.d(TAG, "[REQ] GET $url")
@@ -160,7 +163,6 @@ fun QuizStatsScreen() {
                 totalAvgTime = root.optDoubleOrNull("total_avg_time")
                 val arr: JSONArray = root.optJSONArray("categories") ?: throw Exception("categories 배열이 없습니다.")
                 statsList = List(arr.length()) { i -> arr.getJSONObject(i) }
-                Log.d(TAG, "categories.size=${statsList.size}")
                 if (errorMsg?.startsWith("통계") == true) errorMsg = null
             } catch (e: Exception) {
                 Log.e(TAG, "누적 통계 요청 실패: ${e.message}", e)
@@ -171,11 +173,11 @@ fun QuizStatsScreen() {
             }
         }
 
-        // 2) 월간 통계 (캐시 버스터 추가)
+        // 2) 월간 통계
         launch {
             val ts = System.currentTimeMillis()
             val url = "${BuildConfig.BASE_URL}$PATH_MONTHLY_BASE/monthly" +
-                    "?patient_id=${enc(patientId)}&month=${enc(month)}&_ts=$ts"
+                    "?patient_id=${enc(activePatientId)}&month=${enc(month)}&_ts=$ts"
             try {
                 val t0 = System.nanoTime()
                 Log.d(TAG, "[REQ] GET $url")
@@ -199,36 +201,11 @@ fun QuizStatsScreen() {
                 val root = JSONObject(bodyStr)
                 monthlyObj = root
 
-                // ── 새 스키마(예측/차트) 파싱 ──
                 monthlyPredAcc = root.optDoubleOrNull("predicted_final_accuracy")
                 monthlyColdStart = root.optBooleanOrNull("cold_start")
-
-                // accuracy_percent 우선(이미 %)
                 monthlyAccuracyPct = root.optDoubleOrNull("accuracy_percent")
                     ?: monthlyPredAcc?.let { if (it <= 1.0) it * 100.0 else it }
 
-                val uiObj = root.optJSONObject("ui")
-                val badgesArr = uiObj?.optJSONArray("badges")
-                monthlyBadges = if (badgesArr != null) {
-                    List(badgesArr.length()) { i -> badgesArr.optString(i) }
-                } else emptyList()
-
-                val chartObj = root.optJSONObject("chart")
-                monthlyChartTitle = chartObj?.optString("title", null)
-                monthlyChart = buildList {
-                    val labels = chartObj?.optJSONArray("labels")
-                    val series = chartObj?.optJSONArray("series")
-                    if (labels != null && series != null) {
-                        val n = minOf(labels.length(), series.length())
-                        for (i in 0 until n) {
-                            val label = labels.optString(i)
-                            val value = series.optDouble(i, Double.NaN)
-                            if (!value.isNaN()) add(label to value)
-                        }
-                    }
-                }
-
-                // 일별(있으면 사용)
                 val dailyArr = root.optJSONArray("daily")
                     ?: root.optJSONArray("by_day")
                     ?: root.optJSONArray("days")
@@ -236,10 +213,6 @@ fun QuizStatsScreen() {
                     List(dailyArr.length()) { i -> dailyArr.getJSONObject(i) }
                 } else emptyList()
 
-                Log.d(
-                    TAG,
-                    "monthlyDaily.size=${monthlyDaily.size}, predAcc=${monthlyPredAcc}, accPct=${monthlyAccuracyPct}, coldStart=${monthlyColdStart}, badges=${monthlyBadges.size}, chartPoints=${monthlyChart.size}"
-                )
                 if (errorMsg?.startsWith("월간") == true) errorMsg = null
             } catch (e: Exception) {
                 Log.e(TAG, "월간 통계 요청 실패: ${e.message}", e)
@@ -250,20 +223,18 @@ fun QuizStatsScreen() {
                 monthlyAccuracyPct = null
                 monthlyColdStart = null
                 monthlyBadges = emptyList()
-                monthlyChart = emptyList()
-                monthlyChartTitle = null
             }
         }
     }
 
     // ─────────────────────────────────────────────────────────────
-    // 화면 UI (테두리 추가)
+    // 화면 UI (테두리 + 꺾은선 그래프)
     // ─────────────────────────────────────────────────────────────
     Box(
         modifier = Modifier
             .fillMaxSize()
             .border(width = 7.dp, color = Color(0xFFE795BF))
-            .padding(24.dp) // 테두리와 내용 사이 여백
+            .padding(24.dp)
     ) {
         Column(
             modifier = Modifier
@@ -275,7 +246,6 @@ fun QuizStatsScreen() {
                 Spacer(Modifier.height(8.dp))
             }
 
-            // ───────── 월간 통계 + 선택 UI ─────────
             Text("월간 통계", fontSize = 20.sp)
             Spacer(Modifier.height(26.dp))
 
@@ -288,93 +258,46 @@ fun QuizStatsScreen() {
                 }
             )
 
-            Spacer(Modifier.height(26.dp))
+            Spacer(Modifier.height(18.dp))
 
-            // 차트 표시 (labels / series → 라벨별 프로그레스 바)
-            if (monthlyChart.isNotEmpty()) {
-                Text("다음달 예측 정답률 ($month) 기준", fontSize = 16.sp)
-                Spacer(Modifier.height(6.dp))
-
-                monthlyChart.forEach { (label, valuePct) ->
-                    val shownLabel = remember(label) {
-                        runCatching {
-                            YearMonth.parse(label, ymFormatter).plusMonths(1).format(ymFormatter)
-                        }.getOrElse { label } // 파싱 안 되면 원래 라벨 유지
-                    }
-
-                    Column(Modifier.fillMaxWidth()) {
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(shownLabel)
-                            Text("${"%.1f".format(valuePct)}%")
-                        }
-                        Spacer(Modifier.height(4.dp))
-                        LinearProgressIndicator(
-                            progress = (valuePct / 100.0).toFloat(),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(6.dp)
-                        )
-                    }
-                    Spacer(Modifier.height(8.dp))
-                }
+            val chartPoints = remember(month, monthlyDaily, monthlyAccuracyPct) {
+                buildSampledLinePoints(
+                    month = month,
+                    dailyList = monthlyDaily,
+                    accuracyPercent = monthlyAccuracyPct,
+                    zoneId = seoul
+                )
             }
 
-            // 구(舊) 스키마(accuracy/average_time/daily) 표시
-            monthlyObj?.let { m ->
-                val mAcc = m.optDoubleOrNull("accuracy") ?: m.optDoubleOrNull("total_accuracy")
-                val mAvg = m.optDoubleOrNull("avg_time")
-                    ?: m.optDoubleOrNull("average_time")
-                    ?: m.optDoubleOrNull("total_avg_time")
-                val mTotal = m.optIntOrNull("total")
-                    ?: m.optIntOrNull("total_attempts")
-                    ?: m.optIntOrNull("total_questions")
-                val mCorrect = m.optIntOrNull("correct") ?: m.optIntOrNull("correct_count")
-
-                val parts = mutableListOf<String>()
-                mAcc?.let { parts.add("정답률 ${"%.1f".format(it)}%") }
-                mAvg?.let { parts.add("평균 ${"%.1f".format(it)}초") }
-                if (mCorrect != null && mTotal != null) parts.add("정답 $mCorrect / $mTotal")
-
-                if (parts.isNotEmpty()) {
-                    Spacer(Modifier.height(6.dp))
-                    Text(parts.joinToString(", "))
-                } else if (monthlyAccuracyPct == null && monthlyChart.isEmpty()) {
-                    Text("월간 데이터가 없습니다.")
+            if (chartPoints.isNotEmpty()) {
+                ChartCard(
+                    title = "정답률 추이 (전 달 15일 / 미래 10일 주기)",
+                    subtitle = "• 과거: 1·16·말일  • 미래: 10·20·말일\n" +
+                            "• 미래는 말일의 월 기준값(예측/월 정답률)까지 선형 보간"
+                ) {
+                    LineChart(
+                        points = chartPoints,
+                        month = month,
+                        yMin = 0.0,
+                        yMax = 100.0,
+                        height = 220.dp,
+                        leftPadding = 36.dp,
+                        rightPadding = 16.dp,
+                        topPadding = 12.dp,
+                        bottomPadding = 28.dp
+                    )
                 }
-            } ?: run {
-                if (monthlyAccuracyPct == null && monthlyChart.isEmpty()) {
-                    Text("월간 데이터 없음")
-                }
+            } else {
+                Text("차트 데이터 없음")
             }
 
-            if (monthlyDaily.isNotEmpty()) {
-                Spacer(Modifier.height(6.dp))
-                val preview = monthlyDaily.take(5)
-                preview.forEach { d ->
-                    val day = d.optString("date", d.optString("day", d.optString("dt", "-")))
-                    val acc = d.optDoubleOrNull("accuracy")
-                    val avg = d.optDoubleOrNull("avg_time") ?: d.optDoubleOrNull("average_time")
-                    val line = buildString {
-                        append(" - $day")
-                        if (acc != null) append(" · ${"%.1f".format(acc)}%")
-                        if (avg != null) append(" · ${"%.1f".format(avg)}초")
-                    }
-                    Text(line)
-                }
-            }
-
-            // 섹션 간격 + 구분선
             Spacer(Modifier.height(24.dp))
             Divider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
             Spacer(Modifier.height(24.dp))
 
-            // ───────── 카테고리별 누적 통계 ─────────
             Text("카테고리별 누적 통계", fontSize = 20.sp)
             Text(
-                "풀이 기록이 많아질수록 예상 정답률이 실제 정답률에 가까워집니다.",
+                "풀이 기록이 많을수록 예측 정답률이 실제에 가까워집니다.",
                 style = MaterialTheme.typography.bodySmall,
                 color = Color.Gray
             )
@@ -384,7 +307,6 @@ fun QuizStatsScreen() {
             totalAvgTime?.let { Text("평균 응답 시간: ${"%.1f".format(it)}초") }
             if (totalAccuracy != null || totalAvgTime != null) Spacer(Modifier.height(8.dp))
 
-            // 리스트(비-Lazy) — 상위가 스크롤이므로 충돌 방지
             Column(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
                 modifier = Modifier.fillMaxWidth()
@@ -416,29 +338,6 @@ fun QuizStatsScreen() {
                             )
                         }
                     }
-                }
-            }
-
-            // ───────── 가이드 카드 (하단 보조 설명) ─────────
-            Spacer(Modifier.height(36.dp))
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                tonalElevation = 2.dp,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(Modifier.padding(16.dp)) {
-                    Text("통계를 더 잘 사용하는 법", fontSize = 16.sp)
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        "• 이번 달에 푼 문제수가 늘수록 예측 정답률이 안정됩니다.\n" +
-                                "• 45일 뒤에 정확한 예측이 시작됩니다.\n" +
-                                "• 상단에서 월을 바꿔 지난 기록도 확인해 보세요.\n" +
-                                "• 카테고리를 고르게 풀면 누적 정확도가 빨리 올라갑니다.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.Gray,
-                        lineHeight = 18.sp
-                    )
                 }
             }
 
@@ -481,20 +380,16 @@ private fun MonthSelector(
                 .wrapContentHeight(),
             contentAlignment = Alignment.TopStart
         ) {
-            Row(
+            OutlinedTextField(
+                value = month,
+                onValueChange = {},
+                readOnly = true,
+                label = { Text("월 선택 (YYYY-MM)") },
+                trailingIcon = { Text(if (expanded) "▲" else "▼") },
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable { expanded = !expanded }
-            ) {
-                OutlinedTextField(
-                    value = month,
-                    onValueChange = {},
-                    readOnly = true,
-                    label = { Text("월 선택 (YYYY-MM)") },
-                    trailingIcon = { Text(if (expanded) "▲" else "▼") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
+            )
 
             DropdownMenu(
                 expanded = expanded,
@@ -525,16 +420,348 @@ private fun MonthSelector(
     }
 }
 
+/* ─────────────────────────────
+   꺾은선 차트 Card 래퍼
+   ───────────────────────────── */
+@Composable
+private fun ChartCard(
+    title: String,
+    subtitle: String? = null,
+    content: @Composable () -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        tonalElevation = 1.dp,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Filled.ShowChart,
+                    contentDescription = null
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(title, fontSize = 16.sp)
+            }
+            if (!subtitle.isNullOrBlank()) {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.Gray,
+                    lineHeight = 18.sp
+                )
+            }
+            Spacer(Modifier.height(12.dp))
+            content()
+        }
+    }
+}
+
+/* ─────────────────────────────
+   데이터 포인트
+   ───────────────────────────── */
+private data class ChartPoint(
+    val day: Int,            // 1..말일
+    val valuePct: Double,    // 0..100
+    val isFuture: Boolean
+)
+
+/* ─────────────────────────────
+   라인 차트 (Canvas)
+   ───────────────────────────── */
+@Composable
+private fun LineChart(
+    points: List<ChartPoint>,
+    month: String,
+    yMin: Double = 0.0,
+    yMax: Double = 100.0,
+    height: Dp = 220.dp,
+    leftPadding: Dp = 36.dp,
+    rightPadding: Dp = 16.dp,
+    topPadding: Dp = 16.dp,
+    bottomPadding: Dp = 28.dp,
+) {
+    val ym = remember(month) { YearMonth.parse(month, DateTimeFormatter.ofPattern("yyyy-MM")) }
+    val lastDay = ym.lengthOfMonth()
+    val dashed = remember { PathEffect.dashPathEffect(floatArrayOf(18f, 12f), 0f) }
+
+    Canvas(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(height)
+    ) {
+        val lp = leftPadding.toPx()
+        val rp = rightPadding.toPx()
+        val tp = topPadding.toPx()
+        val bp = bottomPadding.toPx()
+
+        val w = size.width - lp - rp
+        val h = size.height - tp - bp
+        if (w <= 0f || h <= 0f || points.isEmpty()) return@Canvas
+
+        fun xForDay(day: Int): Float {
+            val t = if (lastDay <= 1) 0f else (day - 1).toFloat() / (lastDay - 1).toFloat()
+            return lp + t * w
+        }
+        fun yForVal(v: Double): Float {
+            val clamped = v.coerceIn(yMin, yMax)
+            val t = if (yMax == yMin) 0.0 else (clamped - yMin) / (yMax - yMin)
+            return (tp + (1f - t.toFloat()) * h)
+        }
+
+        // 가이드 라인 (0/50/100%)
+        val guideVals = listOf(0.0, 50.0, 100.0)
+        guideVals.forEach { gv ->
+            val y = yForVal(gv)
+            drawLine(
+                color = Color(0x22000000),
+                start = Offset(lp, y),
+                end = Offset(size.width - rp, y),
+                strokeWidth = 1f
+            )
+        }
+
+        // X축 주요일(1/10/15/20/말일) 가이드
+        val keyXs = listOf(1, 10, 15, 20, lastDay).distinct()
+        keyXs.forEach { d ->
+            val x = xForDay(d)
+            drawLine(
+                color = Color(0x11000000),
+                start = Offset(x, tp),
+                end = Offset(x, size.height - bp),
+                strokeWidth = 1f
+            )
+        }
+
+        // 과거/미래 경로
+        val sorted = points.sortedBy { it.day }
+        val firstFutureIndex = sorted.indexOfFirst { it.isFuture }.let { if (it < 0) sorted.size else it }
+
+        if (firstFutureIndex > 0) {
+            val pastPath = Path().apply {
+                moveTo(xForDay(sorted[0].day), yForVal(sorted[0].valuePct))
+                for (i in 1 until firstFutureIndex) {
+                    lineTo(xForDay(sorted[i].day), yForVal(sorted[i].valuePct))
+                }
+            }
+            drawPath(path = pastPath, color = Color(0xFF1E88E5), style = Stroke(width = 4f))
+        }
+
+        if (firstFutureIndex < sorted.size) {
+            val startIndex = max(0, firstFutureIndex - 1)
+            val futPath = Path().apply {
+                moveTo(xForDay(sorted[startIndex].day), yForVal(sorted[startIndex].valuePct))
+                for (i in startIndex + 1 until sorted.size) {
+                    lineTo(xForDay(sorted[i].day), yForVal(sorted[i].valuePct))
+                }
+            }
+            drawPath(
+                path = futPath,
+                color = Color(0xFFD81B60),
+                style = Stroke(width = 4f, pathEffect = dashed)
+            )
+        }
+
+        // 포인트 & 값 라벨 (drawIntoCanvas 사용)
+        sorted.forEachIndexed { idx, p ->
+            val cx = xForDay(p.day)
+            val cy = yForVal(p.valuePct)
+            val sz = if (p.isFuture) 5f else 6.5f
+            drawCircle(
+                color = if (p.isFuture) Color(0xFFD81B60) else Color(0xFF1E88E5),
+                radius = sz,
+                center = Offset(cx, cy)
+            )
+
+            val labelNeeded = idx == 0 || idx == sorted.lastIndex || p.day in listOf(1, 10, 15, 20, lastDay)
+            if (labelNeeded) {
+                drawIntoCanvas { canvas ->
+                    val paint = android.graphics.Paint().apply {
+                        color = android.graphics.Color.DKGRAY
+                        textSize = 26f
+                        isAntiAlias = true
+                    }
+                    canvas.nativeCanvas.drawText(
+                        "${"%.0f".format(p.valuePct)}%",
+                        cx + 6f,
+                        cy - 10f,
+                        paint
+                    )
+                }
+            }
+        }
+
+        // X축 라벨
+        val labelDays = listOf(1, 10, 15, 20, lastDay).distinct().sorted()
+        labelDays.forEach { d ->
+            drawIntoCanvas { canvas ->
+                val paint = android.graphics.Paint().apply {
+                    color = android.graphics.Color.GRAY
+                    textSize = 26f
+                    isAntiAlias = true
+                }
+                val tx = xForDay(d)
+                val ty = size.height - bp + 22f
+                val text = if (d == lastDay) "말일" else "${d}일"
+                canvas.nativeCanvas.drawText(text, tx - 18f, ty, paint)
+            }
+        }
+
+        // Y축 라벨
+        guideVals.forEach { gv ->
+            val y = yForVal(gv)
+            drawIntoCanvas { canvas ->
+                val paint = android.graphics.Paint().apply {
+                    color = android.graphics.Color.GRAY
+                    textSize = 26f
+                    isAntiAlias = true
+                }
+                canvas.nativeCanvas.drawText("${gv.toInt()}%", 4f, y - 6f, paint)
+            }
+        }
+    }
+}
+
+/* ─────────────────────────────
+   표본 생성 로직
+   ───────────────────────────── */
+private fun buildSampledLinePoints(
+    month: String,
+    dailyList: List<JSONObject>,
+    accuracyPercent: Double?,
+    zoneId: ZoneId
+): List<ChartPoint> {
+    val ym = YearMonth.parse(month, DateTimeFormatter.ofPattern("yyyy-MM"))
+    val lastDay = ym.lengthOfMonth()
+    val today = LocalDate.now(zoneId)
+    val relation = ym.compareTo(YearMonth.from(today))
+
+    // 일→정답률 맵
+    val dailyMap = mutableMapOf<Int, Double>()
+    dailyList.forEach { obj ->
+        val acc = obj.optDoubleOrNull("accuracy")
+            ?: obj.optDoubleOrNull("accuracy_percent")
+        if (acc != null) {
+            val day = runCatching {
+                when {
+                    obj.has("date") && !obj.isNull("date") -> {
+                        LocalDate.parse(obj.getString("date")).dayOfMonth
+                    }
+                    obj.has("day") && !obj.isNull("day") -> {
+                        val s = obj.get("day").toString()
+                        if (s.contains("-")) LocalDate.parse(s).dayOfMonth else s.toInt()
+                    }
+                    obj.has("dt") && !obj.isNull("dt") -> {
+                        val s = obj.get("dt").toString()
+                        if (s.contains("-")) LocalDate.parse(s).dayOfMonth else s.toInt()
+                    }
+                    else -> null
+                }
+            }.getOrNull()
+            if (day != null && day in 1..lastDay) {
+                dailyMap[day] = acc.coerceIn(0.0, 100.0)
+            }
+        }
+    }
+
+    val monthRef = (accuracyPercent ?: 50.0).coerceIn(0.0, 100.0)
+
+    fun nearestKnownBeforeOrEqual(d: Int): Pair<Int, Double>? {
+        var best: Pair<Int, Double>? = null
+        for (i in 1..d) {
+            val v = dailyMap[i] ?: continue
+            best = i to v
+        }
+        return best
+    }
+    fun nearestKnownAfterOrEqual(d: Int): Pair<Int, Double>? {
+        for (i in d..lastDay) {
+            val v = dailyMap[i] ?: continue
+            return i to v
+        }
+        return null
+    }
+    fun interpolate(aDay: Int, aVal: Double, bDay: Int, bVal: Double, d: Int): Double {
+        if (bDay == aDay) return aVal
+        val t = (d - aDay).toDouble() / (bDay - aDay).toDouble()
+        return (aVal + (bVal - aVal) * t).coerceIn(0.0, 100.0)
+    }
+    fun valueForPastDay(d: Int): Double {
+        dailyMap[d]?.let { return it }
+        val left = nearestKnownBeforeOrEqual(d)
+        val right = nearestKnownAfterOrEqual(d)
+        return when {
+            left != null && right != null -> interpolate(left.first, left.second, right.first, right.second, d)
+            left != null -> left.second
+            right != null -> right.second
+            else -> monthRef
+        }
+    }
+
+    val sampledDaysPast = mutableListOf<Int>()
+    val sampledDaysFuture = mutableListOf<Int>()
+
+    when {
+        // 과거 달: 전부 과거 → 15일 주기
+        relation < 0 -> {
+            sampledDaysPast += listOf(1, min(16, lastDay), lastDay).distinct()
+        }
+        // 현재 달: 과거 15일 / 미래 10일
+        relation == 0 -> {
+            val cutoff = min(today.dayOfMonth, lastDay)
+            sampledDaysPast += 1
+            if (16 <= cutoff) sampledDaysPast += 16
+            if (cutoff !in sampledDaysPast) sampledDaysPast += cutoff
+            listOf(10, 20, lastDay).forEach { d ->
+                if (d > cutoff) sampledDaysFuture += d
+            }
+        }
+        // 미래 달: 전부 미래 → 10일 주기
+        else -> {
+            sampledDaysFuture += listOf(1, min(10, lastDay), min(20, lastDay), lastDay).distinct()
+        }
+    }
+
+    val result = mutableListOf<ChartPoint>()
+    sampledDaysPast.distinct().sorted().forEach { d ->
+        result += ChartPoint(day = d, valuePct = valueForPastDay(d), isFuture = false)
+    }
+
+    if (sampledDaysFuture.isNotEmpty()) {
+        val startDay = if (result.isNotEmpty()) result.last().day else sampledDaysFuture.first()
+        val startVal = if (result.isNotEmpty()) result.last().valuePct else monthRef
+        val endDay = lastDay
+        val endVal = monthRef
+
+        sampledDaysFuture.distinct().sorted().forEach { d ->
+            val v = if (endDay == startDay) endVal
+            else {
+                val t = (d - startDay).toDouble() / (endDay - startDay).toDouble()
+                (startVal + (endVal - startVal) * t).coerceIn(0.0, 100.0)
+            }
+            result += ChartPoint(day = d, valuePct = v, isFuture = true)
+        }
+    }
+
+    return result
+        .groupBy { it.day to it.isFuture }
+        .map { (_, list) -> list.maxBy { it.valuePct } }
+        .sortedBy { it.day }
+}
+
+/* ─────────────────────────────
+   유틸
+   ───────────────────────────── */
 private fun enc(s: String): String =
     URLEncoder.encode(s, StandardCharsets.UTF_8.toString())
 
-// 토큰 마스킹
 private fun mask(token: String, prefix: Int = 10, suffix: Int = 6): String = when {
     token.length <= prefix + suffix -> "****"
     else -> token.take(prefix) + "..." + token.takeLast(suffix)
 }
 
-// JSONObject 확장: 안전 파싱
 private fun JSONObject.optDoubleOrNull(key: String): Double? =
     if (has(key) && !isNull(key)) {
         val v = optDouble(key, Double.NaN)
@@ -546,6 +773,7 @@ private fun JSONObject.optIntOrNull(key: String): Int? =
 
 private fun JSONObject.optBooleanOrNull(key: String): Boolean? =
     if (has(key) && !isNull(key)) optBoolean(key) else null
+
 
 
 
